@@ -57,6 +57,10 @@ if release clamps it by the outline thickness; cancellation, maximization and
 Alt bypass do not replay the snap. Captionless pane restoration preserves valid
 saved client rectangles instead of Qt's generic title-bar safety margin.
 Windows 10 retains its one-physical-pixel translucent-outline compensation.
+Every PaneFloatingWindow registers itself as a snap participant at construction;
+target discovery uses that host marker rather than pane-specific object names.
+Viewers therefore participate in both directions with main and other floating
+windows, using the same measured contact bounds and border compensation.
 Dragging their Dock button uses the nonmodal movement path; an ordinary click
 still docks. Native snapping and placement coordinate semantics are preserved.
 Plain title labels and unused native header background use that same movement

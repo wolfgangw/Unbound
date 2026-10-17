@@ -404,6 +404,39 @@ int main(int argc, char **argv)
     }
     {
         using Unbound::paneSnapOffset;
+        Unbound::PaneSnapTransition transition;
+        check(transition.update(QPoint(-12,0),QPoint(1,0),0).isNull() && transition.animating(),
+            "Snap entry jumped immediately instead of beginning a transition");
+        check(transition.update(QPoint(-12,0),QPoint(1,0),8)==QPoint(-1,0),
+            "Snap entry did not begin with a gentle correction");
+        check(transition.update(QPoint(-12,0),QPoint(1,0),16)==QPoint(-3,0),
+            "Snap correction did not accelerate towards exact contact");
+        check(transition.update(QPoint(-12,0),QPoint(1,0),32)==QPoint(-12,0) && !transition.animating(),
+            "Snap entry failed to reach exact alignment and stop animation");
+        check(transition.update(QPoint(-5,0),QPoint(1,0),100)==QPoint(-5,0) && !transition.animating(),
+            "An established snap lagged behind changing pointer proposals");
+        check(transition.update(QPoint(),QPoint(),110)==QPoint(-5,0) && transition.animating(),
+            "Snap release jumped back to the raw pointer proposal");
+        const auto releasing=transition.update(QPoint(),QPoint(),126);
+        check(releasing.x()>-5 && releasing.x()<0,"Snap release skipped its intermediate correction");
+        check(transition.update(QPoint(8,0),QPoint(1,0),126)==releasing,
+            "Re-entering a snap zone during release introduced a correction jump");
+        check(transition.update(QPoint(8,0),QPoint(1,0),158)==QPoint(8,0) && !transition.animating(),
+            "Interrupted release failed to settle at the new snap correction");
+        transition.update(QPoint(),QPoint(),250);
+        check(transition.update(QPoint(),QPoint(),282).isNull() && !transition.animating(),
+            "Released window retained an offset or running animation");
+        transition.reset();
+        transition.update(QPoint(12,0),QPoint(1,0),0);
+        check(transition.update(QPoint(12,-12),QPoint(1,1),8)==QPoint(1,0),
+            "Beginning one axis restarted the other axis's transition");
+        check(transition.update(QPoint(12,-12),QPoint(1,1),16)==QPoint(3,-1),
+            "Independent snap axes did not advance independently");
+        QPoint engagement;
+        check(paneSnapOffset(QRect(100,500,80,80),{QRect(100,100,200,200)},12,
+            true,true,true,true,QSize(),QSize(16777215,16777215),{},&engagement).isNull()
+            && engagement==QPoint(1,0),"Exact edge alignment was confused with leaving the snap zone");
+        std::puts("PASS: snap entry/release easing, interrupted release, exact lock, independent axes and stopped animation");
         Unbound::PaneDragProposal proposal;
         QRect snapped(300, 140, 80, 80);
         proposal.update(snapped, QPoint(500, 200), true, true, true, true);
@@ -436,7 +469,37 @@ int main(int argc, char **argv)
         check(paneSnapOffset(QRect(140, 309, 80, 80), targets, 12) == QPoint(0, -9), "Vertical snap failed");
         check(paneSnapOffset(QRect(105, 103, 80, 80), targets, 12) == QPoint(-5, -3), "Edge alignment snap failed");
         check(paneSnapOffset(QRect(315, 140, 80, 80), targets, 12).isNull(), "Window failed to pull free of snap radius");
-        check(paneSnapOffset(QRect(307, 500, 80, 80), targets, 12).isNull(), "Distant non-overlapping windows snapped");
+        check(paneSnapOffset(QRect(307, 500, 80, 80), targets, 12)==QPoint(-7,0), "Distant window edge did not align");
+        const QRect moving(500,500,80,80);
+        const QRect nearWindow(100,300,200,275),farWindow(1500,300,200,285);
+        check(paneSnapOffset(moving,{farWindow,nearWindow},12)==QPoint(0,-5) &&
+            paneSnapOffset(moving,{nearWindow,farWindow},12)==QPoint(0,-5),
+            "Equally close edge candidates did not favour the nearer window independently of enumeration order");
+        check(paneSnapOffset(moving,{nearWindow,QRect(1500,300,200,276)},12)==QPoint(0,-4),
+            "Spatial proximity overrode the smaller edge adjustment");
+        check(paneSnapOffset(moving,{nearWindow,nearWindow,QRect(1500,300,200,275)},12)==QPoint(0,-5),
+            "Duplicate alignment edges changed the snap result");
+        check(paneSnapOffset(moving,{QRect(1500,300,200,287)},12)==QPoint(0,7),
+            "Bottom edges did not align across a horizontal gap");
+        check(paneSnapOffset(moving,{QRect(1500,507,200,200)},12,false,false,true,false)==QPoint(0,7),
+            "Top-edge resize did not align across a horizontal gap");
+        check(paneSnapOffset(moving,{QRect(1500,300,200,287)},12,false,false,false,true)==QPoint(0,7),
+            "Bottom-edge resize did not align across a horizontal gap");
+        check(paneSnapOffset(moving,{QRect(507,2000,200,200)},12,true,false,false,false)==QPoint(7,0),
+            "Left-edge resize did not align across a vertical gap");
+        check(paneSnapOffset(moving,{QRect(587,2000,200,200)},12,false,true,false,false)==QPoint(7,0),
+            "Right-edge resize did not align across a vertical gap");
+        check(paneSnapOffset(moving,{QRect(587,2000,200,200),QRect(1500,300,200,287)},12,
+            false,true,false,true)==QPoint(7,7),"Distant corner resizing did not align independently on both axes");
+        check(paneSnapOffset(moving,{QRect(587,2000,200,200)},12,false,true,false,false,QSize(1,1),QSize(85,100)).isNull(),
+            "Distant edge alignment violated resize limits");
+        check(paneSnapOffset(moving,{QRect(593,2000,200,200)},12).isNull(),
+            "Distant alignment did not release outside the snap radius");
+        check(paneSnapOffset(QRect(-500,-500,80,80),{QRect(-1500,-700,200,287)},12)==QPoint(0,7),
+            "Distant alignment failed at negative display coordinates");
+        check(paneSnapOffset(moving,{},12,true,true,true,true,QSize(),QSize(16777215,16777215),
+            {QRect(507,2000,1000,800)}).isNull(),"Distant monitor edge became an unrelated alignment guide");
+        std::puts("PASS: distant edge/corner alignment, spatial tie-breaking, duplicate edges, limits, release and local work areas");
         check(paneSnapOffset(QRect(-293, -160, 80, 80), {QRect(-500, -200, 200, 200)}, 12) == QPoint(-7, 0),
             "Negative monitor coordinates failed");
         check(paneSnapOffset(QRect(307, 140, 80, 80), {QRect(100, 100, 200, 200), QRect(309, 100, 200, 200)}, 12)

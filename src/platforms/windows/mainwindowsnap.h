@@ -12,6 +12,7 @@ public:
     {
         const auto handle = window ? reinterpret_cast<HWND>(window->effectiveWinId()) : nullptr;
         if (handle == m_handle) return;
+        stopFrames(); m_liveTarget=false;
         if (m_handle) RemoveWindowSubclass(m_handle, dispatch, reinterpret_cast<UINT_PTR>(this));
         m_handle = nullptr;
         m_active = false;
@@ -24,6 +25,7 @@ private:
     {
         auto self = reinterpret_cast<MainWindowSnap *>(data);
         if (message == WM_NCDESTROY) {
+            self->stopFrames();
             RemoveWindowSubclass(handle, dispatch, id);
             self->m_handle = nullptr;
             self->m_active = false;
@@ -33,6 +35,16 @@ private:
     }
     LRESULT process(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        if(message==WM_TIMER && wParam==reinterpret_cast<UINT_PTR>(this)) {
+            if(!m_active || !m_liveTarget || !IsWindowVisible(handle) || IsZoomed(handle) || IsIconic(handle)) {
+                stopFrames(); return 0;
+            }
+            RECT frame=m_rawRect;
+            m_snap.applyAnimated(frame,m_hit,m_limits);
+            putRect(handle,frame);
+            if(!m_snap.animating()) stopFrames();
+            return 0;
+        }
         if (message == commitMessage()) {
             if (!m_commitPending) return 0;
             m_commitPending = false;
@@ -57,14 +69,24 @@ private:
             SendMessage(handle, WM_GETMINMAXINFO, 0, reinterpret_cast<LPARAM>(&m_limits));
             m_active = true;
             m_topAligned = m_commitPending = false;
+            stopFrames(); m_liveTarget=false;
             m_proposal.reset();
             return result;
         }
-        if (message == WM_CANCELMODE || (message == WM_KEYDOWN && wParam == VK_ESCAPE))
+        if (message == WM_CANCELMODE || (message == WM_KEYDOWN && wParam == VK_ESCAPE)) {
             m_topAligned = m_commitPending = false;
+            stopFrames(); m_liveTarget=false;
+        }
         if (message == WM_EXITSIZEMOVE) {
+            const bool settle=m_liveTarget;
+            stopFrames(); m_liveTarget=false;
             m_active = false;
             const auto result = DefSubclassProc(handle, message, wParam, lParam);
+            if(settle && IsWindowVisible(handle) && !IsZoomed(handle) && !IsIconic(handle)) {
+                RECT final=m_rawRect;
+                m_snap.applyAnimated(final,m_hit,m_limits,true);
+                putRect(handle,final);
+            }
             if (m_topAligned && !(GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
                 m_commitPending = true;
                 PostMessage(handle, commitMessage(), 0, 0);
@@ -109,16 +131,25 @@ private:
             } else m_proposal.reset(); // Preserve keyboard/system-menu movement.
             // Retain Resolve's native constraints after deriving the raw drag.
             DefSubclassProc(handle, message, wParam, lParam);
-            m_snap.apply(*reinterpret_cast<RECT *>(lParam), hit, m_limits);
+            m_rawRect=target; m_hit=hit;
+            m_liveTarget=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0;
+            RECT final=target;
+            m_snap.apply(final,hit,m_limits);
+            if(m_liveTarget) {
+                m_snap.applyAnimated(target,hit,m_limits);
+                if(m_snap.animating()) {
+                    if(!m_frameTimer) m_frameTimer=SetTimer(handle,reinterpret_cast<UINT_PTR>(this),16,nullptr);
+                } else stopFrames();
+            } else { stopFrames(); target=final; }
             m_topAligned = false;
             if (message == WM_MOVING && !(GetAsyncKeyState(VK_MENU) & 0x8000)) {
                 RECT current{};
                 GetWindowRect(handle, &current);
                 m_topInset = paneContactBounds(handle).top() - current.top;
                 MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
-                if (GetMonitorInfo(MonitorFromRect(&target, MONITOR_DEFAULTTONEAREST), &monitor)
-                    && target.top + m_topInset == monitor.rcWork.top) {
-                    m_finalRect = target;
+                if (GetMonitorInfo(MonitorFromRect(&final, MONITOR_DEFAULTTONEAREST), &monitor)
+                    && final.top + m_topInset == monitor.rcWork.top) {
+                    m_finalRect = final;
                     m_topAligned = true;
                 }
             }
@@ -131,6 +162,16 @@ private:
         static const UINT message = RegisterWindowMessageW(L"Unbound.MainWindowSnap.Commit");
         return message;
     }
+    void stopFrames() {
+        if(m_frameTimer && m_handle) KillTimer(m_handle,m_frameTimer);
+        m_frameTimer=0;
+    }
+    static void putRect(HWND handle,const RECT &target) {
+        RECT current{};
+        if(GetWindowRect(handle,&current) && !EqualRect(&current,&target))
+            SetWindowPos(handle,nullptr,target.left,target.top,target.right-target.left,target.bottom-target.top,
+                SWP_NOZORDER|SWP_NOACTIVATE);
+    }
     HWND m_handle = nullptr;
     Unbound::PaneSnapWindows m_snap;
     Unbound::PaneDragProposal m_proposal;
@@ -139,6 +180,10 @@ private:
     bool m_topAligned = false, m_commitPending = false;
     int m_topInset = 0;
     RECT m_finalRect{};
+    RECT m_rawRect{};
+    int m_hit=HTCAPTION;
+    bool m_liveTarget=false;
+    UINT_PTR m_frameTimer=0;
 };
 }
 #endif

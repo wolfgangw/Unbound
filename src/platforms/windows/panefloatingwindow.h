@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QApplication>
 #include <QScreen>
+#include <QTimer>
 #include "geometryjson.h"
 #include "panesnapwindows.h"
 #include "paneresizehitfilter.h"
@@ -22,6 +23,14 @@ public:
     {
         // Auxiliary taskbar windows must not keep Resolve alive.
         setAttribute(Qt::WA_QuitOnClose, false);
+        // Snap membership belongs to the host, independent of pane identifiers.
+        setProperty("unboundFloatingWindow",true);
+        m_snapFrame.setInterval(16);
+        m_snapFrame.setTimerType(Qt::PreciseTimer);
+        connect(&m_snapFrame,&QTimer::timeout,this,[this] {
+            if(m_dragHit) updateInteractiveDrag(m_dragCursor);
+            else m_snapFrame.stop();
+        });
     }
     ~PaneFloatingWindow() override { if(m_resizeFilter) m_resizeFilter->remove(this); }
     bool restoreGeometry(const QByteArray &bytes)
@@ -67,7 +76,7 @@ public:
         if (cancel) SetWindowPos(reinterpret_cast<HWND>(winId()), nullptr,
             m_dragRect.left, m_dragRect.top, m_dragRect.right - m_dragRect.left,
             m_dragRect.bottom - m_dragRect.top, SWP_NOZORDER | SWP_NOACTIVATE);
-        finishDeferredResize();
+        finishDeferredResize(!cancel);
     }
     void beginDeferredResize()
     {
@@ -75,9 +84,11 @@ public:
         m_deferredLayout = layout();
         m_deferredLayout->setEnabled(false);
     }
-    void finishDeferredResize()
+    void finishDeferredResize(bool settle=true)
     {
 #ifdef Q_OS_WIN
+        m_snapFrame.stop();
+        if(m_dragHit && settle) updateInteractiveDrag(m_dragCursor,true);
         const bool releaseCapture = m_dragHit != 0 && !m_buttonMove;
         m_dragHit = 0;
         m_buttonMove = false;
@@ -94,9 +105,10 @@ public:
 #ifdef Q_OS_WIN
     POINT dragStartPosition() const { return m_dragStart; }
     bool interactiveDragActive() const { return m_dragHit != 0; }
-    void updateInteractiveDrag(POINT cursor)
+    void updateInteractiveDrag(POINT cursor,bool settle=false)
     {
         if (!m_dragHit) return;
+        m_dragCursor=cursor;
         RECT target = m_dragRect;
         const LONG dx = cursor.x - m_dragStart.x, dy = cursor.y - m_dragStart.y;
         if (m_dragHit == HTCAPTION) OffsetRect(&target, dx, dy);
@@ -114,9 +126,14 @@ public:
             if (left) target.left = target.right - width; else target.right = target.left + width;
             if (top) target.top = target.bottom - height; else target.bottom = target.top + height;
         }
-        m_snap.apply(target, m_dragHit, m_dragLimits);
-        SetWindowPos(reinterpret_cast<HWND>(winId()), nullptr, target.left, target.top,
-            target.right - target.left, target.bottom - target.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        m_snap.applyAnimated(target, m_dragHit, m_dragLimits,settle);
+        if(m_snap.animating()) { if(!m_snapFrame.isActive()) m_snapFrame.start(); }
+        else m_snapFrame.stop();
+        const auto handle=reinterpret_cast<HWND>(winId());
+        RECT current{};
+        if(GetWindowRect(handle,&current) && !EqualRect(&current,&target))
+            SetWindowPos(handle, nullptr, target.left, target.top,
+                target.right - target.left, target.bottom - target.top, SWP_NOZORDER | SWP_NOACTIVATE);
     }
 #endif
 protected:
@@ -205,11 +222,11 @@ protected:
             if (msg->message == WM_KEYDOWN || msg->message == WM_CANCELMODE)
                 SetWindowPos(handle, nullptr, m_dragRect.left, m_dragRect.top,
                     m_dragRect.right - m_dragRect.left, m_dragRect.bottom - m_dragRect.top, SWP_NOZORDER | SWP_NOACTIVATE);
-            finishDeferredResize();
+            finishDeferredResize(msg->message!=WM_KEYDOWN && msg->message!=WM_CANCELMODE);
             *result = 0;
             return true;
         }
-        if (msg->message == WM_SHOWWINDOW && !msg->wParam) finishDeferredResize();
+        if (msg->message == WM_SHOWWINDOW && !msg->wParam) finishDeferredResize(false);
         // WM_SIZING distinguishes border resizing from title-bar dragging.
         if (msg->message == WM_SIZING) beginDeferredResize();
         if (msg->message == WM_EXITSIZEMOVE) finishDeferredResize();
@@ -225,6 +242,7 @@ private:
         GetWindowRect(handle, &m_dragRect);
         m_snap.begin(handle);
         GetCursorPos(&m_dragStart);
+        m_dragCursor=m_dragStart;
         m_dragLimits = MINMAXINFO{};
         SendMessage(handle, WM_GETMINMAXINFO, 0, reinterpret_cast<LPARAM>(&m_dragLimits));
         if (m_dragLimits.ptMaxTrackSize.x <= 0) m_dragLimits.ptMaxTrackSize.x = 32767;
@@ -243,6 +261,8 @@ private:
     bool m_buttonMove = false;
     RECT m_dragRect{};
     POINT m_dragStart{};
+    POINT m_dragCursor{};
+    QTimer m_snapFrame;
     MINMAXINFO m_dragLimits{};
     PaneSnapWindows m_snap;
     QPointer<PaneResizeHitFilter> m_resizeFilter;

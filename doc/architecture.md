@@ -12,6 +12,24 @@ per-page placement tracking and snap calculations. Widget work stays on Resolve'
 Qt GUI thread. `startController()` queues initialization on the existing application
 and retains the existing idempotency guard.
 
+`panesnap.h` compares all visible Resolve window edges, including windows across
+gaps. Each axis chooses the smallest adjustment within the existing snap radius;
+ties favour the spatially nearer window, using the gap between rectangles.
+Duplicate edge coordinates produce one effective snap position. Work-area targets
+retain perpendicular overlap requirements and yield to window edges on equal
+adjustments. The Windows adapter uses the existing drag-start target cache and
+native contact bounds, visibility exclusions, resize limits and Alt bypass.
+`PaneSnapTransition` eases only the correction over 32 ms when an axis enters or
+leaves a snap zone. Quadratic ease-in starts gently and accelerates towards
+contact; established locks track the pointer proposal exactly. Windows snap zones
+span 24 pixels scaled for the moving window's DPI. A zero
+correction remains distinguishable from an inactive snap axis. Floating windows
+use a short Qt frame timer; the main window uses a native timer during its Windows
+move/resize loop. Frames run only during an unfinished transition, never while
+idle. Mouse release commits exact geometry, cancellation stops frames without
+committing a new snap, and Alt clears the transition immediately. Raw pointer
+proposals and snap-target selection are unchanged.
+
 `src/platform/` describes the boundary:
 
 - `windowintegration.h` includes the single CMake-selected `windowbackend.h`.

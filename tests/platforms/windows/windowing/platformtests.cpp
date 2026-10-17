@@ -640,6 +640,14 @@ bool runPlatformWindowTests(QApplication &app)
         const auto cursor = peer.dragStartPosition();
         const int desiredLeft = contact.x() + contact.width() - (peerBounds.x() - peerRect.left) + 6;
         peer.updateInteractiveDrag(POINT{cursor.x + desiredLeft - peerRect.left, cursor.y});
+        // Hold the pointer still: transition frames must continue without new
+        // mouse messages, then stop at exact native contact before release.
+        QEventLoop animationWait;
+        QTimer::singleShot(140,&animationWait,&QEventLoop::quit);
+        animationWait.exec();
+        DwmFlush();
+        check(Unbound::paneContactBounds(peerHandle).x() == contact.x() + contact.width(),
+            "Floating snap animation did not settle while the pointer was stationary");
         SendMessage(peerHandle, WM_LBUTTONUP, 0, 0);
         DwmFlush();
         check(Unbound::paneContactBounds(peerHandle).x() == contact.x() + contact.width(),
@@ -707,7 +715,63 @@ bool runPlatformWindowTests(QApplication &app)
             check(proposal.top + topInset == monitor.rcWork.top,
                 "Window and desktop top edges produced a one-pixel double snap");
         }
-        std::puts("PASS: native main move/resize routing, floating resize, exact contact alignment, bypass and hidden-window exclusion");
+        // Viewers retain their native Qt ancestry. Membership must come from
+        // the floating host, not a pane-specific object-name convention.
+        QWidget viewerPage(&main);
+        Unbound::PaneFloatingWindow viewer;
+        viewer.setParent(&viewerPage,viewer.windowFlags());
+        viewer.setObjectName("unboundViewer_widgetEditTimelinePlayer");
+        viewer.setGeometry(1200,650,350,240);
+        peer.setGeometry(700,650,250,240);
+        viewer.show(); peer.show(); app.processEvents(); DwmFlush();
+        const auto viewerHandle=reinterpret_cast<HWND>(viewer.winId());
+        for(auto movingHandle : {handle,peerHandle,viewerHandle}) {
+            const auto targetHandle=movingHandle==viewerHandle ? peerHandle : viewerHandle;
+            const auto targetContact=Unbound::paneContactBounds(targetHandle);
+            const auto movingContact=Unbound::paneContactBounds(movingHandle);
+            RECT movingRect{}; GetWindowRect(movingHandle,&movingRect);
+            const int leftInset=movingContact.left()-movingRect.left;
+            const int upperInset=movingContact.top()-movingRect.top;
+            const int rightInset=movingRect.right-movingContact.x()-movingContact.width();
+            const int lowerInset=movingRect.bottom-movingContact.y()-movingContact.height();
+            snap.begin(movingHandle);
+            for(int delta=-4;delta<=4;++delta) {
+                RECT proposal=movingRect;
+                OffsetRect(&proposal,targetContact.x()+targetContact.width()-movingContact.x()+delta,
+                    targetContact.y()-movingContact.y());
+                snap.apply(proposal,HTCAPTION,limits);
+                check(proposal.left+leftInset==targetContact.x()+targetContact.width(),
+                    "Viewer/peer horizontal snapping missed contact or produced a nearby false snap");
+                proposal=movingRect;
+                OffsetRect(&proposal,targetContact.x()-movingContact.x(),
+                    targetContact.y()+targetContact.height()-movingContact.y()+delta);
+                snap.apply(proposal,HTCAPTION,limits);
+                check(proposal.top+upperInset==targetContact.y()+targetContact.height(),
+                    "Viewer/peer vertical snapping missed contact or produced a nearby false snap");
+            }
+            RECT distant=movingRect;
+            // Probe beyond the former 18-DIP zone but inside the new 24-DIP
+            // zone, using the moving window's actual DPI.
+            const int widenedDelta=MulDiv(21,GetDpiForWindow(movingHandle),96);
+            OffsetRect(&distant,targetContact.x()+1000-movingContact.x(),
+                targetContact.y()+targetContact.height()-movingContact.y()-movingContact.height()+widenedDelta);
+            snap.apply(distant,HTCAPTION,limits);
+            check(distant.bottom-lowerInset==targetContact.y()+targetContact.height(),
+                "Distant native bottom-edge alignment failed for main/pane/viewer");
+            distant=movingRect;
+            OffsetRect(&distant,targetContact.x()+targetContact.width()-movingContact.x()-movingContact.width()+5,
+                targetContact.y()+1200-movingContact.y());
+            snap.apply(distant,HTCAPTION,limits);
+            check(distant.right-rightInset==targetContact.x()+targetContact.width(),
+                "Distant native right-edge alignment failed for main/pane/viewer");
+            distant=movingRect;
+            OffsetRect(&distant,targetContact.x()+1000-movingContact.x(),0);
+            distant.bottom=targetContact.y()+targetContact.height()+lowerInset+5;
+            snap.apply(distant,HTBOTTOM,limits);
+            check(distant.bottom-lowerInset==targetContact.y()+targetContact.height() && distant.top==movingRect.top,
+                "Distant native resize alignment failed or moved its stationary edge");
+        }
+        std::puts("PASS: native main move/resize routing, floating resize, exact contact alignment, bypass and hidden-window exclusion; adjacent and distant main/pane/viewer targets");
         return true;
     }
     if (app.arguments().contains("--audition-taskbar-native")) {

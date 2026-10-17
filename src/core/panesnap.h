@@ -3,7 +3,35 @@
 #define UNBOUND_PANESNAP_H
 #include <QRect>
 #include <QVector>
+#include <limits>
 namespace Unbound {
+// Ease only the magnetic correction. Raw pointer movement never trails behind
+// the cursor. The caller supplies a monotonic clock and drives frames only
+// while transitioning; exact final geometry is committed on release.
+class PaneSnapTransition {
+    struct Axis {
+        bool engaged=false;
+        double start=0,current=0;
+        qint64 began=-32;
+        bool pending=false;
+        int update(int desired,bool active,qint64 now) {
+            if(active!=engaged) { start=current; began=now; engaged=active; }
+            const double t=qBound(0.,double(now-began)/32.,1.);
+            // A short accelerating pull: gentle entry, fastest at contact.
+            const double eased=t*t;
+            current=start+((engaged ? desired : 0)-start)*eased;
+            pending=t<1. && (engaged || start!=0.);
+            return qRound(current);
+        }
+    };
+    Axis m_x,m_y;
+public:
+    void reset() { m_x=Axis{}; m_y=Axis{}; }
+    QPoint update(QPoint desired,QPoint engaged,qint64 now) {
+        return {m_x.update(desired.x(),engaged.x()!=0,now),m_y.update(desired.y(),engaged.y()!=0,now)};
+    }
+    bool animating() const { return m_x.pending || m_y.pending; }
+};
 // Native move loops can feed a previously snapped rectangle back to us. Derive
 // new proposals from accumulated pointer travel, not that snapped position.
 class PaneDragProposal
@@ -25,38 +53,53 @@ private:
     QPoint m_cursor;
 };
 // Rectangles use screen coordinates; compare exclusive right/bottom edges.
+// Window edges align across gaps. Work-area targets stay local to their spans.
 inline QPoint paneSnapOffset(const QRect &moving, const QVector<QRect> &targets, int distance,
     bool left = true, bool right = true, bool top = true, bool bottom = true,
-    QSize minimum = QSize(), QSize maximum = QSize(16777215, 16777215))
+    QSize minimum = QSize(), QSize maximum = QSize(16777215, 16777215),
+    const QVector<QRect> &workAreas = {}, QPoint *engaged = nullptr)
 {
     int bestX = distance + 1, bestY = distance + 1;
-    auto consider = [distance](int delta, int &best) {
-        if (qAbs(delta) <= distance && qAbs(delta) < qAbs(best)) best = delta;
+    qint64 bestGapX=std::numeric_limits<qint64>::max(),bestGapY=bestGapX;
+    auto consider = [distance](int delta, qint64 gap, int &best, qint64 &bestGap) {
+        if (qAbs(delta) <= distance && (qAbs(delta) < qAbs(best) ||
+            (qAbs(delta)==qAbs(best) && gap<bestGap))) {
+            best = delta; bestGap=gap;
+        }
     };
-    for (const auto &other : targets) {
-        if (moving.y() <= other.y() + other.height() + distance
-            && moving.y() + moving.height() >= other.y() - distance) {
+    auto target = [&](const QRect &other,bool local) {
+        const qint64 dx=qMax(qint64(0),qMax(qint64(other.x())-moving.x()-moving.width(),
+            qint64(moving.x())-other.x()-other.width()));
+        const qint64 dy=qMax(qint64(0),qMax(qint64(other.y())-moving.y()-moving.height(),
+            qint64(moving.y())-other.y()-other.height()));
+        // Nearest edge wins; equally close edges favour the nearer window.
+        // Identical edge coordinates naturally produce the same result.
+        // Windows retain precedence over work areas when edge distances tie.
+        const qint64 gap=local ? std::numeric_limits<qint64>::max() : dx*dx+dy*dy;
+        if (!local || dy<=distance) {
             for (int edge = 0; edge < 2; ++edge) {
                 if (!(edge ? right : left)) continue;
                 int from = edge ? moving.x() + moving.width() : moving.x();
                 for (int to : {other.x(), other.x() + other.width()}) {
                     const int width = moving.width() + (edge ? to - from : from - to);
-                    if (left == right || (width >= minimum.width() && width <= maximum.width())) consider(to - from, bestX);
+                    if (left == right || (width >= minimum.width() && width <= maximum.width())) consider(to - from, gap, bestX, bestGapX);
                 }
             }
         }
-        if (moving.x() <= other.x() + other.width() + distance
-            && moving.x() + moving.width() >= other.x() - distance) {
+        if (!local || dx<=distance) {
             for (int edge = 0; edge < 2; ++edge) {
                 if (!(edge ? bottom : top)) continue;
                 int from = edge ? moving.y() + moving.height() : moving.y();
                 for (int to : {other.y(), other.y() + other.height()}) {
                     const int height = moving.height() + (edge ? to - from : from - to);
-                    if (top == bottom || (height >= minimum.height() && height <= maximum.height())) consider(to - from, bestY);
+                    if (top == bottom || (height >= minimum.height() && height <= maximum.height())) consider(to - from, gap, bestY, bestGapY);
                 }
             }
         }
-    }
+    };
+    for (const auto &other : targets) target(other,false);
+    for (const auto &area : workAreas) target(area,true);
+    if(engaged) *engaged=QPoint(qAbs(bestX)<=distance,qAbs(bestY)<=distance);
     return QPoint(qAbs(bestX) <= distance ? bestX : 0, qAbs(bestY) <= distance ? bestY : 0);
 }
 }

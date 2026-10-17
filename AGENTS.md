@@ -8,6 +8,12 @@ Edit Index, Inspector, Metadata and Mixer; Color supports Nodes, Gallery, LUTs
 and Media Pool. Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
 
+Window edges also align across gaps. The smallest edge adjustment wins; equal
+adjustments prefer the nearer window. Work-area edge snapping stays local.
+Snap zones are 24 pixels scaled for DPI. Capture/release uses a short 32 ms
+quadratic ease-in (accelerating towards contact); pointer movement remains
+direct, release commits exact geometry, and frame timers run only in transitions.
+
 Fairlight supports Media Pool, Effects, Index, Groups, Sound Library, ADR, Mixer,
 Metadata and Inspector; Meters is excluded. Fairlight docking controls must sit
 immediately left of the native options action (Create Group for Groups), never

@@ -16,6 +16,9 @@ to supported panels.
 Open a project, then use a panel's Dock/Undock button. Resolve's native panel
 toggles remain available to control the space in the main window.
 
+Windows snap together and align their edges across gaps, with smooth snap
+transitions. Hold Alt while moving or resizing to bypass snapping.
+
 Native minimum panel sizes apply. Nodes may need panning after docking into a
 narrower area.
 

@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QMargins>
 #include <QOperatingSystemVersion>
+#include <QElapsedTimer>
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <dwmapi.h>
@@ -67,6 +68,7 @@ public:
     void begin(HWND handle)
     {
         m_handle = handle;
+        m_transition.reset(); m_clock.start();
         m_windows.clear();
         m_workAreas.clear();
         // Use native coordinates, as for the window rectangles below. Qt screen
@@ -75,7 +77,7 @@ public:
         for (auto widget : QApplication::topLevelWidgets()) {
             if (reinterpret_cast<HWND>(widget->effectiveWinId()) != handle
                 && (widget->objectName() == QLatin1String("UiMainWindow")
-                    || widget->objectName().startsWith(QLatin1String("unboundFloating_"))))
+                    || widget->property("unboundFloatingWindow").toBool()))
                 m_windows.append(widget);
         }
         RECT bounds{};
@@ -84,8 +86,9 @@ public:
         m_insets = QMargins(contact.x() - bounds.left, contact.y() - bounds.top,
             bounds.right - contact.x() - contact.width(), bounds.bottom - contact.y() - contact.height());
     }
-    void apply(RECT &target, int hit, const MINMAXINFO &limits, bool bypass = false) const
+    void apply(RECT &target, int hit, const MINMAXINFO &limits, bool bypass = false, QPoint *engaged = nullptr) const
     {
+        if(engaged) *engaged=QPoint();
         if (!m_handle || bypass || (GetAsyncKeyState(VK_MENU) & 0x8000)) return;
         QVector<QRect> targets;
         for (const auto &widget : m_windows) {
@@ -94,8 +97,7 @@ public:
             if (handle && IsWindowVisible(handle) && !IsIconic(handle)) targets.append(paneContactBounds(handle));
         }
         // Window and monitor edges compete by distance in the same calculation;
-        // existing window adjacency wins ties. Refresh monitor areas each drag.
-        targets += m_workAreas;
+        // windows win ties; work-area edges remain local to their monitor.
         const bool move = hit == HTCAPTION;
         const bool left = move || hit == HTLEFT || hit == HTTOPLEFT || hit == HTBOTTOMLEFT;
         const bool right = move || hit == HTRIGHT || hit == HTTOPRIGHT || hit == HTBOTTOMRIGHT;
@@ -108,13 +110,44 @@ public:
         const QSize minimum(qMax(1, int(limits.ptMinTrackSize.x) - horizontal), qMax(1, int(limits.ptMinTrackSize.y) - vertical));
         const QSize maximum(limits.ptMaxTrackSize.x > 0 ? limits.ptMaxTrackSize.x - horizontal : 16777215,
             limits.ptMaxTrackSize.y > 0 ? limits.ptMaxTrackSize.y - vertical : 16777215);
-        const int distance = qMax(1, MulDiv(12, GetDpiForWindow(m_handle), 96));
-        const auto offset = paneSnapOffset(visible, targets, distance, left, right, top, bottom, minimum, maximum);
+        const int distance = qMax(1, MulDiv(24, GetDpiForWindow(m_handle), 96));
+        const auto offset = paneSnapOffset(visible, targets, distance, left, right, top, bottom, minimum, maximum, m_workAreas, engaged);
         if (left) target.left += offset.x();
         if (right) target.right += offset.x();
         if (top) target.top += offset.y();
         if (bottom) target.bottom += offset.y();
     }
+    void applyAnimated(RECT &target,int hit,const MINMAXINFO &limits,bool settle=false)
+    {
+        if(!m_handle || (GetAsyncKeyState(VK_MENU)&0x8000)) { m_transition.reset(); return; }
+        const RECT raw=target;
+        QPoint engaged;
+        apply(target,hit,limits,false,&engaged);
+        if(settle) { m_transition.reset(); return; }
+        const bool move=hit==HTCAPTION;
+        const bool left=move || hit==HTLEFT || hit==HTTOPLEFT || hit==HTBOTTOMLEFT;
+        const bool right=move || hit==HTRIGHT || hit==HTTOPRIGHT || hit==HTBOTTOMRIGHT;
+        const bool top=move || hit==HTTOP || hit==HTTOPLEFT || hit==HTTOPRIGHT;
+        const bool bottom=move || hit==HTBOTTOM || hit==HTBOTTOMLEFT || hit==HTBOTTOMRIGHT;
+        const QPoint desired(left ? target.left-raw.left : target.right-raw.right,
+            top ? target.top-raw.top : target.bottom-raw.bottom);
+        const auto offset=m_transition.update(desired,engaged,m_clock.elapsed());
+        target=raw;
+        if(left) target.left+=offset.x();
+        if(right) target.right+=offset.x();
+        if(top) target.top+=offset.y();
+        if(bottom) target.bottom+=offset.y();
+        // A fading release correction must not exceed current resize limits.
+        if(!move) {
+            const LONG width=qBound(qMax(1L,limits.ptMinTrackSize.x),target.right-target.left,
+                limits.ptMaxTrackSize.x>0 ? limits.ptMaxTrackSize.x : 16777215L);
+            const LONG height=qBound(qMax(1L,limits.ptMinTrackSize.y),target.bottom-target.top,
+                limits.ptMaxTrackSize.y>0 ? limits.ptMaxTrackSize.y : 16777215L);
+            if(left) target.left=target.right-width; else target.right=target.left+width;
+            if(top) target.top=target.bottom-height; else target.bottom=target.top+height;
+        }
+    }
+    bool animating() const { return m_transition.animating(); }
 private:
     static BOOL CALLBACK collectWorkArea(HMONITOR monitor, HDC, LPRECT, LPARAM data)
     {
@@ -130,6 +163,8 @@ private:
     QList<QPointer<QWidget>> m_windows;
     QVector<QRect> m_workAreas;
     QMargins m_insets;
+    PaneSnapTransition m_transition;
+    QElapsedTimer m_clock;
 };
 
 }
