@@ -17,6 +17,14 @@ and pane fixtures, audits dependencies and publishes only `Unbound.exe` and
 `Unbound.dll` under `release/win/<version>/`. Existing releases are never overwritten.
 Pane fixture builds use `build/windows/pane-tests/`.
 
+For feature development, run `./build-unbound-release.cmd -InternalBuild`.
+The same tests and dependency audit run, with output in
+`release/win/<yyyy.mm.dd.daily_counter>/` (three-digit daily counter). `VERSION`
+stays unchanged; embedded semantic version strings carry internal build metadata
+and the Windows numeric revision uses the daily counter. No ZIP or tag is created.
+Use a fresh Resolve session to load a rebuilt helper. Viewer integration uses
+normal header controls with no separate development control panel.
+
 EXE and DLL file/product version strings contain the complete semantic version.
 Their numeric Windows resources map `MAJOR.MINOR.PATCH` to `MAJOR,MINOR,PATCH,0`;
 `-BuildNumber` overrides only that final numeric revision (0..65535). Each public

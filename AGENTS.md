@@ -31,7 +31,12 @@ native Resolve pane toggle to reclaim main-window space; docking turns it on
 to show the restored pane, deferred until page return if inactive. Native toggles
 remain usable, and startup restoration honors saved choices. Remember geometry, docking and native toggle
 states across sessions; hide/show retained floating windows with their page.
-Main-window placement is remembered per page. Unbound can start first and wait
+Main-window placement is remembered per page.
+Edit's Program and Source viewers use normal header buttons, independent saved
+geometry/floating state and native Single/Dual Viewer controls, without an extra
+control window. Source restoration waits for native availability. An event-driven
+geometry adapter reclaims the viewer region when no visible viewer remains docked.
+Unbound can start first and wait
 silently for Resolve, without launching it.
 Activating the main window or a floating pane raises the visible, non-minimized
 group while preserving selected-window focus. Group activation is event-driven.
@@ -96,6 +101,12 @@ shared artwork is in `src/assets`; the ICO is in
 Create distribution ZIP packages only when explicitly requested, never
 automatically as part of a build.
 
+Feature development normally requires an internal build in
+`release/win/<yyyy.mm.dd.daily_counter>/` (counter padded to three digits).
+Use `-InternalBuild`; keep VERSION/public semantic versions unchanged. Internal
+builds do not create ZIP packages or tag HEAD. Publishing a proper release,
+changing its public version/tag or packaging requires an explicit request.
+
 ## Development constraints
 
 - Keep widget/layout manipulation on Resolve's Qt GUI thread. Preserve native
@@ -119,6 +130,9 @@ automatically as part of a build.
 
 Keep README.md and doc/Unbound settings.md accurate for current behavior. This repository
 is self-contained for development apart from the installed toolchain and Resolve.
+
+README.md is the public GitHub landing page. Keep internal build/testing notes
+and development investigations in AGENTS.md, doc/ or the relevant tests directory.
 
 ## Local inspection tools
 

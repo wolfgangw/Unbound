@@ -78,6 +78,29 @@ Original artwork and shared PNGs live in `src/assets/`. The Windows ICO and reso
 templates live in `src/platforms/windows/resources/`. Source and artwork are covered
 by the root MIT `LICENSE`. Local inspection tools are not release dependencies.
 
+## Edit viewers
+
+Edit viewers use `editviewers.h` for native widget reparenting and independent
+settings recall. `viewergeometryadapter.h` retains native region baselines while
+expanding the timeline when no visible viewer remains docked. During resizing it
+coalesces temporary native half-height timeline resize notifications before Qt
+dispatches them to child layouts, preserving the last delivered oldSize. A narrow
+application filter is installed only during reclamation and acts only on retained
+resize targets. It finishes each native resize pass through the retained ancestor
+chain up to the main window once, then applies the expanded regions synchronously.
+Main-region painting is deferred until that transaction completes; floating
+viewers retain their own updates. Docking restores native region geometry;
+private Resolve layout anchors and the custom video/audio divider are not modified.
+
+In Single Viewer Mode, native Media Pool hover preview hides the Program widget
+and shows Source. A floating Program remains independently visible: a coalesced
+GUI-thread update shows its existing content after the native swap completes.
+The native Source preview and viewer mode remain unchanged. Native Program
+visibility intent is retained for docking; Source hiding marks the return to
+Program even when Resolve's own show call is already satisfied. Ownership changes
+and Unbound's own show calls are excluded from intent tracking. Page/host hiding
+still wins; no frames are copied and no playback or private native handler is used.
+
 ## Tests
 
 `tests/core/pane-float/` contains shared Qt fixtures. Its platform test contract

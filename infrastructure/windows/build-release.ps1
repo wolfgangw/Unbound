@@ -1,6 +1,7 @@
 param(
     [string]$Version = '',
     [int]$BuildNumber = 0,
+    [switch]$InternalBuild,
     [string]$QtPath = "$env:USERPROFILE\Qt\5.15.2\msvc2019_64"
 )
 $ErrorActionPreference = 'Stop'
@@ -26,10 +27,20 @@ function Invoke-Checked([string]$Program, [string[]]$Arguments) {
 try {
     try { $locked = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $locked = $true }
     if (!$locked) { throw 'Another Unbound release build is running.' }
-    $destination = Join-Path $releaseRoot $version
+    $outputVersion = $version
+    if ($InternalBuild) {
+        $day = (Get-Date).ToString('yyyy.MM.dd')
+        $counter = 1
+        while (Test-Path -LiteralPath (Join-Path $releaseRoot ('{0}.{1:000}' -f $day, $counter))) { $counter++ }
+        if ($counter -gt 65535) { throw 'Internal daily counter exceeds Windows revision limit.' }
+        $outputVersion = '{0}.{1:000}' -f $day, $counter
+        $BuildNumber = $counter
+        $version = (($version -split '\+')[0]) + '+internal.' + ($day -replace '\.', '') + ".$counter"
+    }
+    $destination = Join-Path $releaseRoot $outputVersion
     if (Test-Path -LiteralPath $destination) { throw "Release already exists: $destination. Existing releases are never overwritten." }
     Build-UnboundIcons -repoRoot $repoRoot
-    $build = Join-Path $repoRoot "build\windows\unbound\$version"
+    $build = Join-Path $repoRoot "build\windows\unbound\$outputVersion"
     Invoke-Checked 'cmake' @('-S', $repoRoot, '-B', $build,
         '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath",
         "-DUNBOUND_VERSION=$version", "-DUNBOUND_BUILD=$BuildNumber", "-DUNBOUND_BUILD_ID=$buildId")
@@ -54,6 +65,7 @@ try {
     Invoke-Checked 'cmake' @('--build', $testBuild, '--config', 'Release', '--', '/m:1', '/nr:false')
     $env:PATH = "$QtPath\bin;$env:PATH"
     $env:QT_QPA_PLATFORM = 'offscreen'
+    Invoke-Checked (Join-Path $build 'Release\UnboundViewerTests.exe') @()
     $test = Join-Path $testBuild 'Release\pane-float-smoke.exe'
     Invoke-Checked (Join-Path $testBuild 'Release\audition-activation-test.exe') @()
     Invoke-Checked $test @()

@@ -1,0 +1,644 @@
+Edit viewers and native Full Screen Timeline: investigation, 2026-10-16
+====================================================================
+
+Scope
+-----
+Local investigation and development only. No release version, tag, ZIP or
+production controller changes. The running Resolve already had Unbound loaded
+and its Edit Media Pool floating, so this is not fresh-session release validation.
+
+Evidence
+--------
+The complete saved WStackPage_Conform snapshot and live accessibility inspection
+identify this hierarchy:
+
+  frameEditPageVideoPlayers
+    frameEditPlayersContainer (QHBoxLayout)
+      stackedEditSourceOfflinePlayers (QStackedWidget)
+        widgetEditSourcePlayer
+        widgetEditOfflinePlayer
+        widgetEditSourceTimelinePlayer
+      frameEditPlayerSeperator
+      widgetEditTimelinePlayer (UiPlayerWidgetImp)
+
+The actual layout item ordering is retained, not inferred from QObject child
+enumeration. Each player includes its own header, video area and transport.
+The native header options anchor is framePlayerTime/rightFrame/btnOptions.
+Program's native single/dual-viewer button is btnViewerMode in that header.
+Switching to Single Viewer Mode hides the Source stack and rearranges the primary
+player's header; widening the main window can restore the Source viewer. The
+primary player also has Source Clip/Source Tape/Timeline controls in single mode,
+so its role is not permanently limited to timeline output.
+
+frameEditPageVideoPlayers and frameEditTimelinesHolder are ordinarily siblings
+under frameEditPageWidgetsContainer. That parent has no QLayout: Resolve computes
+the outer region geometry itself. Changing the QHBoxLayout of the viewers does
+not automatically transfer their entire region to the timeline.
+
+Native Dual Screen / Full Screen Timeline
+----------------------------------------
+Qt reports one 3440x1440 display, 3440x1392 available, DPR 1. Native Dual Screen
+activation succeeds and splits Resolve into two windows on this one ultrawide
+display. Initial interpretation of its grey menu text as disabled was wrong:
+On was enabled, while Full Screen Timeline was disabled until Dual Screen was on.
+Native menus update QAction enabled states lazily when opened; an earlier
+snapshot can retain an old enabled state.
+
+An isolated read-only ViewerProbe.dll captured object identities, parents,
+geometry, native actions and exposed Qt methods before and after the transitions.
+The QAction is workspaceDualScreenFullScreenTimeline.
+
+Native Full Screen Timeline reparents the SAME frameEditPageVideoPlayers object
+from frameEditPageWidgetsContainer into frameEditAuxWidgetsContainer under
+UiEditPanelAux / UiAuxPanelWindow. It does not duplicate the video widgets.
+frameEditTimelinesHolder stays in the primary Edit container and moves to y=0.
+The visible native toolbar switches to pageEditFullTimelineTools.
+
+Representative measured geometry (Qt logical coordinates, each relative to its
+own parent; widths depend on visible Inspector/sidebar regions):
+
+  Dual Screen, normal:
+    viewers:  [0,   0, 1721, 640], parent frameEditPageWidgetsContainer
+    timeline: [0, 641, 1721, 637], parent frameEditPageWidgetsContainer
+
+  Dual Screen, Full Screen Timeline:
+    viewers:  [0,   0, 1298, 679], parent frameEditAuxWidgetsContainer
+    timeline: [0,   0, 1300,1278], parent frameEditPageWidgetsContainer
+
+The whole mode also rearranges Media Pool, Effects, Index, Mixer and toolbars.
+Turning Dual Screen off restores the ordinary viewer/timeline arrangement.
+No independent timeline-expansion slot was identified in the inspected main
+window or UiConformerPanelImp Qt meta-object. This does not prove that no internal
+function exists; it means an independently usable entry point is not established.
+
+Whole-widget floating experiment
+--------------------------------
+ViewerExperiment.dll is a separate development helper, not a replacement for the
+already-loaded Unbound.dll. It reuses PaneFloatingWindow, native taskbar identity,
+dark borders, UndockButton/UndockIconEngine and PaneHeaderDrag.
+
+The Program experiment moves widgetEditTimelinePlayer as a whole. The Source
+experiment moves stackedEditSourceOfflinePlayers as a whole, preserving its
+alternative player widgets. Zero-size placeholders preserve the QHBoxLayout
+positions; docking restores parentage, stretch and alignment. Floating hosts
+retain their native ancestry through their Qt parent while remaining windows.
+
+Live observations:
+  - Program detached and docked repeatedly, including docking via its header button.
+  - Source's complete stack detached, displayed its existing clip image and docked.
+  - With Program floating, native Source expanded into its vacated horizontal space.
+  - Floating Program rendered a known timeline frame at 00:00:52:07.
+  - Its native Play transport started playback: video changed, timecode advanced,
+    the native 24 fps indicator appeared, and the main timeline playhead advanced.
+    Its Stop transport stopped playback.
+  - User confirms floating viewer playback performance was flawless. All audio
+    tracks were muted, explaining the lack of audio in that test; this was not
+    evidence of a floating-viewer audio defect. Audio still needs an unmuted test.
+
+Native reclamation negative result:
+  With both viewers floating, the main viewer region still occupied 644 pixels
+  vertically. Hiding frameEditPageVideoPlayers and sending same-size QResizeEvents
+  to its native ancestors did NOT expand the timeline. Resolve showed the viewer
+  container again; the measured frameEditTimelinesHolder remained
+  [0,645,3440,633]. Both floating contents and hosts remained alive and visible
+  according to Qt. No geometry override or repeated hide loop was installed.
+
+Automation note: multiple owned windows made UI accessibility indexes and capture
+ordering unreliable across activations. Inspect a fresh screenshot before each
+action and identify the correct captured region. A repeated experiment launch
+initially created a second control window because QApplication's QObject children
+do not include every top-level QWidget; the duplicate was removed without moving
+its content. Source now uses a static QPointer guard for repeated bootstrap.
+That fix must be tested in a fresh Resolve process; the originally loaded helper
+cannot be replaced in place.
+
+Standalone fixture
+------------------
+viewer-lifecycle.exe passed checks for whole-widget detachment, preserving all
+three Source alternatives/current selection, original order/stretch, page hide/
+show, native-area visibility restoration, repeated docking, close-to-dock and
+cleanup. These fixtures do not model Resolve's native geometry policy or playback.
+
+Design implications / next experiments
+------------------------------------
+1. Whole-widget viewer reparenting is feasible for initial rendering and Program
+   playback. It needs a dedicated session rather than transferring the Source
+   QStackedLayout into an ordinary sidebar host.
+2. Full Screen Timeline is evidence that Resolve already supports a viewer-free
+   main layout, but invoking the complete action would impose Dual Screen and
+   relocate unrelated panels. It is not yet a suitable automatic reclamation API.
+3. Investigate the native layout manager/mode signal path before adding geometry
+   interception. Do not guess OnSizeModeChanged(int) enum values or private offsets.
+4. Distinguish Program-only, Source-only and both-floating cases. One remaining
+   docked viewer should keep its region; only both floating can free the full
+   vertical viewer area. Native single/dual mode and width changes need explicit
+   behavior, including startup restoration when the Source pane is unavailable.
+5. Test Source playback/audio, mode changes, clip loading, shortcuts, resizing,
+   page return and native Dual Screen transitions in a fresh Resolve session.
+   The current prototype deliberately does not persist geometry or docking.
+
+Tools/source: tests/platforms/windows/viewer-probe/.
+Raw captures: ignored build/windows/viewer-probe/Release/viewers-*.json.
+
+End-of-test state
+-----------------
+Both viewers are docked with their native parents restored; the injected viewer
+buttons/control window were removed. Dual Screen is off and the timeline was
+returned to its original 00:00:52:07 position after playback testing. The main
+window is left maximized (it was widened to expose native Dual Viewer Mode).
+The probe DLLs remain loaded until Resolve exits; they do not poll. The final
+local development build is under build/windows/viewer-dev/Release/ and requires
+a fresh Resolve process to load its updated experiment bootstrap.
+
+Follow-up connection inspection failure
+--------------------------------------
+A separate one-shot LayoutProbe attempted QObject::dumpObjectInfo() on selected
+native objects to identify signal/slot receivers. It faulted before completing
+the capture. An external stack walk found the sole remaining Resolve thread in
+QObject destruction during process shutdown, below an exception originating at
+Qt5Core!QObject::dumpObjectInfo+0x29f, called by LayoutProbe. Resolve was stuck
+in shutdown, not merely spending time enumerating widgets. The precise offending
+connection/object is not established. No further injection or forced thread
+recovery was attempted; the user was informed and asked to restart Resolve.
+The dumpObjectInfo probe source and CMake targets were removed. Do not repeat
+this connection-dump approach against Resolve. Continue with saved snapshots,
+read-only on-disk analysis, and scoped event tracing in a fresh session.
+Local diagnostic stack: build/windows/thread-diagnostic/resolve-threads.txt.
+
+Native layout handler: follow-up findings
+----------------------------------------
+Inspected installed Resolve.exe version: 21.1.1.10, 614232536 bytes.
+SHA256: 1a109e719f2d5e20167ecd9e0f1a37407cf62702fcea366e5e7f6dbbdb826f83.
+All code addresses below are preferred image VAs for this exact binary. They
+are evidence for investigation, never supported APIs or addresses to call from
+Unbound. No Resolve executable code or private object fields were modified.
+
+On-disk Qt metadata identifies the actual menu receiver class:
+
+  UiMainMenuSlots
+    workspaceDualScreenOn_triggered(bool)                  local method 815
+    workspaceDualScreenFullScreenTimeline_triggered(bool)  local method 816
+
+The generated Qt dispatcher at 0x1452a4970 maps method 816 to 0x1452a1a40.
+That handler passes the checked state to the native setter at 0x141008600.
+The setter checks a native enablement condition, derives mode 1/2 from false/true,
+updates native mode state, calls 0x1452e7a40, then refreshes the screen arrangement.
+The mode routine's mode-2 branch applies the special mode to Edit (page key 3)
+and resets other page arrangements through the same registry. This is a broader
+workspace operation, not a visibility toggle for the viewer widget.
+
+The key missing QObject from the earlier QWidget-only probe is:
+
+  UiConformerPanelLayout
+    OnTopBarButtonClickedInSSM(QAbstractButton*)
+    OnAnchorMovedInSSM(UiLayout::UiLayoutAnchor*,int)
+    OnTopBarButtonClickedInDSM(QAbstractButton*)
+    OnAnchorMovedInDSM(UiLayout::UiLayoutAnchor*,int)
+    OnTopBarButtonClickedInEFTM(QAbstractButton*)
+    OnScreenSizeModeChanged()
+    OnAudioMixerSizeRestrictionChanged(int,int,int,int)
+    OnAudioMeterSizeRestrictionChanged(int,int,int,int)
+    OnAudioDeliverMeterSizeRestrictionChanged(int,int,int,int)
+    OnAudioMixerCurrentWidthChanged(int)
+    OnTimelineSplitterMoved()
+    SetPlayerViewerExpanded(bool)
+
+Its three paths correspond to the observed Single Screen, Dual Screen and
+Edit Full Timeline arrangements (SSM, DSM, EFTM). Static branches use modes 0, 1,
+2. A fresh-session metadata capture confirms this controller is a non-widget
+child of the Edit conformer panel, alongside three UiLayout::UiDynamicLayout
+objects. Those expose AnchorMoved(UiLayoutAnchor*,int), with no Qt methods for
+removing an arbitrary region or selecting a layout mode. No mode enum is exposed
+through these objects' Qt metadata.
+
+Important distinction: UiResizeManager exposes SizeModeChanged(int), whereas
+UiMultiScreenManager exposes ScreenModeChanged(). UiConformerPanelImp's
+OnSizeModeChanged(int), 0x14113e380, forwards sizing to two child components and
+calls UpdateViewerVisibility(), 0x14114d2b0. It does not set the screen mode.
+The layout controller's OnScreenSizeModeChanged() similarly reacts to current
+native state. Neither is an independent Full Screen Timeline selector.
+SetPlayerViewerExpanded(bool) changes a separate viewer-expansion flag and
+refreshes the existing single/dual layout; it does not select EFTM.
+
+Runtime confirmation, fresh Resolve PID 8720
+-------------------------------------------
+After the user closed the failed process, Resolve was started fresh and the
+existing Vergleich - ffmpeg CRF project opened. Production Unbound and the
+viewer-floating experiment were not loaded into this new process.
+
+The replacement LayoutStateProbe reads object identities and Qt metadata only:
+no connection dumps, custom property getters, log handler replacement or slot
+invocation. Its initial broad capture hit the 100000-object cap and explicitly
+reports truncated:true. It nevertheless positively locates the Edit controller
+and three dynamic layouts; absence of other managers in this capture proves
+nothing. Source has since been narrowed to widget children and layout-related
+objects; that narrower build still requires separate live validation.
+
+LayoutTraceProbe passively observed only relevant Edit containers' native
+parent/show/hide/move/resize events and their synchronous call stacks. Through
+normal Workspace menu clicks, Dual Screen was enabled, then Full Screen Timeline.
+The resulting 26-event capture did not reach its limit. A second invocation
+removed the event filters and wrote the capture; Resolve remained responsive.
+
+The viewer container's ParentChange event into frameEditAuxWidgetsContainer has
+this normalized native chain (outer callers first):
+
+  0x1452a1a40   Full Screen Timeline menu handler
+  0x141008600   checked-state -> native mode setter
+  0x1452e7a40   special timeline arrangement selection
+  0x1452e7860   per-page mode application
+  0x1452e3ff0   registered native widgets transfer
+    0x1452e432f calls QWidget::setParent
+
+The same synchronous transition then moves frameEditTimelinesHolder to
+[0,0,1300,1278] through the native layout application path. Before the transition
+it was [0,641,1721,637]. Its parent remains frameEditPageWidgetsContainer.
+Viewer movement and timeline expansion are coordinated consequences of selecting
+the native mode; expansion is not inferred automatically from missing viewers.
+
+The layout uses explicit geometry: the recorded timeline move passes through
+native layout calculation and QWidget geometry-setting calls, not a QBoxLayout
+noticing that the viewer item disappeared. This explains why hiding the empty
+viewer container or replacing its internal child items did not reclaim height.
+
+Raw evidence:
+  build/windows/viewer-layout/Release/layout-state-8720-*.json
+  build/windows/viewer-layout/Release/layout-trace-8720-1792171955356.json
+  build/windows/viewer-layout/static/*.json, *.txt
+Static reports used tests/platforms/windows/native-player-inspect/inspect_native.py.
+
+Current design assessment
+-------------------------
+We have identified and live-confirmed the native handler path. No separately
+exposed Qt operation for collapsing the viewer region in ordinary Single Screen
+mode has been established. Calling the entire native menu handler would impose
+Dual Screen and its unrelated panel moves; calling a reaction slot cannot replace
+the missing mode change. Calling the recovered private routines or patching
+their fields would add version-specific binary dependencies and is not proposed.
+
+Two viable investigation directions remain:
+  - Inspect the native dynamic layout anchors/constraints for a reversible
+    zero-height viewer region. GammaRay may help inspect these native objects,
+    but no public Qt mutation interface has yet been found. This is a research
+    lead, not a working solution; do not call OnAnchorMoved with invented pointers.
+  - Prototype a narrowly scoped, reversible geometry adapter for the Edit viewer
+    region and timeline, active only when all available viewers float. It must
+    cooperate with native resize/sidebar/page/mode changes, preserve the native
+    splitter state, and restore native behavior when either viewer docks. This
+    would be explicit Unbound layout behavior, not reuse of native EFTM.
+
+At this stage no production viewer feature or reclamation adapter was implemented. The
+scope remains local development, with no release build, version/tag or ZIP.
+After tracing, Dual Screen was turned off and the main window maximized again;
+native viewers are docked and timeline position remains 00:00:52:07. Native mode
+transitions changed timeline viewport/scroll presentation. The scoped trace is
+stopped; the metadata/trace DLLs remain loaded until Resolve exits. GammaRay was
+not required for this stage.
+
+Layout anchors and constraints: deeper investigation
+----------------------------------------------------
+Same installed binary/hash and live PID 8720 as above. No private function was
+called and no private state was written. The only layout changes were normal
+mouse drags of Resolve's native viewer/timeline divider, subsequently restored.
+
+AnchorProbe.dll subscribes to the public Qt signal
+AnchorMoved(UiLayoutAnchor*,int) on the three Edit UiDynamicLayout objects.
+All three connections succeeded. It records opaque anchor identities and native
+region geometry; it never dereferences an anchor in Resolve. It stops after two
+minutes or a second launcher invocation, disconnects only its own subscriptions,
+and caps recording at 100 samples. This session was explicitly stopped.
+
+The active Single Screen layout sender was 0x1fa31ff40f0. A drag of the divider
+towards the top emitted anchor pointer 0x1fa31e4ecf0, requested position 134.
+The viewer region stopped at height 319 and timeline started at y=320:
+
+  frameEditPageWidgetsContainer: [0,36,1721,1278]
+  frameEditPageVideoPlayers:     [0,0,1300,319]
+  frameEditTimelinesHolder:      [0,320,1721,958]
+
+These are logical Qt coordinates relative to each widget's parent. The main
+window became 1721 pixels wide on activation, with native Single Viewer Mode;
+the original Source stack was unavailable at that width. This test establishes
+the native single-screen divider constraint, not behavior with both viewers
+floating. Timeline position stayed 00:00:52:07. The viewer frame's QWidget
+minimumSize was [0,0], as was the timeline holder's; Qt minimumSize is therefore
+not the source of this clamp.
+
+External ReadProcessMemory reads, bounded to the emitted anchor and its QString
+name, established the object name timelineBarAnchor, native key 5, position 319
+at the limit, and a false edge-anchor flag. After restoring the divider its
+position was 643, close to the starting 644; a final one-pixel drag adjustment
+was made. The external reads cannot invoke target code or dereference a bad
+address inside Resolve. The diagnostic offsets are specific to this exact
+binary and were not added to production code or the injected observer.
+
+The anchor's vtable/RTTI confirms UiLayout::UiLayoutAnchor with no base classes.
+In particular it is not a QObject. Its manager has only the inherited
+objectName property, no dynamic properties, and the AnchorMoved signal; there
+are no Qt setters for anchor limits, position, collapse, or region activity.
+GammaRay's standard QObject property inspector therefore cannot expose these
+private anchor fields as editable Qt properties. A more specialized native
+debugger/type-aware inspector would be required to change them directly, which
+would not provide a portable feature mechanism.
+
+On-disk code confirms the clamp:
+  UiConformerPanelLayout::OnAnchorMovedInSSM at 0x14115fc00 dispatches on
+  the native anchor key. The key-5 path at 0x14115fd50 computes a lower bound
+  max(native computed minimum, floor(0.25 * container height)). Its upper bound
+  is based on 0.75 * height, additionally limited by space reserved below.
+  The 0.25 and 0.75 constants were read directly from the binary. With height
+  1278, floor(0.25 * 1278) is 319, exactly matching the live result. It updates
+  the stored split ratio and position, then applies the native layout.
+
+This is a stronger result than a widget minimum-size constraint: lowering the
+QWidget minimum or requesting a zero splitter position will not bypass the
+native handler's explicit nonzero lower bound in this arrangement. Other
+anchors in this same handler use different limits (including the 370/440-pixel
+constants seen earlier); those must not be attributed to timelineBarAnchor.
+
+Internal collapse support DOES exist:
+  A native diagnostic string identifies
+  UiDynamicLayout::LayoutMultipleAnchorWidgets at 0x144eafec0.
+  Its caller 0x144eb07f0 passes native region activation flags and anchor/widget
+  lists. The routine selects active entries from that flag list and links or
+  unlinks anchors accordingly; it is not driven by QWidget::isVisible().
+  It also explicitly rejects attempts to collapse an outer edge anchor.
+  Ordinary Edit layout preparation builds a list of 11 native region flags
+  from native controls and page state, then applies it via 0x1411680c0.
+
+Thus the engine has the capability we want, but the missing integration point
+is a way to mark the viewer REGION inactive in that native policy. Detaching
+the two inner viewer widgets, changing their Qt minimum sizes, or hiding the
+outer QWidget does not supply that flag. Neither the manager's Qt metadata nor
+the anchor object exposes an operation to do so. The generic collapse routine
+is private machine code; its existence does not make it a reusable Qt API.
+
+Assessment after anchor investigation
+--------------------------------------
+No safe native anchor/property shortcut has emerged. A private field patch or
+direct call to recovered addresses would couple the feature to this binary's
+class layouts and mode policy; neither was attempted or proposed for Unbound.
+The practical next prototype remains an explicit reversible geometry adapter,
+confined to the Edit viewer/timeline region while all available viewers float.
+It should react to native layout events rather than poll or repeatedly force
+anchor values, and preserve/restore the native split ratio and mode behavior.
+
+Artifacts:
+  tests/platforms/windows/viewer-probe/anchorprobe.cpp
+  build/windows/viewer-layout/Release/anchors-8720-start-1792172493200.json
+  build/windows/viewer-layout/Release/anchors-8720-stop-1792172548726.json
+  build/windows/viewer-layout/static/anchor-moved-ssm.txt
+  build/windows/viewer-layout/static/anchor-collapse.txt
+  build/windows/viewer-layout/static/anchor-layout-entry.txt
+  build/windows/viewer-layout/static/observed-anchor-fields.txt
+  build/windows/viewer-layout/static/observed-anchor-name.txt
+  build/windows/viewer-layout/static/anchor-rtti.txt
+
+Resolve remained responsive throughout this investigation. No GammaRay attach,
+production controller edits, release build, version/tag change or ZIP occurred.
+
+Reversible geometry adapter prototype and live validation
+---------------------------------------------------------
+Implemented in tests/platforms/windows/viewer-probe/viewergeometryadapter.h and
+connected to the existing local ViewerExperiment controls. This is separate from
+the production controller, settings and release build. Build output for this
+iteration is build/windows/viewer-adapter/Release/.
+
+The adapter observes only the identified native Edit regions and page. Native
+Move/Resize/Show/Hide events capture the latest native rectangles, and a coalesced
+queued adjustment applies the expanded layout. Self-generated geometry events
+are excluded. There is no recurring timer, discovery scan, fake native resize,
+anchor write, minimum-size override or call to a recovered private address.
+Page departure pauses the adapter and restores native geometry; return resumes
+it. Reparenting a key native region disables it.
+
+The native viewer container is kept explicitly shown at height zero, preserving
+the floating hosts' native ancestry. The timeline expands upward within the
+horizontal intersection of the native viewer and timeline rectangles. Full-height
+side columns and their vertical handles extend downward; partial/stacked columns
+retain native geometry. The native viewer/timeline divider is hidden only while
+expanded. Docking restores saved native geometry and explicit visibility.
+
+An initial live iteration exposed that expanding the normally full-width timeline
+covered Inspector. That experiment was removed, docking both viewers, and Resolve
+was restarted before testing the corrected central-column implementation.
+
+The corrected helper was loaded into fresh Resolve PID 14528, main HWND 460948,
+same installed Resolve binary. Both viewers floating automatically reclaimed the
+region. Snapshot viewers-14528-1792173833639.json records logical geometry:
+  frameEditPageVideoPlayers: [0,0,3011,0], visible
+  frameEditTimelinesHolder:  [0,0,3011,1273], visible
+  frameEditPageInspector:    [3012,0,420,1273], visible
+Both independent floating hosts were visible. Source had no selected source clip.
+The large Source host occluded Program; docking Source revealed Program's correct
+timeline image, so the black occluded capture was not evidence of lost rendering.
+
+Live checks also established:
+  - Edit -> Color hides both floating viewers; return to Edit restores them and
+    the reclaimed timeline area.
+  - Docking Source while native Dual Viewer Mode is active restores native upper
+    viewer space and Inspector's original upper-only height; Program stays floating.
+  - With Program floating and Source docked, the native Single Viewer button hides
+    Source and automatically reclaims the region. The button remains usable in
+    the floating Program header.
+  - Inspector off/on expands/shrinks the reclaimed central column and restores
+    Inspector to full height without covering it.
+  - Switching back to native Dual Viewer Mode restores the docked Source area.
+    Dock both then restores Source on the left and Program on the right with
+    the original native viewer/timeline division and Inspector height.
+
+The standalone lifecycle fixture passes (exit 0). It covers layout order/stretch,
+the whole Source stack and selected alternative, repeated detach/dock/close,
+page pause/resume, explicit native resize bursts, latest geometry restoration,
+Inspector/divider preservation, and automatic native Source show/hide policy.
+
+Remaining investigation: live main-window width thresholds/resizing, stacked side
+panel arrangements, all Source modes and selected clips, keyboard shortcuts,
+unmuted audio, sustained playback with reclamation active, and native Dual Screen
+transitions. Do not change native Dual Screen layouts with viewers floating in
+this prototype. Hosts can initially be oversized after the other viewer detaches.
+The development status label reflects the last control action and can become
+stale after automatic reclamation; geometry is the authoritative observed state.
+
+No production integration, release build, package, version/tag change or commit
+was made for this prototype.
+Final live state: both viewers docked in Dual Viewer Mode, Inspector on, timeline
+still at 00:00:52:07, experiment control window open for user testing.
+
+2026-10-17: normal viewer integration and persistence
+-----------------------------------------------------
+The separate control window and feature build switch have been removed. Viewer
+handling now lives in src/core/editviewers.h, with the adapter in
+src/core/viewergeometryadapter.h. Controller installs the standard header buttons
+when Edit is available. Interaction uses those buttons and Resolve's native
+Single/Dual Viewer controls. The earlier experiment descriptions above are
+historical; there is no extra control panel in the new internal build.
+
+Both viewers share Controller's PaneSettings instance to avoid concurrent stale
+settings copies. Under WStackPage_Conform.panes, widgetEditTimelinePlayer and
+stackedEditSourceOfflinePlayers store independent window and floating fields.
+Geometry saves after a 750 ms movement/resize debounce and flushes on docking or
+cleanup. Restoring uses the normal captionless host geometry restoration and
+monitor recovery. Shutdown restores native ownership without clearing floating
+intent. User docking/closing clears only that viewer's floating flag. Startup
+restores on Edit; Source waits for native visibility rather than forcing Dual
+Viewer Mode. Native Source visibility changes also hide/show its retained host.
+
+The lifecycle fixture adds disk reload, independent Program/Source geometry,
+dock/re-undock recall, startup floating restoration and shutdown intent checks.
+It is now run by the main build as UnboundViewerTests, using temporary settings.
+The new helper requires a fresh Resolve session for live validation. No ZIP,
+public version/tag change or commit is part of this internal build.
+
+2026-10-17: main-window resize and timeline divider disturbance
+--------------------------------------------------------------
+User reported vertical instability and the video/audio divider moving upward
+while resizing the main window with Program floating in Single Viewer Mode.
+Native playback and viewer operation were otherwise reported as unaffected.
+
+Inspected running Resolve PID 22696 using Computer Use and the passive layout
+trace (no private native calls or live patch). A bottom-edge resize captured in
+build/windows/viewer-adapter/Release/layout-trace-22696-1792222800175.json shows
+frameEditTimelinesHolder at [0,556,1569,485], then [0,0,1569,1041]. Both steps
+delivered native Move/Resize events. The outer main-window size was adjusted for
+inspection; the timeline/project content and playhead were not edited. The
+passive observer was stopped and removed its event filters after capture.
+
+This establishes alternating native short-region and adapted full-region sizes,
+rather than a paint-only artifact. The adapter previously allowed native
+timeline resize handlers to process the intermediate shrink before expanding
+again. A native internal divider can clamp to that smaller viewport and retain
+the clamped position. The trace confirms the conflicting geometry; the precise
+private divider handler was not invoked or modified during this investigation.
+
+Correction: while reclamation is active, save the native timeline rectangle but
+coalesce its Resize notifications into the final expanded geometry update. The
+native timeline receives the last delivered size as oldSize, never the discarded
+half-height interim size. Equal final sizes do not cause redundant notifications.
+Native baseline restoration remains unchanged on docking/page departure; this
+does not patch native anchor limits or restore an arbitrary divider position.
+
+The lifecycle fixture models a native divider that irreversibly clamps on a
+temporary viewport shrink. It now checks that repeated native layout bursts do
+not deliver the half-height resize, clamp the divider, or break oldSize/newSize
+continuity. Existing geometry, persistence, page and docking fixtures still pass.
+Internal 2026.10.17.005 is prepared for a fresh-session live test; replacing the
+DLL cannot change the already-running 004 helper.
+
+2026-10-17: 005 failed live validation; early layout filtering
+--------------------------------------------------------------
+User confirmed 005 still flashes apparent space for the hidden Source viewer
+and remains vertically unstable during main-window drag resizing. The earlier
+plain-widget fixture did not model the actual nested Qt layout and was insufficient.
+
+Qt 5.15.2 QApplicationPrivate::notify_helper calls application event filters,
+then QLayout::widgetEvent, then receiver/object event filters, then QWidget's
+event handler. Reference (inspection only; no Qt source copied into Unbound):
+https://github.com/qt/qtbase/blob/v5.15.2/src/widgets/kernel/qapplication.cpp#L3353-L3383
+
+005 filtered at the receiver level, after QLayout had already resized children.
+The fixture now includes a real QVBoxLayout with a child viewport whose divider
+clamps on shrink. This test FAILS against 005 with:
+  Qt child layout processed the native shrink before the timeline object filter
+
+The updated adapter filters the retained timeline's resize events at application
+level, before QLayout, while preserving native baseline geometry. No work beyond
+a quick event-type check is done on paint/input/playback events; no discovery or
+polling is introduced. The application filter exists only while reclamation is on.
+
+Native page/panel/root resize events are forwarded once through Qt under a scoped
+recursion guard, then adapted geometry is applied synchronously on completion.
+This avoids leaving the native viewer region/timeline rectangle in place until
+a queued callback during interactive resizing. Nested native resize handlers run
+normally inside that pass. Other activation/layout events remain coalesced.
+Docking and page departure restore native geometry and deliver any pending resize.
+
+The expanded fixture now passes with nested viewport preservation, consistent
+oldSize/newSize, and synchronous reclaimed geometry before the native resize call
+returns. It asserts that the native handler runs once, not twice. These results
+justify internal 006 for fresh-session live validation; they do not establish
+that all Resolve-specific resize behavior is fixed without that validation.
+
+2026-10-17: 006 feedback and complete resize transaction
+------------------------------------------------------
+User reports much better behavior: the divider is no longer yanked upward, but
+brief viewer-space flashes and gradual divider movement remain. Desired behavior
+is the same divider height ratio after releasing a main-window resize drag.
+
+A read-only metadata probe (timelineinspect.cpp) inspected the running process.
+The video/audio divider is inside UiTiSequenceView, a custom graphics view. Its
+only additional exposed method is ResizeEventSignal(int,int); there is no exposed
+property or setter for the divider position. timelineViewsSplitter separates
+stacked timeline views and is not the video/audio divider. No native methods or
+property getters were invoked, and no UI or project state was modified. Results:
+build/windows/viewer-adapter/Release/timeline-*.json.
+
+The new fixture models a main-window native layout assignment after nested root
+resize processing returns. Restricting interception to the previous root/page/
+panel boundary reproduces a failure:
+  Late main-window layout left viewer space visible until the next queued callback
+
+The adapter now retains the complete ancestor chain through the main window and
+finishes the outermost native resize before returning. Main-region updates are
+briefly disabled during that synchronous transaction, then restored after the
+final geometry is applied. Previously disabled updates remain disabled. Floating
+viewer windows keep their own updates enabled. No input, playback or paint events
+are intercepted, and no polling/discovery has been added.
+
+Activation also refreshes the last-delivered timeline size, so resizing while
+fully docked does not leave an old resize baseline when reclamation is enabled.
+The exact video/audio separator ratio is not restored by this change: no safe
+native position interface has been found. Remaining native divider drift needs
+live testing, and the fixture cannot establish Resolve-specific paint behavior.
+
+Internal 2026.10.17.007 built successfully; launcher/version/dependency checks,
+viewer lifecycle, shared pane and native window/input checks all passed. Live
+validation remains with the user in a fresh Resolve process. No ZIP/tag/commit.
+
+2026-10-17: Single Viewer Media Pool hover blanks floating Program
+----------------------------------------------------------------
+User reports that hovering a clip (not a timeline thumbnail) opens native Source
+preview in the main window and blanks the floating Program; leaving restores it.
+Dual Viewer Mode does not exhibit the same behavior.
+
+Reproduced in the existing Resolve session with Program and Media Pool floating.
+Computer Use positioned the pointer over unused pool background, then the clip,
+then unused background again, without clicking/selecting a clip or altering the
+timeline/playhead. Program's whole content, including header, disappeared while
+its host remained open; Source showed the hovered frame normally in main.
+
+Bounded passive observer hovertrace.cpp recorded Qt visibility/geometry events
+and native caller stacks, without suppressing events or invoking private code.
+Trace: build/windows/viewer-adapter/Release/hover-17068-1792230370131.json
+405 events; truncated=false. The observer was explicitly stopped and removed.
+
+On hover, native Resolve hides widgetEditTimelinePlayer (UiPlayerWidgetImp) at
+[0,0,1542,783] with hidden=true, then shows stackedEditSourceOfflinePlayers.
+The floating host remains. Resolve caller offsets on the Hide stack include
+0x114d62f and 0x1144590 (build-specific observations, not runtime hooks).
+On leave, Resolve hides Source and shows Program again (0x114d545).
+The geometry adapter correctly releases/restores viewer-region space as Source
+becomes visible/hidden. The blanking is a native whole-widget visibility request,
+not evidence of a shared decoder/render surface being stolen.
+
+EditViewers now tracks explicit Program hide/show intent while floating and,
+through its existing coalesced GUI-thread update, keeps Program content shown
+while its host and Edit page are visible. It allows native hide handling to
+finish, then shows the existing widget, without overriding Source or viewer mode.
+Its own show and docking/reparent events do not overwrite native visibility
+intent. Source hide marks native return to Program because a subsequent native
+show() can already be satisfied and therefore emit no Show event.
+
+The lifecycle fixture fails without visibility preservation:
+  Single Viewer Source preview blanked or moved the floating Program viewer
+With the change it passes repeated native hover swaps, independent host geometry,
+Source region restoration/reclamation, page hide/show, docking during preview,
+docking after hover exit, and existing persistence/ownership behavior.
+A separate fixture confirmed the need to preserve native docking visibility intent.
+
+This is prepared for internal 013. The running session is unchanged except for
+read-only tracing and normal pointer hover; the new helper needs a fresh Resolve
+process for live validation. No release package, tag or commit is requested.
+Internal 2026.10.17.013 built successfully; all launcher, version, dependency,
+viewer lifecycle, pane and native window/input checks passed. Live correction
+remains to be validated in a fresh Resolve process.

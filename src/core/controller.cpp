@@ -13,6 +13,7 @@
 #include "mainwindowplacement.h"
 #include "sidebarfloatsession.h"
 #include "panedecoration.h"
+#include "editviewers.h"
 
 namespace {
 QString audioToggle(const QString &name)
@@ -103,7 +104,8 @@ public:
     }
     ~Controller() override
     {
-        qApp->removeEventFilter(this);
+        if(qApp) qApp->removeEventFilter(this);
+        delete m_viewers.data();
         m_mainPlacement.flush();
         m_mainPlacement.error = {};
         m_mainSnap.setWindow(nullptr);
@@ -414,6 +416,15 @@ private:
         // Project Manager/other pages can exist before Edit is ready. Keep
         // intent pending, without selecting a page or touching empty layouts.
         if (QCoreApplication::closingDown() || QApplication::activeModalWidget()) return;
+        if (!m_viewers && m_window) {
+            auto page=m_window->findChild<QWidget *>("WStackPage_Conform");
+            auto players=page && page->isVisible() ? page->findChild<QWidget *>("frameEditPageVideoPlayers") : nullptr;
+            auto program=players ? players->findChild<QWidget *>("widgetEditTimelinePlayer") : nullptr;
+            auto source=players ? players->findChild<QWidget *>("stackedEditSourceOfflinePlayers") : nullptr;
+            if (program && source) {
+                m_viewers=new EditViewers(m_window,players,program,source,m_settings,this);
+            }
+        }
         showDockedPanes();
         for (auto it = m_decorations.cbegin(); it != m_decorations.cend(); ++it) {
             const auto name = it.key();
@@ -439,6 +450,7 @@ private:
         restoreColorToggles();
     }
     QPointer<QWidget> m_window;
+    QPointer<EditViewers> m_viewers;
     QSet<QWidget *> m_pages;
     QMap<QString,QPointer<QWidget>> m_candidates;
     QMap<QString,QList<QPointer<QAbstractButton>>> m_toggles;

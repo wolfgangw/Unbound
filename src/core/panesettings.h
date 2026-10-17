@@ -118,7 +118,8 @@ private:
         static const QStringList audioPanes={"frameAudioPanelMediaPoolContainer","frameAudioPanelEffectsLibraryContainer",
             "frameAudioPanelIndexContainer","frameAudioPanelGroupsContainer","frameAudioPanelSoundLibraryContainer",
             "frameAudioPanelAdrContainer","frameTimelineMixerContainer","frameMetadataContainer","frameInspectorContainer"};
-        if(!legacyPanes().contains(name) && !(name.startsWith("Audio/") && audioPanes.contains(name.mid(6)))) return {};
+        const bool viewer=name==QLatin1String("widgetEditTimelinePlayer") || name==QLatin1String("stackedEditSourceOfflinePlayers");
+        if(!viewer && !legacyPanes().contains(name) && !(name.startsWith("Audio/") && audioPanes.contains(name.mid(6)))) return {};
         return {name.startsWith("Audio/") ? "WStackPage_Audio" : name.startsWith("Color/") ? "WStackPage_Color" : "WStackPage_Conform",name.section('/',-1)};
     }
     QJsonObject entry(const QString &name) const

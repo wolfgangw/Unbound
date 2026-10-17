@@ -49,6 +49,16 @@ For example, `pages.WStackPage_Conform.panes.frameEditPageMediaPool` contains:
 Supported Edit pane keys are `frameEditPageMediaPool`, `frameEditPageSoundLibrary`,
 `frameEditPageKeyframeEditor`, `frameEditPageEffectsLibrary`, `frameEditPageEditIndex`,
 `frameEditPageInspector`, `frameEditPageMetadata`, and `frameEditAudioMeter`.
+Edit viewers use `widgetEditTimelinePlayer` (Program) and
+`stackedEditSourceOfflinePlayers` (the complete Source viewer stack). Each stores
+independent `window` geometry and `floating` state in the same settings file.
+Moving/resizing autosaves after a short delay; docking and shutdown flush geometry.
+Shutdown preserves floating intent, while clicking Dock or closing a host clears
+it. Restoration waits for Edit to become active; Source waits until available in
+native Dual Viewer Mode. Viewer restoration does not force a native mode change.
+Single/Dual Viewer switching continues through Resolve's Program header button;
+the timeline reclaims viewer space when Program floats and no visible viewer
+remains docked. Viewer state has no experiment switch or additional control panel.
 Color pane keys are `m_pFrameNodeGraph`, `m_pWidgetGallery`, `m_pWidgetLutBrowser`,
 and `m_pWidgetMediaPool`. Color's shared sidebar selectors are exclusive;
 save at most one of Gallery/LUTs/Media Pool as checked. All can be unchecked.
