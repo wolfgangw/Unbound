@@ -41,6 +41,12 @@ The export delegates to shared GUI-thread initialization. Floating hosts omit th
 Windows caption while retaining native dark resize borders and shell identity.
 The normal top frame is reduced to a one-physical-pixel outline, which is also
 the native top resize target; side and bottom resize margins remain native.
+An invisible inward grab band adds six logical pixels for edge resizing and
+twelve-pixel corner targets, scaled to the window's DPI. Native child widgets at
+the edge route resize presses into the same nonmodal host gesture; content farther
+inside retains normal input. No overlay, added layout margin or visible border
+is used. Maximized/fullscreen windows do not use the added grab zones. Child
+hooks are removed when their host is disposed, including after docking/reparenting.
 Windows 11 uses DWM's visible border thickness without subtracting a pixel;
 side and bottom compensation stops at client content. Resolve's custom client
 rectangle includes the DWM top outline, so the top compensation uses DWM's
@@ -67,3 +73,7 @@ event-driven and adds no polling. The native regression test is
 
 For development tools, see the [diagnostic build](../../tests/platforms/windows/diagnostic/README.md)
 and [Inspector probe](../../tests/platforms/windows/inspector-probe/README.md).
+
+Native windowing fixtures run through `infrastructure/windows/test-input.ps1`.
+Each child process has a 30-second deadline; desktop cursor confinement is
+released in the runner's finally block, including nonzero exits and timeouts.

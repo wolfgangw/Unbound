@@ -18,6 +18,7 @@ $mutex = New-Object Threading.Mutex($false, 'Local\UnboundWindowsReleaseBuild')
 $locked = $false
 . (Join-Path $PSScriptRoot 'generate-icons.ps1')
 . (Join-Path $PSScriptRoot 'audit-dependencies.ps1')
+. (Join-Path $PSScriptRoot 'test-input.ps1')
 function Invoke-Checked([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Program failed with exit code $LASTEXITCODE" }
@@ -73,10 +74,10 @@ try {
     Invoke-Checked $test @('--discovery-test', $dll)
     $env:QT_QPA_PLATFORM = 'windows'
     try {
-        Invoke-Checked $test @('--audition-taskbar-native')
-        Invoke-Checked $test @('--snap-native')
-        Invoke-Checked $test @('--captionless-native')
-        Invoke-Checked $test @('--frame-paint-native')
+        Invoke-UnboundNativeTest $test @('--audition-taskbar-native')
+        Invoke-UnboundNativeTest $test @('--snap-native')
+        Invoke-UnboundNativeTest $test @('--captionless-native')
+        Invoke-UnboundNativeTest $test @('--frame-paint-native')
     }
     finally { $env:QT_QPA_PLATFORM = 'offscreen' }
     # Only these two runtime files are distributed; build records stay in build/.

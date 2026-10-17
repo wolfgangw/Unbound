@@ -9,6 +9,7 @@
 #include <QScreen>
 #include "geometryjson.h"
 #include "panesnapwindows.h"
+#include "paneresizehitfilter.h"
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <dwmapi.h>
@@ -22,6 +23,7 @@ public:
         // Auxiliary taskbar windows must not keep Resolve alive.
         setAttribute(Qt::WA_QuitOnClose, false);
     }
+    ~PaneFloatingWindow() override { if(m_resizeFilter) m_resizeFilter->remove(this); }
     bool restoreGeometry(const QByteArray &bytes)
     {
         const bool restored = QWidget::restoreGeometry(bytes);
@@ -136,6 +138,8 @@ protected:
             // screen change; system defaults still include the thick top frame.
             SetWindowPos(handle, nullptr, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            m_resizeFilter=PaneResizeHitFilter::shared();
+            m_resizeFilter->watch(handle,this,[this](int hit) { beginInteractiveDrag(hit,false); });
         }
         return handled;
     }
@@ -241,6 +245,7 @@ private:
     POINT m_dragStart{};
     MINMAXINFO m_dragLimits{};
     PaneSnapWindows m_snap;
+    QPointer<PaneResizeHitFilter> m_resizeFilter;
 #endif
 };
 }

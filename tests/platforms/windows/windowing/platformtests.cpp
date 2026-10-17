@@ -260,6 +260,73 @@ bool runPlatformWindowTests(QApplication &app)
                     "Captionless edge/corner resizing hit test failed");
         };
         verifyFrame();
+        // Resolve's crash dump showed a dispatcher-level non-client press with
+        // a null result pointer. It must pass through without starting resize.
+        for(UINT message : {WM_NCHITTEST,WM_NCLBUTTONDOWN,WM_SETCURSOR}) {
+            MSG dispatch{}; dispatch.hwnd=handle; dispatch.message=message;
+            dispatch.wParam=HTTOPRIGHT; dispatch.lParam=MAKELPARAM(HTTOPRIGHT,WM_MOUSEMOVE);
+            long result=123;
+            auto filter=Unbound::PaneResizeHitFilter::shared();
+            check(!filter->nativeEventFilter("windows_dispatcher_MSG",&dispatch,nullptr) &&
+                !filter->nativeEventFilter("windows_dispatcher_MSG",&dispatch,&result) &&
+                !filter->nativeEventFilter("windows_generic_MSG",&dispatch,nullptr) &&
+                result==123 && !host.interactiveDragActive(),
+                "Dispatcher/null-result pass consumed a resize message or started a gesture");
+        }
+        // The grab band extends into content, including native child headers.
+        // Neither the frame nor the content layout needs to grow to expose it.
+        const auto headerHandle=reinterpret_cast<HWND>(header.winId());
+        POINT clientOrigin{}; ClientToScreen(handle,&clientOrigin);
+        RECT nativeClient{}; GetClientRect(handle,&nativeClient);
+        const int band=MulDiv(6,GetDpiForWindow(handle),96);
+        const int corner=MulDiv(12,GetDpiForWindow(handle),96);
+        const int centerX=clientOrigin.x+nativeClient.right/2;
+        const int centerY=clientOrigin.y+nativeClient.bottom/2;
+        auto hitAt=[&](HWND window,int x,int y) {
+            return SendMessage(window,WM_NCHITTEST,0,MAKELPARAM(x,y));
+        };
+        check(hitAt(headerHandle,centerX,clientOrigin.y+band-1)==HTTOP,
+            "Native child header did not expose the widened top resize band");
+        check(hitAt(handle,clientOrigin.x+band-1,centerY)==HTLEFT &&
+            hitAt(handle,clientOrigin.x+nativeClient.right-band,centerY)==HTRIGHT &&
+            hitAt(handle,centerX,clientOrigin.y+nativeClient.bottom-band)==HTBOTTOM,
+            "Client edge resize bands were not widened to six logical pixels");
+        check(hitAt(headerHandle,clientOrigin.x+corner-1,clientOrigin.y+corner-1)==HTTOPLEFT &&
+            hitAt(headerHandle,clientOrigin.x+nativeClient.right-corner,clientOrigin.y+corner-1)==HTTOPRIGHT,
+            "Native child header did not expose twelve-pixel corner targets");
+        check(hitAt(headerHandle,centerX,clientOrigin.y+band)==HTCLIENT,
+            "Resize band intercepted header content beyond the intended width");
+        SendMessage(headerHandle,WM_SETCURSOR,reinterpret_cast<WPARAM>(headerHandle),MAKELPARAM(HTTOP,WM_MOUSEMOVE));
+        check(GetCursor()==LoadCursor(nullptr,IDC_SIZENS),"Native child resize hit did not show the resize cursor");
+        const auto originalGeometry=host.geometry();
+        SendMessage(headerHandle,WM_NCLBUTTONDOWN,HTTOP,MAKELPARAM(centerX,clientOrigin.y+band-1));
+        check(host.interactiveDragActive() && GetCapture()==handle,
+            "Native child edge press did not start the host's nonmodal resize");
+        const auto resizeStart=host.dragStartPosition();
+        host.updateInteractiveDrag(POINT{resizeStart.x,resizeStart.y-24});
+        SendMessage(handle,WM_LBUTTONUP,0,0);
+        app.processEvents(); DwmFlush();
+        check(!host.interactiveDragActive() && host.height()>originalGeometry.height(),
+            "Widened edge gesture did not resize/release the host");
+        host.setGeometry(originalGeometry); app.processEvents();
+        // Exercise queued input through Qt's dispatcher as well as direct
+        // SendMessage delivery. The reported crash used HTTOPRIGHT (13).
+        for(int cornerHit : {HTTOPLEFT,HTTOPRIGHT,HTBOTTOMLEFT,HTBOTTOMRIGHT}) {
+            const bool left=cornerHit==HTTOPLEFT || cornerHit==HTBOTTOMLEFT;
+            const bool top=cornerHit==HTTOPLEFT || cornerHit==HTTOPRIGHT;
+            const auto destination=top ? headerHandle : handle;
+            PostMessage(destination,WM_NCLBUTTONDOWN,cornerHit,0);
+            app.processEvents(); app.processEvents();
+            check(host.interactiveDragActive() && GetCapture()==handle,
+                "Queued corner press did not start host resizing");
+            const auto start=host.dragStartPosition();
+            host.updateInteractiveDrag(POINT{start.x+(left ? -24 : 24),start.y+(top ? -24 : 24)});
+            PostMessage(handle,WM_LBUTTONUP,0,0);
+            app.processEvents(); app.processEvents();
+            check(!host.interactiveDragActive() && host.width()>originalGeometry.width() &&
+                host.height()>originalGeometry.height(),"Queued corner resize did not grow/release both axes");
+            host.setGeometry(originalGeometry); app.processEvents();
+        }
         auto mouse = [&](QEvent::Type type, QPoint local, Qt::MouseButton changed, Qt::MouseButtons held) {
             QMouseEvent event(type, local, button.mapToGlobal(local), changed, held, Qt::NoModifier);
             QApplication::sendEvent(&button, &event);
@@ -424,7 +491,7 @@ bool runPlatformWindowTests(QApplication &app)
         host.showMinimized(); app.processEvents();
         check(host.isMinimized(), "Captionless minimization failed");
         host.showNormal(); app.processEvents(); verifyFrame();
-        std::puts("PASS: captionless frame, resize edges, native-child button/title/background movement, immediate native controls, drag thresholds, cancellation, top restoration and window commands");
+        std::puts("PASS: captionless frame, six-pixel client resize bands, twelve-pixel corners, native-child resize cursor/gesture, button/title/background movement, immediate native controls, cancellation, top restoration and window commands");
         verifyAuditionHeaderDrag(app);
         return true;
     }
