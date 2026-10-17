@@ -16,6 +16,9 @@ to supported panels.
 Open a project, then use a panel's Dock/Undock button. Resolve's native panel
 toggles remain available to control the space in the main window.
 
+On the Edit page, Program and Source viewers can float independently. The
+timeline expands into the viewer area when no visible viewer remains docked.
+
 Windows snap together and align their edges across gaps, with smooth snap
 transitions. Hold Alt while moving or resizing to bypass snapping.
 
@@ -55,7 +58,7 @@ libraries and CMake configuration).
 The script regenerates icons from `src/assets/unbound-symbol.svg`, builds,
 runs regression tests and audits imports, then puts the two release binaries in
 `release/win/<version>/`. The default semantic version comes from `VERSION`
-(currently `0.1.0`); `-Version 0.2.0-dev.1` overrides it. Existing releases are
+(currently `0.2.0`); `-Version 0.3.0-dev.1` overrides it. Existing releases are
 never overwritten. Use `-QtPath` to override the default
 `%USERPROFILE%\Qt\5.15.2\msvc2019_64`. Windows build output is in `build/windows/`.
 The root command delegates to `infrastructure/windows/`.
@@ -66,8 +69,8 @@ Packaging is a separate, explicit step after committing and tagging the release:
 powershell -NoProfile -ExecutionPolicy Bypass -File infrastructure/windows/package-release.ps1
 ```
 
-This creates `release/packages/Unbound-0.1.0-windows-x64.zip` with a single enclosing
-folder, ready to attach to GitHub release `v0.1.0`.
+This creates `release/packages/Unbound-0.2.0-windows-x64.zip` with a single enclosing
+folder, ready to attach to GitHub release `v0.2.0`.
 
 ## Source layout
 
