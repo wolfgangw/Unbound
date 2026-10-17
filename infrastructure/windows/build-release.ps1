@@ -66,6 +66,7 @@ try {
     $env:PATH = "$QtPath\bin;$env:PATH"
     $env:QT_QPA_PLATFORM = 'offscreen'
     Invoke-Checked (Join-Path $build 'Release\UnboundViewerTests.exe') @()
+    Invoke-Checked (Join-Path $build 'Release\UnboundPresetTests.exe') @()
     $test = Join-Path $testBuild 'Release\pane-float-smoke.exe'
     Invoke-Checked (Join-Path $testBuild 'Release\audition-activation-test.exe') @()
     Invoke-Checked $test @()
@@ -86,6 +87,7 @@ try {
     Invoke-Checked $test @('--discovery-test', $dll)
     $env:QT_QPA_PLATFORM = 'windows'
     try {
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundPresetTests.exe') @()
         Invoke-UnboundNativeTest $test @('--audition-taskbar-native')
         Invoke-UnboundNativeTest $test @('--snap-native')
         Invoke-UnboundNativeTest $test @('--captionless-native')

@@ -2,6 +2,7 @@
 #ifndef UNBOUND_MAINWINDOWSNAP_H
 #define UNBOUND_MAINWINDOWSNAP_H
 #include "panesnapwindows.h"
+#include "windowinteraction.h"
 #include <commctrl.h>
 namespace Unbound {
 class MainWindowSnap
@@ -63,6 +64,7 @@ private:
             return 0;
         }
         if (message == WM_ENTERSIZEMOVE) {
+            WindowInteractionEvent::notify(QWidget::find(reinterpret_cast<WId>(handle)));
             const auto result = DefSubclassProc(handle, message, wParam, lParam);
             m_snap.begin(handle);
             m_limits = MINMAXINFO{};

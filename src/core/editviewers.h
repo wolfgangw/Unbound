@@ -28,8 +28,9 @@ class EditViewers : public QObject
     };
 public:
     EditViewers(QWidget *main, QWidget *players, QWidget *program, QWidget *source,
-        Unbound::PaneSettings &settings, QObject *owner=nullptr)
-        : QObject(owner ? owner : main), m_players(players), m_main(main), m_settings(settings)
+        Unbound::PaneSettings &settings, QObject *owner=nullptr,
+        std::function<void(QWidget *,const QPoint &)> contextMenu={})
+        : QObject(owner ? owner : main), m_players(players), m_main(main), m_settings(settings),m_contextMenu(std::move(contextMenu))
     {
         setObjectName("UnboundEditViewers");
         m_program.content=program; m_source.content=source;
@@ -57,6 +58,22 @@ public:
     void toggleProgram() { toggle(m_program,"Program Viewer"); }
     void toggleSource() { toggle(m_source,"Source Viewer"); }
     void dockBoth() { restoreArea(); dock(m_source); dock(m_program); }
+    bool hasFloating() const { return m_program.host || m_source.host; }
+    void flushGeometry() { rememberAll(); }
+    void preparePreset(const QJsonObject &panes) {
+        for(auto pane:{&m_source,&m_program}) if(pane->host &&
+            !panes.value(pane->content->objectName()).toObject().value("floating").toBool()) dock(*pane);
+    }
+    void restorePreset() {
+        m_saveTimer.stop();
+        for(auto pane:{&m_program,&m_source}) if(pane->host && pane->content) {
+            const auto geometry=m_settings.geometry(pane->content->objectName());
+            if(!geometry.isEmpty()) pane->host->restoreGeometry(geometry);
+        }
+        m_restoreProgram=m_program.content && m_settings.floating(m_program.content->objectName()) && !m_program.host;
+        m_restoreSource=m_source.content && m_settings.floating(m_source.content->objectName()) && !m_source.host;
+        queueReclaim();
+    }
 protected:
     bool eventFilter(QObject *object,QEvent *event) override
     {
@@ -98,6 +115,7 @@ private:
             auto layout=qobject_cast<QBoxLayout *>(parent->layout());
             if(!layout || layout->indexOf(anchor)<0 || layout->direction()!=QBoxLayout::LeftToRight) continue;
             auto b=new Unbound::UndockButton(parent);
+            b->contextMenu=m_contextMenu;
             b->setObjectName("resolvePaneUndockButton");
             b->setIcon(QIcon(new Unbound::UndockIconEngine)); b->setIconSize(QSize(20,20));
             b->setFixedSize(20,20); b->setCheckable(true); b->setFocusPolicy(Qt::NoFocus);
@@ -225,4 +243,5 @@ private:
     ViewerGeometryAdapter *m_geometry=nullptr;
     bool m_reclaimPending=false;
     bool m_showingProgram=false;
+    std::function<void(QWidget *,const QPoint &)> m_contextMenu;
 };

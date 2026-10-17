@@ -111,6 +111,11 @@ public:
         const auto message=m_settings.save(key(),m_last);
         if (!message.isEmpty() && error) error(message);
     }
+    void reloadCurrent() {
+        // The selected preset has already replaced the saved placement. Drop
+        // the outgoing cache before entering the normal page restoration path.
+        m_save.stop(); m_page.clear(); m_last.clear(); refresh();
+    }
 protected:
     bool eventFilter(QObject *object,QEvent *event) override
     {

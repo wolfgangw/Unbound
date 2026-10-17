@@ -32,8 +32,10 @@ set_property(TARGET UnboundHelper PROPERTY MSVC_RUNTIME_LIBRARY MultiThreadedDLL
 target_link_libraries(UnboundHelper PRIVATE UnboundWindowsWindowing)
 add_executable(UnboundViewerTests "${UNBOUND_ROOT}/tests/platforms/windows/viewer-probe/lifecycle.cpp")
 target_link_libraries(UnboundViewerTests PRIVATE UnboundWindowsWindowing)
+add_executable(UnboundPresetTests "${UNBOUND_ROOT}/tests/core/pane-float/presettest.cpp" "${UNBOUND_ROOT}/src/core/controller.cpp")
+target_link_libraries(UnboundPresetTests PRIVATE UnboundWindowsWindowing)
 # Preserve the release script's existing Release/ artifact layout.
-foreach(target Unbound UnboundHelper UnboundLauncherTests UnboundViewerTests)
+foreach(target Unbound UnboundHelper UnboundLauncherTests UnboundViewerTests UnboundPresetTests)
     set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endforeach()
 install(TARGETS Unbound UnboundHelper RUNTIME DESTINATION .)

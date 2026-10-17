@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include "windowintegration.h"
 #include "paneheaderdrag.h"
 #include <functional>
@@ -43,7 +44,13 @@ class UndockButton : public QToolButton
 public:
     using QToolButton::QToolButton;
     ~UndockButton() override { finishMove(true); }
+    std::function<void(QWidget *,const QPoint &)> contextMenu;
 protected:
+    void contextMenuEvent(QContextMenuEvent *event) override {
+        if(!contextMenu) { QToolButton::contextMenuEvent(event); return; }
+        m_moveCandidate=false; finishMove(true); setDown(false);
+        contextMenu(this,event->globalPos()); event->accept();
+    }
     void mousePressEvent(QMouseEvent *event) override
     {
         m_dragged = false;
@@ -128,8 +135,9 @@ private:
 class PaneDecoration : public QObject
 {
 public:
-    PaneDecoration(QWidget *pane,QObject *owner,std::function<void()> action)
-        : QObject(owner),m_pane(pane),m_margins(pane->contentsMargins()),m_action(std::move(action))
+    PaneDecoration(QWidget *pane,QObject *owner,std::function<void()> action,
+        std::function<void(QWidget *,const QPoint &)> contextMenu={})
+        : QObject(owner),m_pane(pane),m_margins(pane->contentsMargins()),m_action(std::move(action)),m_contextMenu(std::move(contextMenu))
     {
         pane->installEventFilter(this);
         refresh();
@@ -203,6 +211,7 @@ private:
     QToolButton *makeButton(QWidget *parent)
     {
         auto b=new UndockButton(parent); b->setObjectName("resolvePaneUndockButton");
+        b->contextMenu=m_contextMenu;
         b->setIcon(QIcon(new UndockIconEngine)); b->setIconSize(QSize(20,20));
         b->setCheckable(true); b->setChecked(m_floating);
         b->setToolButtonStyle(Qt::ToolButtonIconOnly); b->setAccessibleName(m_floating ? "Dock" : "Undock");
@@ -264,6 +273,7 @@ private:
     QList<PaneHeaderDrag *> m_headerDrags;
     QMargins m_margins;
     std::function<void()> m_action;
+    std::function<void(QWidget *,const QPoint &)> m_contextMenu;
     int m_strip=0;
     bool m_native=false,m_floating=false,m_refreshing=false;
 };

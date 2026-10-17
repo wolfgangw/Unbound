@@ -14,6 +14,7 @@
 #include "sidebarfloatsession.h"
 #include "panedecoration.h"
 #include "editviewers.h"
+#include "pagepresetmenu.h"
 
 namespace {
 QString audioToggle(const QString &name)
@@ -105,6 +106,7 @@ public:
     ~Controller() override
     {
         if(qApp) qApp->removeEventFilter(this);
+        delete m_presetMenu.data();
         delete m_viewers.data();
         m_mainPlacement.flush();
         m_mainPlacement.error = {};
@@ -149,6 +151,161 @@ protected:
         return false;
     }
 private:
+    QString currentPage() const {
+        if(!m_window) return {};
+        if(auto stack=m_window->findChild<QStackedWidget *>("widgetStack_Panel"))
+            if(auto page=stack->currentWidget()) return page->objectName();
+        // Some supported fixtures/early native layouts have no page stack yet.
+        for(auto page:m_pages) if(page && page->isVisible() && !Unbound::PaneSettings::pageLabel(page->objectName()).isEmpty())
+            return page->objectName();
+        for(auto page:m_pages) if(page && page->isVisible() && page->objectName()=="frameEditPageWidgetsContainer")
+            return "WStackPage_Conform";
+        return {};
+    }
+    QString capturePage(const QString &page) {
+        if(!m_settings.readError().isEmpty()) return m_settings.readError();
+        if(currentPage()!=page) return QStringLiteral("Return to this page before saving its configuration.");
+        m_lastSettingsError.clear();
+        m_mainPlacement.refresh(); m_mainPlacement.flush();
+        if(page=="WStackPage_Conform" && m_viewers) m_viewers->flushGeometry();
+        for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
+            const auto key=settingsKey(it.key());
+            if(Unbound::PaneSettings::pageForPane(key)!=page) continue;
+            const auto session=m_sessions.value(it.key());
+            if(session && session->active()) session->rememberGeometry();
+            // Preserve still-pending startup intent for a lazily available pane.
+            if(!m_settings.floating(key) || m_restoreAttempted.contains(it.key()))
+                settingsError(m_settings.saveFloating(key,session && session->active()));
+            auto pane=m_candidates.value(it.key());
+            if(pane) if(auto toggle=nativeToggle(pane,it.key()))
+                settingsError(m_settings.saveToggle(key,toggle->isChecked()));
+        }
+        return m_lastSettingsError;
+    }
+    void openPresets(const QString &page,QWidget *button,const QPoint &position) {
+        if(!m_window || currentPage()!=page) return;
+        settingsError(capturePage(page));
+        delete m_presetMenu.data();
+        auto menu=new Unbound::PagePresetMenu(m_settings,page,m_window,[this,page] {
+            if(currentPage()!=page) return false;
+            if(page=="WStackPage_Conform" && m_viewers && m_viewers->hasFloating()) return true;
+            for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it)
+                if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && it.value()->active()) return true;
+            return false;
+        });
+        m_presetMenu=menu;
+        menu->save=[this,page](QString &name,bool &duplicate) {
+            const auto error=capturePage(page);
+            return error.isEmpty() ? m_settings.savePreset(page,name,duplicate) : error;
+        };
+        menu->recall=[this,page](const QString &id,bool &applied) { return recallPreset(page,id,applied); };
+        menu->remove=[this,page](const QString &id) { return m_settings.deletePreset(page,id); };
+        menu->update=[this,page](const QString &id) {
+            const auto error=capturePage(page);
+            return error.isEmpty() ? m_settings.updatePreset(page,id) : error;
+        };
+        menu->rename=[this,page](const QString &id,const QString &name) { return m_settings.renamePreset(page,id,name); };
+        menu->dockAll=[this,page] { return dockAll(page); };
+        menu->popup(button ? button->mapToGlobal(QPoint(0,button->height())) : position);
+    }
+    QString dockAll(const QString &page) {
+        if(currentPage()!=page) return QStringLiteral("Return to this page before docking its panels.");
+        if(!m_settings.readError().isEmpty()) return m_settings.readError();
+        for(const auto &name:m_initializingNative)
+            if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)
+                return QStringLiteral("Panels are still initializing. Please try again.");
+        for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
+            if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
+            const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
+        }
+        if(page=="WStackPage_Conform" && m_viewers) m_viewers->preparePreset({});
+        // Clear retained startup intent too: a not-yet-created native pane or
+        // Source viewer must not float later after the user chose Dock all.
+        for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
+            const auto key=settingsKey(it.key());
+            if(Unbound::PaneSettings::pageForPane(key)!=page) continue;
+            const auto error=m_settings.saveFloating(key,false); if(!error.isEmpty()) return error;
+            m_pendingPresetToggles.remove(it.key()); m_pendingColorToggles.remove(it.key());
+            m_activationRequested.remove(it.key()); m_restoreAttempted.insert(it.key());
+        }
+        if(page=="WStackPage_Conform") {
+            for(const auto &key:{QStringLiteral("widgetEditTimelinePlayer"),QStringLiteral("stackedEditSourceOfflinePlayers")}) {
+                const auto error=m_settings.saveFloating(key,false); if(!error.isEmpty()) return error;
+            }
+            if(m_viewers) m_viewers->restorePreset();
+        }
+        const auto error=m_settings.clearActivePreset(page); if(!error.isEmpty()) return error;
+        scheduleDiscovery(); return {};
+    }
+    QString recallPreset(const QString &page,const QString &presetId,bool &applied) {
+        applied=false;
+        if(currentPage()!=page) return QStringLiteral("Return to this page before recalling its configuration.");
+        if(!m_settings.readError().isEmpty()) return m_settings.readError();
+        const auto configuration=m_settings.preset(page,presetId);
+        if(configuration.isEmpty()) return QStringLiteral("The panel preset no longer exists.");
+        for(const auto &name:m_initializingNative)
+            if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)
+                return QStringLiteral("Panels are still initializing. Please try again.");
+        const auto captured=capturePage(page);
+        if(!captured.isEmpty()) return captured;
+        if(m_settings.activePreset(page)==presetId && !m_settings.presetDirty(page,presetId)) return {};
+        applied=true;
+        const auto panes=configuration.value("panes").toObject();
+        // Dock only differences, before activating the saved settings: outgoing
+        // geometry/dock callbacks must not overwrite the incoming configuration.
+        for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
+            if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
+            if(!panes.value(it.key()).toObject().value("floating").toBool()) {
+                const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
+            }
+        }
+        if(page=="WStackPage_Conform" && m_viewers) m_viewers->preparePreset(panes);
+        const auto error=m_settings.activatePreset(page,presetId);
+        if(!error.isEmpty()) return error;
+        for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
+            const auto key=settingsKey(it.key());
+            if(Unbound::PaneSettings::pageForPane(key)!=page) continue;
+            m_pendingDockToggles.remove(it.key()); m_pendingColorToggles.remove(it.key());
+            m_activationRequested.remove(it.key()); m_restoreAttempted.remove(it.key());
+            if(auto session=m_sessions.value(it.key())) {
+                session->applySavedGeometry(m_settings.geometry(key));
+                if(session->active()) m_restoreAttempted.insert(it.key());
+            }
+            if(m_settings.hasToggle(key)) m_pendingPresetToggles.insert(it.key());
+            else m_pendingPresetToggles.remove(it.key());
+        }
+        m_mainPlacement.reloadCurrent();
+        if(page=="WStackPage_Conform" && m_viewers) m_viewers->restorePreset();
+        scheduleDiscovery();
+        return {};
+    }
+    void restorePresetToggles() {
+        const auto page=currentPage();
+        for(auto it=m_decorations.cbegin();it!=m_decorations.cend();++it) {
+            const auto key=settingsKey(it.key());
+            if(Unbound::PaneSettings::pageForPane(key)!=page || !m_settings.floating(key) || m_restoreAttempted.contains(it.key())) continue;
+            auto pane=it.value()->pane();
+            if(pane && panePage(pane) && panePage(pane)->isVisible() && pane->layout() && pane->layout()->count()) return;
+        }
+        m_restoringToggles=true;
+        for(bool checked:{false,true}) for(const auto &name:m_pendingPresetToggles.values()) {
+            const auto key=settingsKey(name);
+            if(Unbound::PaneSettings::pageForPane(key)!=page || m_settings.toggle(key)!=checked) continue;
+            auto pane=m_candidates.value(name);
+            if(!pane) continue;
+            auto toggle=nativeToggle(pane,name);
+            if(!toggle) continue;
+            auto session=m_sessions.value(name);
+            if(m_settings.floating(key) && (!session || !session->active())) continue;
+            if(toggle->isChecked()!=checked) {
+                if(!checked && session && session->active() && colorToggle(name).isEmpty()) session->reclaimNativeSpace(toggle);
+                else toggle->click();
+            }
+            m_pendingPresetToggles.remove(name);
+        }
+        m_restoringToggles=false;
+        if(m_presetMenu && m_presetMenu->page()==page) m_presetMenu->finishRecall();
+    }
     void scheduleDiscovery()
     {
         if (m_discoveryQueued || QCoreApplication::closingDown()) return;
@@ -233,6 +390,7 @@ private:
     {
         if (m_restoringToggles || QCoreApplication::closingDown()) return;
         for (auto it=m_sessions.cbegin(); it!=m_sessions.cend(); ++it) {
+            if(m_pendingPresetToggles.contains(it.key())) continue;
             if (!it.value()->active()) continue;
             auto decoration=m_decorations.value(it.key());
             auto pane=decoration ? decoration->pane() : nullptr;
@@ -299,6 +457,7 @@ private:
     }
     void settingsError(const QString &message)
     {
+        if(!message.isEmpty()) m_lastSettingsError=message;
         if (!message.isEmpty() && !m_settingsErrorShown) {
             m_settingsErrorShown = true;
             error(message);
@@ -410,6 +569,8 @@ private:
                 || (!qobject_cast<QBoxLayout *>(pane->layout()) && !qobject_cast<QGridLayout *>(pane->layout()))) continue;
             auto decoration = new Unbound::PaneDecoration(pane, this, [this, name] {
                 undock(name);
+            },[this,name](QWidget *button,const QPoint &position) {
+                openPresets(Unbound::PaneSettings::pageForPane(settingsKey(name)),button,position);
             });
             m_decorations.insert(name, decoration);
         }
@@ -422,7 +583,8 @@ private:
             auto program=players ? players->findChild<QWidget *>("widgetEditTimelinePlayer") : nullptr;
             auto source=players ? players->findChild<QWidget *>("stackedEditSourceOfflinePlayers") : nullptr;
             if (program && source) {
-                m_viewers=new EditViewers(m_window,players,program,source,m_settings,this);
+                m_viewers=new EditViewers(m_window,players,program,source,m_settings,this,
+                    [this](QWidget *button,const QPoint &position) { openPresets("WStackPage_Conform",button,position); });
             }
         }
         showDockedPanes();
@@ -448,9 +610,11 @@ private:
             undock(name, true);
         }
         restoreColorToggles();
+        restorePresetToggles();
     }
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
+    QPointer<Unbound::PagePresetMenu> m_presetMenu;
     QSet<QWidget *> m_pages;
     QMap<QString,QPointer<QWidget>> m_candidates;
     QMap<QString,QList<QPointer<QAbstractButton>>> m_toggles;
@@ -461,6 +625,7 @@ private:
     Unbound::MainWindowSnap m_mainSnap;
     Unbound::WindowGroupActivation m_windowGroup;
     bool m_settingsErrorShown = false;
+    QString m_lastSettingsError;
     bool m_restoringToggles = false;
     QSet<QAbstractButton *> m_watchedToggles;
     QSet<QString> m_activationRequested;
@@ -468,6 +633,7 @@ private:
     QSet<QString> m_restoreAttempted;
     QSet<QString> m_pendingColorToggles;
     QSet<QString> m_pendingDockToggles;
+    QSet<QString> m_pendingPresetToggles;
     QMap<QString, QString> m_names;
     QMap<QString, Unbound::PaneDecoration *> m_decorations;
     QMap<QString, Unbound::SidebarFloatSession *> m_sessions;

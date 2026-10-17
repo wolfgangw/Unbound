@@ -78,6 +78,79 @@ Original artwork and shared PNGs live in `src/assets/`. The Windows ICO and reso
 templates live in `src/platforms/windows/resources/`. Source and artwork are covered
 by the root MIT `LICENSE`. Local inspection tools are not release dependencies.
 
+## Panel presets
+
+`pagepresetmenu.h` uses a Qt `QFrame` tool popout with ordinary push buttons
+and vector save/trash icons. It deliberately stays outside Qt's transient popup
+stack: native pane docking can dismiss that stack, which previously required
+hiding/reopening our QMenu and could flash. An application event filter handles
+outside interaction (mouse buttons, wheel/scroll, dragging, context menus,
+keyboard/text input, touch/tablet and gestures), Escape and application deactivation.
+Hover alone does not dismiss it. Native user move/resize starts notify the filter
+through WindowInteractionEvent, including border presses consumed by the backend.
+Programmatic geometry and activation during recall are not user interaction. It exists
+only while the popout is visible; there is no polling or reopen timer. The owned
+tool window is frameless and stays above Resolve while open.
+
+The anchor is the invoking button's bottom-left corner, clamped to the display
+work area. The translucent popout uses the main window's Window palette role,
+a 4 px corner radius, and 3 px button highlights. Dirty updates have a
+playhead-style red background and a light save icon. Preset rows separate their
+controls with 5 px gaps and 2 px top/bottom margins. Rows are keyed by stable preset
+ID and retained across recall; active styling and dirty controls update in
+place under one paint transaction. Deferred refresh requests coalesce. The
+popout belongs to the stable main window, so docking its invoking pane cannot
+destroy it.
+
+`PaneSettings` format 7 stores five `presets` per page, a generated name counter,
+and an optional `activePreset` UUID. Every preset has an immutable UUID and an
+independent display name; operations never resolve display labels to identities. Snapshots change only on explicit update.
+Active identity survives manual layout changes; direct configuration comparison
+shows a dirty update control. Opening the menu flushes geometry, without polling. Direct JSON object equality detects duplicates; no hashes are
+stored. Formats 1-6 migrate through the existing atomic writer and preserve their
+active layouts. Preset validation prevents malformed snapshots from clearing a
+page's active panes. Version 6 name-based presets receive IDs atomically,
+including conversion of the active reference; snapshots and working layouts
+remain unchanged. Version 7 validation requires unique IDs, not unique names.
+
+`PresetNameButton` runs a single-shot precise 1000 ms timer only while pressed.
+Movement beyond the drag threshold, leaving the button, release or hiding
+cancels it. A completed hold replaces the label with an inline `QLineEdit` and
+suppresses recall on release. Opening the editor explicitly activates its tool
+window before focusing/selecting the text; QWidget::setFocus on an inactive tool
+alone does not transfer native keyboard input. Unmodified Left/Right collapse a
+selection to its start/end, with modified arrows handled by QLineEdit.
+Return/Enter submits only a rename; Escape and
+focus loss cancel it. Rows, callbacks and active state remain keyed by ID, so
+identical labels do not conflate recall/update/delete. Editor callbacks are
+cleared before widget teardown.
+
+Dock all clears this page's floating intent (including pending lazy panes/viewers),
+docks active hosts through their normal paths, and clears active preset identity.
+It preserves archives, other pages and the main window placement. Its menu action
+and widget are hidden and disabled without a current-page floating host; the
+controller queries existing sessions/viewers, not saved pending intent or a scan.
+
+Controller captures pending geometry/toggles before saving or deciding whether
+recall is needed. Clean active-preset recall returns without applying placement,
+toggles, viewer restoration or discovery; the popup skips its refresh too. Dirty
+active-preset recall still restores the saved snapshot. Recall docks only
+state differences before selecting the snapshot, avoiding outgoing dock callbacks
+overwriting incoming geometry. Existing hosts restore geometry in place. New
+floats go through `discover()`/`undock(..., true)`, lazy native initialization and
+the existing toggle-recovery paths. Native toggle restoration runs off-first,
+then on, once float initialization completes. Main placement reloads through its
+normal page restoration path after discarding its outgoing cache. Edit viewers
+reuse their startup intent and geometry restoration, including Source availability.
+
+`UnboundPresetTests` exercises migrated settings, naming, duplicate detection,
+capacity/delete/save, active identity, dirty updates, failed writes, page isolation,
+button anchoring, Dock all, dirty-discard semantics and popup persistence. Its
+controller fixture checks main placement, retained hosts, changed docking, native
+toggles, and header entry points on Edit/Color/Fairlight. The viewer lifecycle
+fixture checks both viewer buttons and preset restoration. Fixtures use temporary
+settings. `--preview` opens an isolated menu preview with automatic shutdown.
+
 ## Edit viewers
 
 Edit viewers use `editviewers.h` for native widget reparenting and independent

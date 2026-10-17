@@ -7,12 +7,47 @@ Windows x64. Edit supports Media Pool, Effects, Sound Library, Keyframe Editor,
 Edit Index, Inspector, Metadata and Mixer; Color supports Nodes, Gallery, LUTs
 and Media Pool. Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
-
 Window edges also align across gaps. The smallest edge adjustment wins; equal
 adjustments prefer the nearer window. Work-area edge snapping stays local.
 Snap zones are 24 pixels scaled for DPI. Capture/release uses a short 32 ms
 quadratic ease-in (accelerating towards contact); pointer movement remains
 direct, release commits exact geometry, and frame timers run only in transitions.
+Right-click any Unbound button for up to five panel configuration presets per
+page. Save/recall/delete keep the popup open; outside interactions dismiss it,
+including scrolling, keyboard input and dragging. Hover alone leaves it open. Names are
+generated per page; identical stored configurations do not create duplicates.
+Presets include main placement, supported panes' floating geometry/docking and
+native toggle states, with existing restoration/monitor recovery. They do not
+change Resolve's viewer mode or internal panel split positions. Settings format
+7 migrates previous layouts without creating presets. Existing name-based
+presets receive stable UUIDs and an active-ID reference without changing layouts. The active preset stays
+highlighted; when dirty it offers an update icon left of trash. Only explicit
+updates overwrite snapshots. Save is labelled "Save as new preset". The popup
+anchors below the invoking button. Dock all affects only the current page,
+clears pending undocking/active preset identity and preserves saved presets.
+Dock all is hidden/disabled without an actual floating host on the current page,
+including viewers. The popup inherits the main-window background palette and has
+4 px rounded corners; highlights use 3 px corners. Dirty update buttons use playhead-style
+red; trash stays neutral. Preset row controls have 5 px horizontal gaps and
+2 px top/bottom margins. Clean active-preset recall is a no-op after a fresh
+state capture; dirty recall restores the saved snapshot. Retain preset rows and
+coalesce updates rather than rebuilding rows on recall. The persistent popout
+uses a Qt tool QFrame rather than Qt's transient popup stack, so native docking
+cannot dismiss/reopen it. Outside clicks, Escape and application deactivation
+hide it; its application filter exists only while visible.
+Native user move/resize starts also dismiss it, including native-child resize
+edges. Backends report WindowInteractionEvent before starting those gestures;
+programmatic geometry changes during recall do not emit it. Switching presets
+discards the outgoing unsaved changes; there are no per-preset drafts.
+Hold a preset name for 1 second to edit inline. Enter renames only, even for an
+inactive preset; Escape or focus loss cancels. Activate the popout when opening
+the editor. While it owns focus, hand off only that popout's key/shortcut events
+directly to the owned editor's Qt event handler. Resolve can swallow key presses
+even with correct native/Qt focus; sendEvent re-enters the same host routing.
+Do not synthesize clicks or alter Resolve's global shortcut handling. Left/Right without
+modifiers collapse selection to its start/end. Names may repeat (up to 128
+characters, nonblank). Recall/update/delete and retained rows use stable IDs,
+never display names. Rename preserves active identity and dirty/layout state.
 
 Fairlight supports Media Pool, Effects, Index, Groups, Sound Library, ADR, Mixer,
 Metadata and Inspector; Meters is excluded. Fairlight docking controls must sit
@@ -100,7 +135,6 @@ shared artwork is in `src/assets`; the ICO is in
 `src/platforms/windows/resources`. Build output is in `build/windows/`.
 Create distribution ZIP packages only when explicitly requested, never
 automatically as part of a build.
-
 Feature development normally requires an internal build in
 `release/win/<yyyy.mm.dd.daily_counter>/` (counter padded to three digits).
 Use `-InternalBuild`; keep VERSION/public semantic versions unchanged. Internal
@@ -130,7 +164,6 @@ changing its public version/tag or packaging requires an explicit request.
 
 Keep README.md and doc/Unbound settings.md accurate for current behavior. This repository
 is self-contained for development apart from the installed toolchain and Resolve.
-
 README.md is the public GitHub landing page. Keep internal build/testing notes
 and development investigations in AGENTS.md, doc/ or the relevant tests directory.
 

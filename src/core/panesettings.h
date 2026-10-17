@@ -6,9 +6,12 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QMap>
+#include <QSet>
+#include <QUuid>
 #include "geometryjson.h"
 namespace Unbound {
 class PaneSettings
@@ -34,8 +37,9 @@ public:
         file.close();
         const auto root=document.object();
         const int version=root.value("version").toInt();
-        if(error.error!=QJsonParseError::NoError || !document.isObject() || version<1 || version>5
-            || !(version>=4 ? root.value("pages").isObject() : root.value("panes").isObject())) {
+        if(error.error!=QJsonParseError::NoError || !document.isObject() || version<1 || version>7
+            || !(version>=4 ? root.value("pages").isObject() : root.value("panes").isObject())
+            || (version>=6 && !validPresets(root.value("pages").toObject(),version>=7))) {
             m_readError=QStringLiteral("Unbound settings are invalid or unsupported: %1. The file was left unchanged.").arg(m_path); return;
         }
         if(version>=4) {
@@ -59,7 +63,8 @@ public:
                 }
                 m_pages=converted;
             }
-            if(version<5 || !previousPath.isEmpty()) {
+            if(version<7) m_pages=withPresetIds(m_pages);
+            if(version<7 || !previousPath.isEmpty()) {
                 m_readError=write(m_pages);
                 if(m_readError.isEmpty() && !previousPath.isEmpty()) QFile::remove(previousPath);
             }
@@ -95,7 +100,155 @@ public:
     bool hasToggle(const QString &name) const { return entry(name).value("toolbarButtonChecked").isBool(); }
     bool toggle(const QString &name) const { return entry(name).value("toolbarButtonChecked").toBool(); }
     QString saveToggle(const QString &name,bool value) { return saveField(name,"toolbarButtonChecked",value); }
+    static QString pageForPane(const QString &name) { return location(name).first; }
+    QString readError() const { return m_readError; }
+    static QString pageLabel(const QString &page) {
+        if(page=="WStackPage_Conform") return "Edit";
+        if(page=="WStackPage_Color") return "Color";
+        if(page=="WStackPage_Audio") return "Fairlight";
+        return {};
+    }
+    QJsonObject pageConfiguration(const QString &page) const {
+        const auto state=m_pages.value(page).toObject();
+        QJsonObject result;
+        if(state.contains("mainWindow")) result.insert("mainWindow",state.value("mainWindow"));
+        result.insert("panes",state.value("panes").toObject());
+        return result;
+    }
+    QJsonArray presets(const QString &page) const { return m_pages.value(page).toObject().value("presets").toArray(); }
+    QJsonObject preset(const QString &page,const QString &id) const {
+        for(const auto &value:presets(page)) if(value.toObject().value("id").toString()==id)
+            return value.toObject().value("configuration").toObject();
+        return {};
+    }
+    QString presetName(const QString &page,const QString &id) const {
+        for(const auto &value:presets(page)) if(value.toObject().value("id").toString()==id)
+            return value.toObject().value("name").toString();
+        return {};
+    }
+    QString activePreset(const QString &page) const {
+        return m_pages.value(page).toObject().value("activePreset").toString();
+    }
+    bool presetDirty(const QString &page,const QString &id) const {
+        return !id.isEmpty() && preset(page,id)!=pageConfiguration(page);
+    }
+    QString clearActivePreset(const QString &page) {
+        if(!m_readError.isEmpty()) return m_readError;
+        auto updated=m_pages; auto state=updated.value(page).toObject();
+        if(!state.contains("activePreset")) return {};
+        state.remove("activePreset"); updated.insert(page,state); return write(updated);
+    }
+    QString renamePreset(const QString &page,const QString &id,QString name) {
+        if(!m_readError.isEmpty()) return m_readError;
+        name=name.trimmed();
+        if(name.isEmpty()) return QStringLiteral("Enter a preset name.");
+        if(name.size()>128) return QStringLiteral("Preset names can have up to 128 characters.");
+        auto saved=presets(page);
+        for(int i=0;i<saved.size();++i) if(saved[i].toObject().value("id").toString()==id) {
+            auto item=saved[i].toObject();
+            if(item.value("name").toString()==name) return {};
+            item.insert("name",name); saved[i]=item;
+            auto updated=m_pages; auto state=updated.value(page).toObject();
+            state.insert("presets",saved); updated.insert(page,state); return write(updated);
+        }
+        return QStringLiteral("The panel preset no longer exists.");
+    }
+    QString updatePreset(const QString &page,const QString &id) {
+        if(!m_readError.isEmpty()) return m_readError;
+        auto saved=presets(page);
+        for(int i=0;i<saved.size();++i) if(saved[i].toObject().value("id").toString()==id) {
+            auto item=saved[i].toObject(); item.insert("configuration",pageConfiguration(page)); saved[i]=item;
+            auto updated=m_pages; auto state=updated.value(page).toObject();
+            state.insert("presets",saved); state.insert("activePreset",id);
+            updated.insert(page,state); return write(updated);
+        }
+        return QStringLiteral("The panel preset no longer exists.");
+    }
+    QString savePreset(const QString &page,QString &name,bool &duplicate) {
+        if(!m_readError.isEmpty()) return m_readError;
+        if(pageLabel(page).isEmpty()) return QStringLiteral("This page does not support panel presets.");
+        const auto configuration=pageConfiguration(page);
+        auto saved=presets(page);
+        duplicate=false;
+        for(const auto &value:saved) if(value.toObject().value("configuration").toObject()==configuration) {
+            const auto item=value.toObject(); name=item.value("name").toString(); duplicate=true;
+            auto updated=m_pages; auto state=updated.value(page).toObject();
+            state.insert("activePreset",item.value("id")); updated.insert(page,state);
+            return updated==m_pages ? QString() : write(updated);
+        }
+        if(saved.size()>=5) return QStringLiteral("Five presets are saved. Delete one to make room.");
+        auto updated=m_pages;
+        auto state=updated.value(page).toObject();
+        int number=qMax(1,state.value("nextPresetNumber").toInt(1));
+        QSet<QString> names;
+        for(const auto &value:saved) names.insert(value.toObject().value("name").toString());
+        do { name=pageLabel(page)+"-"+QString::number(number++); } while(names.contains(name));
+        const auto id=QUuid::createUuid().toString(QUuid::WithoutBraces);
+        saved.append(QJsonObject{{"id",id},{"name",name},{"configuration",configuration}});
+        state.insert("presets",saved); state.insert("nextPresetNumber",number); state.insert("activePreset",id);
+        updated.insert(page,state); return write(updated);
+    }
+    QString deletePreset(const QString &page,const QString &id) {
+        if(!m_readError.isEmpty()) return m_readError;
+        auto saved=presets(page);
+        for(int i=0;i<saved.size();++i) if(saved[i].toObject().value("id").toString()==id) {
+            saved.removeAt(i);
+            auto updated=m_pages; auto state=updated.value(page).toObject();
+            state.insert("presets",saved);
+            if(state.value("activePreset").toString()==id) state.remove("activePreset");
+            updated.insert(page,state); return write(updated);
+        }
+        return {};
+    }
+    QString activatePreset(const QString &page,const QString &id) {
+        if(!m_readError.isEmpty()) return m_readError;
+        const auto configuration=preset(page,id);
+        if(configuration.isEmpty()) return QStringLiteral("The panel preset no longer exists.");
+        auto updated=m_pages; auto state=updated.value(page).toObject();
+        if(configuration.contains("mainWindow")) state.insert("mainWindow",configuration.value("mainWindow"));
+        else state.remove("mainWindow");
+        state.insert("panes",configuration.value("panes").toObject());
+        state.insert("activePreset",id);
+        updated.insert(page,state); return write(updated);
+    }
 private:
+    static QJsonObject withPresetIds(QJsonObject pages) {
+        for(auto page=pages.begin();page!=pages.end();++page) {
+            auto state=page.value().toObject();
+            if(!state.contains("presets")) { state.remove("activePreset"); page.value()=state; continue; }
+            auto saved=state.value("presets").toArray();
+            const auto active=state.value("activePreset").toString(); state.remove("activePreset");
+            for(int i=0;i<saved.size();++i) {
+                auto item=saved[i].toObject(); const auto id=QUuid::createUuid().toString(QUuid::WithoutBraces);
+                item.insert("id",id); saved[i]=item;
+                if(item.value("name").toString()==active) state.insert("activePreset",id);
+            }
+            state.insert("presets",saved); page.value()=state;
+        }
+        return pages;
+    }
+    static bool validPresets(const QJsonObject &pages,bool stableIds) {
+        for(auto page:pages) {
+            const auto state=page.toObject();
+            if(!state.contains("presets")) continue;
+            if(!state.value("presets").isArray() || state.value("presets").toArray().size()>5) return false;
+            QSet<QString> identities;
+            for(const auto &value:state.value("presets").toArray()) {
+                if(!value.isObject()) return false;
+                const auto item=value.toObject(); const auto name=item.value("name").toString();
+                const auto identity=item.value(stableIds ? "id" : "name").toString();
+                if(name.trimmed().isEmpty() || identity.isEmpty() || identities.contains(identity) ||
+                    !item.value("configuration").isObject()) return false;
+                identities.insert(identity);
+                const auto configuration=item.value("configuration").toObject();
+                if(!configuration.value("panes").isObject() ||
+                    (configuration.contains("mainWindow") && !configuration.value("mainWindow").isObject())) return false;
+            }
+            if(stableIds && state.contains("activePreset") &&
+                !identities.contains(state.value("activePreset").toString())) return false;
+        }
+        return true;
+    }
     static QMap<QString,QString> legacyPanes()
     {
         return {
@@ -153,7 +306,7 @@ private:
     {
         if(!QDir().mkpath(QFileInfo(m_path).absolutePath())) return QStringLiteral("Cannot create Unbound settings directory: %1").arg(m_path);
         QSaveFile file(m_path);
-        const auto bytes=QJsonDocument(QJsonObject{{"version",5},{"pages",pages}}).toJson();
+        const auto bytes=QJsonDocument(QJsonObject{{"version",7},{"pages",pages}}).toJson();
         if(!file.open(QIODevice::WriteOnly) || file.write(bytes)!=bytes.size() || !file.commit())
             return QStringLiteral("Cannot save Unbound settings: %1 (%2)").arg(m_path,file.errorString());
         m_pages=pages; return {};

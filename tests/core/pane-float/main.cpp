@@ -285,7 +285,7 @@ int main(int argc, char **argv)
         const auto bytes=file.readAll(); file.close();
         check(!bytes.contains("m_pLightBox") && !bytes.contains(original.toBase64()),"Obsolete pane or encoded geometry retained");
         auto root=QJsonDocument::fromJson(bytes).object();
-        check(root.value("version").toInt()==5,"Readable format version missing");
+        check(root.value("version").toInt()==7,"Readable format version missing");
         auto pages=root.value("pages").toObject(); auto edit=pages.value("WStackPage_Conform").toObject();
         auto panes=edit.value("panes").toObject(); auto pool=panes.value("frameEditPageMediaPool").toObject();
         auto geometry=pool.value("window").toObject(); auto client=geometry.value("clientRect").toObject();

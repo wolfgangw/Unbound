@@ -19,6 +19,13 @@ toggles remain available to control the space in the main window.
 Windows snap together and align their edges across gaps, with smooth snap
 transitions. Hold Alt while moving or resizing to bypass snapping.
 
+Right-click any Dock/Undock button to save or recall a panel configuration for
+the current page. Each page has five preset slots; use a preset's trash button
+to delete it. Hold a preset name for one second to rename it; Enter saves the
+name and Escape cancels. Duplicate names are allowed. The active preset is highlighted; when its configuration changes,
+a save icon lets you update it. **Dock all** returns the current page's floating
+panels to the main window. The menu stays open while using these actions.
+
 Native minimum panel sizes apply. Nodes may need panning after docking into a
 narrower area.
 

@@ -11,6 +11,7 @@
 #include "geometryjson.h"
 #include "panesnapwindows.h"
 #include "paneresizehitfilter.h"
+#include "windowinteraction.h"
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <dwmapi.h>
@@ -236,6 +237,7 @@ protected:
 private:
     void beginInteractiveDrag(int hit, bool fromButton)
     {
+        WindowInteractionEvent::notify(this);
         const auto handle = reinterpret_cast<HWND>(winId());
         if (isMaximized()) showNormal();
         SetForegroundWindow(handle);

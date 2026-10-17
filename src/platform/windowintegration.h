@@ -8,4 +8,6 @@
 // WindowGroupActivation: setWindow(QWidget *), event-driven group raising.
 // applyPaneDarkCaption(QWidget *, QWidget *) and inheritPaneTaskbarIdentity(...).
 // All window operations are performed on the Qt GUI thread.
+// User move/resize starts emit the shared WindowInteractionEvent, including
+// native border paths that consume a press before Qt mouse-event translation.
 #include <windowbackend.h>

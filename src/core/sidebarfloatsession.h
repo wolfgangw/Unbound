@@ -48,6 +48,10 @@ public:
     std::function<void(const QByteArray &)> geometrySaved;
     std::function<void()> userDocked;
     void setSavedGeometry(const QByteArray &geometry) { if (!active()) m_savedGeometry = geometry; }
+    void applySavedGeometry(const QByteArray &geometry) {
+        m_geometryTimer->stop(); m_savedGeometry=geometry;
+        if(m_host && !geometry.isEmpty()) static_cast<PaneFloatingWindow *>(m_host.data())->restoreGeometry(geometry);
+    }
     void rememberGeometry()
     {
         m_geometryTimer->stop();
