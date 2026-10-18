@@ -157,7 +157,7 @@ private:
         };
         menu->rename=[this,page](const QString &id,const QString &name) { return m_settings.renameLayout(page,id,name); };
         menu->dockAll=[this,page] { return dockAll(page); };
-        menu->popup(button ? button->mapToGlobal(QPoint(0,button->height())) : position);
+        menu->popup(button ? button->mapToGlobal(QPoint(0,button->height())) : position,button);
     }
     QString dockAll(const QString &page) {
         if(currentPage()!=page) return QStringLiteral("Return to this page before docking its panels.");

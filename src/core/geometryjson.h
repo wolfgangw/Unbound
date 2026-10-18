@@ -21,7 +21,7 @@ inline bool readRectangle(const QJsonValue &value,QRect &r)
     r=QRect(o.value("x").toInt(),o.value("y").toInt(),o.value("width").toInt(),o.value("height").toInt());
     return r.width()>0 && r.height()>0;
 }
-// Qt remains the runtime restoration API; its binary transport stays in memory.
+// Qt's geometry transport stays in memory; native adapters can use its fields.
 // The settings file contains only named JSON fields, never encoded blobs.
 inline QJsonObject qtGeometryJson(const QByteArray &bytes)
 {

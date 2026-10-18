@@ -1,4 +1,9 @@
-# Reserved for the native macOS backend. Do not silently build Windows fallbacks.
-message(FATAL_ERROR
-    "The macOS backend is not implemented yet. See doc/platforms/macos.md. "
-    "Windows releases remain available through infrastructure/windows/build-release.cmd on Windows x64.")
+enable_language(OBJCXX)
+include("${CMAKE_CURRENT_LIST_DIR}/windowing.cmake")
+option(UNBOUND_MAC_TESTS "Build native Mac and shared fixtures" ON)
+include("${CMAKE_CURRENT_LIST_DIR}/loading/lua/targets.cmake")
+if(UNBOUND_MAC_TESTS)
+    include("${UNBOUND_ROOT}/tests/core/pane-float/targets.cmake")
+    unbound_add_pane_tests(UnboundMacWindowing "${UNBOUND_ROOT}/tests/platforms/macos/platformtests.mm")
+    unbound_add_layout_tests(UnboundMacWindowing "${UNBOUND_ROOT}/tests/platforms/macos/layoutadapter.mm")
+endif()

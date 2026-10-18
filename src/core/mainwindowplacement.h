@@ -72,8 +72,9 @@ public:
         const auto saved=m_settings.geometry(key());
         m_applying=true;
         if (!saved.isEmpty()) {
-            const auto document=QJsonDocument::fromJson(saved).object();
+            auto document=QJsonDocument::fromJson(saved).object();
             const bool envelope=document.value("format").toString()==QLatin1String("unbound-main-placement-1");
+            if (!envelope) document=qtGeometryJson(saved);
             const bool nativeRestored=Platform::restoreWindowPlacement(m_window, document, screenSignature());
             if (!nativeRestored) m_window->restoreGeometry(envelope
                 ? QByteArray::fromBase64(document.value("qt").toString().toLatin1()) : saved);

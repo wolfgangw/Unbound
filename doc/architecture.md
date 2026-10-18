@@ -1,8 +1,24 @@
 # Source and platform boundaries
 
 Unbound has one shared Qt core and one selected native backend per build.
-Windows remains the implemented release platform. macOS has a separate development
-area and currently rejects application configuration explicitly.
+Windows remains the release platform. macOS has a separate experimental Cocoa
+backend and internal Lua startup loading, using the same shared
+controller and UI.
+
+The platform split is an implementation boundary, not a product fork. Identical
+logical inputs must use the same settings/layout rules, pane catalogue, controls,
+visual design and snapping policy. New platform-independent behavior belongs in
+shared code once, including fixes first discovered on one OS. Native backends
+translate OS events, coordinates and drawing primitives into those shared rules.
+
+| Concern | Shared owner | Platform responsibility |
+| --- | --- | --- |
+| User settings | `src/core/panesettings.h`: filenames, override, JSON schema, migration, validation and atomic saves | Default data directory via `src/platform/settingslocation.h` |
+| Layouts and pane support | `panecatalogue.h`, shared controller and `pagelayoutmenu.h` | Native gesture/focus events; no alternate layout implementation |
+| Visual design | Shared buttons, icons, menu styling and `panewindowappearance.h` | Native windows/borders and color conversion |
+| Snapping | `panesnap.h`: distance, target selection, ties, easing and frame interval | Native contact bounds, DPI conversion, modifier state and event-loop timers |
+| Geometry restoration | `mainwindowplacement.h`, `panegeometryrestore.h`, settings serialization | Native placement capture/apply and fullscreen eligibility |
+| Loading and installation | All routes start the shared controller | Separate platform and approach source/infrastructure/tests |
 
 ## Shared code
 
@@ -11,6 +27,18 @@ reparenting, header buttons, page visibility, Nodes bounds, settings serializati
 per-page placement tracking and snap calculations. Widget work stays on Resolve's
 Qt GUI thread. `startController()` queues initialization on the existing application
 and retains the existing idempotency guard.
+
+`panecatalogue.h` is the authoritative page/pane catalogue: Resolve object names,
+labels, discovery roots, native toggle variants, header anchors, persistence keys,
+legacy aliases and initialization policy. The controller, decoration and settings
+migration consume it directly. Edit viewers are catalogue entries with a dedicated
+shared lifecycle adapter. Specialized pane layout handling remains in shared core;
+a catalogue entry alone does not implement an unfamiliar Resolve layout.
+
+To add pane support, register its metadata here, implement any necessary shared
+layout behavior, and extend the shared fixtures. Platform code is needed only for
+new native window/event requirements. Preserve existing settings keys and migration
+aliases when changing the catalogue.
 
 `panesnap.h` compares all visible Resolve window edges, including windows across
 gaps. Each axis chooses the smallest adjustment within the existing snap radius;
@@ -41,7 +69,24 @@ proposals and snap-target selection are unchanged.
 - `windowplacement.h` declares native capture, restoration and eligibility hooks.
   The common placement tracker retains monitor checks, page lifecycle and Qt
   geometry fallback. Native Windows placement records and coordinate conventions
-  are unchanged.
+  are unchanged. macOS captures/applies NSWindow content and frame rectangles,
+  converting Cocoa points to the shared logical coordinates. Both use the common
+  reachable-window policy; page/startup/layout restoration share one tracker.
+- `settingslocation.h` selects a backend's data-directory lookup. The Windows
+  adapter preserves `%LOCALAPPDATA%` with the existing Qt fallback; macOS uses
+  Qt's generic data directory. Shared settings code appends the same product/file
+  names and implements `UNBOUND_SETTINGS_FILE` and all migration behavior.
+
+Both platforms call `restoreReachablePaneClientGeometry()` for captionless host
+recovery. Shared snap constants remain 24 logical units, 32 ms easing and 16 ms
+frame cadence; Windows converts distance to native pixels and macOS uses points.
+The host background value is defined once in `panewindowappearance.h`.
+
+Settings parity means one format and identical state-transition/validation rules.
+Native placement metadata, available monitors and default directory may differ;
+shared geometry fallbacks preserve recoverability across desktops. Do not fork
+the schema or layout logic by platform or by loading approach. Shared legacy
+geometry codecs remain shared so either platform can read existing files.
 
 Core must not include platform paths or native OS headers. Backend implementation
 headers can include core headers and OS APIs. Each target gets exactly one backend
@@ -54,24 +99,40 @@ classes, placement hooks and resource templates. Its `windowing.cmake` supplies 
 same backend to production, shared fixtures and Windows diagnostics. The launcher
 remains independent of Qt; the helper uses Resolve's Qt runtime.
 
-`src/platforms/macos/` is reserved for Cocoa/Objective-C++ implementation and an
-independently validated loading mechanism. It must implement the contracts before
-building the shared controller. Further platforms should get their own source,
+`src/platforms/macos/` implements the contracts in Cocoa/Objective-C++ and loads the
+shared controller through `loading/lua/`. The Qt-free loader validates the host
+Qt version before loading the helper on the GUI thread. Matching infrastructure
+and loader tests live under `lua/`. Builds use `build/macos/lua/` and
+`release/mac/lua/`. See the macOS status
+document for validation limits. Further platforms should get their own source,
 infrastructure, tests and documentation directories.
 
 ## Build and release infrastructure
 
 The root `CMakeLists.txt` selects the platform. Windows resources and native link
 libraries are declared only under `src/platforms/windows/`.
+`src/core/CMakeLists.txt` owns the production core source list through
+`unbound_link_core()`. Helpers and controller fixtures use that function with the
+selected backend; add new shared translation units there once. Loader definitions
+and entry points remain local to their respective targets.
 
-Windows build entry points live under `infrastructure/windows/`; platform
+`tests/core/pane-float/targets.cmake` defines the shared pane and layout fixtures.
+Platform builds supply their native adapter sources. `layouttest.cpp` runs the same
+storage, identity, menu and controller scenarios on Windows and macOS;
+`layoutadapter.h` isolates native placement, focus and gesture checks. The Windows
+adapter retains the Win32 border/child-window cases; Cocoa supplies NSWindow/NSView
+events. Native details stay under `tests/platforms/<platform>/`.
+
+Windows build entry points are `infrastructure/windows/build-release.cmd` and
+`build-release.ps1`, alongside the icon, dependency-audit and diagnostic helpers.
+macOS build entry points live under `infrastructure/macos/`. Platform-specific
 build scripts do not live in the repository root.
 Each script resolves paths from its own location, not the caller's directory.
 
 Build output is ignored under `build/<platform>/`. Windows release artifacts remain
 exactly `Unbound.exe` and `Unbound.dll` in immutable `release/win/<version>/`
-directories. Future macOS releases belong under `release/mac/`; no macOS package
-or signing policy is implemented yet.
+directories. Internal macOS candidates belong under `release/mac/` and are signed
+ad hoc for local testing; no notarized distribution workflow is implemented yet.
 
 Original artwork and shared PNGs live in `src/assets/`. The Windows ICO and resource
 templates live in `src/platforms/windows/resources/`. Source and artwork are covered
@@ -101,9 +162,12 @@ place under one paint transaction. Deferred refresh requests coalesce. The
 popout belongs to the stable main window, so docking its invoking pane cannot
 destroy it.
 
-`PaneSettings` format 7 stores five `presets` per page, a generated name counter,
-and an optional `activePreset` UUID. Every layout has an immutable UUID and an
-independent display name; operations never resolve display labels to identities. Snapshots change only on explicit update.
+`PaneSettings` format 7 stores five layouts under the legacy `presets` key per
+page, a generated name counter, and an optional `activePreset` UUID. These wire
+names remain stable for compatibility; the shared API, UI and tests use layout
+terminology. Every layout has an immutable UUID and an independent display name;
+operations never resolve display labels to identities. Snapshots change only on
+explicit update.
 Active identity survives manual layout changes; direct configuration comparison
 shows a dirty update control. Opening the menu flushes geometry, without polling. Direct JSON object equality detects duplicates; no hashes are
 stored. Formats 1-6 migrate through the existing atomic writer and preserve their
@@ -189,11 +253,3 @@ and dependency audit. Native interactive tests remain manually selectable with
 A successful structural/configuration check on macOS does not validate Windows
 compilation or runtime behavior. Run the Windows release command on its supported
 toolchain and validate a newly built helper in a fresh Resolve process.
-
-Shared pane metadata lives in `src/core/panecatalogue.h`; discovery, header
-anchors and settings migration consume it. Shared source lists live in
-`src/core/CMakeLists.txt`, and fixture targets in `tests/core/pane-float/targets.cmake`.
-Native fixture operations use `layoutadapter.h` with platform implementations.
-Settings schema and atomic writes remain shared; `src/platform/settingslocation.h`
-selects only the native data directory. Appearance, snap constants and reachable
-geometry policy are shared, with existing Windows native behavior preserved.

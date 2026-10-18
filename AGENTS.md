@@ -19,10 +19,11 @@ generated per page; identical stored configurations do not create duplicates.
 Layouts include main placement, supported panes' floating geometry/docking and
 native toggle states, with existing restoration/monitor recovery. They do not
 change Resolve's viewer mode or internal panel split positions. Settings format
-7 migrates previous layouts without creating layouts. Existing name-based
+7 migrates previous working arrangements without creating saved layouts. Existing name-based
 layouts receive stable UUIDs and an active-ID reference without changing layouts. The active layout stays
 highlighted; when dirty it offers an update icon left of trash. Only explicit
-updates overwrite snapshots. Save is labelled "Save as new layout". The popup
+updates overwrite snapshots. Save names the current page, e.g. "Save as new Edit layout",
+using the shared page catalogue's capitalized label. The popup
 anchors below the invoking button. Dock all affects only the current page,
 clears pending undocking/active layout identity and preserves saved layouts.
 Dock all is hidden/disabled without an actual floating host on the current page,
@@ -48,6 +49,9 @@ Do not synthesize clicks or alter Resolve's global shortcut handling. Left/Right
 modifiers collapse selection to its start/end. Names may repeat (up to 128
 characters, nonblank). Recall/update/delete and retained rows use stable IDs,
 never display names. Rename preserves active identity and dirty/layout state.
+Use layout terminology in UI, code and tests. Retain format-7 JSON wire keys
+`presets`, `activePreset` and `nextPresetNumber` for compatibility, and preserve
+Resolve-owned widget names such as `btnPresetsSelector`.
 
 Fairlight supports Media Pool, Effects, Index, Groups, Sound Library, ADR, Mixer,
 Metadata and Inspector; Meters is excluded. Fairlight docking controls must sit
@@ -101,14 +105,40 @@ group while preserving selected-window focus. Group activation is event-driven.
   the path for tests. Page/pane keys are actual Resolve widget names. Qt geometry
   records exist only in memory; persisted fields are unencoded and named.
 
+`src/core/panecatalogue.h` owns page/pane metadata for discovery, native toggles,
+header anchors and persistence/migration. Add pane metadata there once; specialized
+layout behavior stays in shared core. `src/core/CMakeLists.txt` owns the shared
+production source list. Both platform helpers and controller fixtures use
+`unbound_link_core()`. Shared fixture targets live in
+`tests/core/pane-float/targets.cmake`; native layout operations implement
+`layoutadapter.h` under the platform's tests directory.
+
 Shared pane behavior and persistence live in `src/core/`. OS contracts live in
 `src/platform/`; CMake selects the implementation under `src/platforms/<platform>/`.
 Keep native APIs out of shared code. Windows bootstrap is in
 `src/platforms/windows/bootstrap.cpp`; native placement is in that directory's
 `windowplacement.cpp`, while per-page tracking remains in core.
-The root release entry points delegate to `infrastructure/windows/`.
-macOS source, infrastructure and tests have separate development areas; the
-macOS backend is not implemented. Do not substitute a no-op backend for a release.
+Platform separation must never create independent versions of settings, layouts,
+pane support, visual design or snapping policy. Those mechanisms belong in shared
+core and must retain identical semantics. Settings directory discovery alone uses
+`src/platform/settingslocation.h`; filenames, overrides, JSON schema, migration
+and atomic writes remain shared. `panewindowappearance.h`, `panesnap.h` and
+`panegeometryrestore.h` own host colors, snap constants/calculations and reachable
+captionless geometry recovery. Native backends supply coordinate/DPI conversion,
+OS events, native placement and window rendering. Reuse shared fixtures on each
+backend; keep native event fixtures under that platform. Preserve working Windows
+behavior when extracting shared implementation; do not replace its backend.
+macOS main placement uses native NSWindow capture/apply with the shared geometry
+fields and recovery policy. Do not restore it through QWidget::restoreGeometry:
+Qt assumes external title-bar clearance that Resolve's integrated frame lacks.
+Windows build entry points live under `infrastructure/windows/`; macOS entry
+points live under `infrastructure/macos/`. Keep platform build scripts out of the
+repository root.
+macOS source, infrastructure and tests have separate development areas. The
+experimental Cocoa backend loads the unchanged shared controller through
+`loading/lua/`, with matching infrastructure and loader-test directories.
+Keep the existing UI concept and functions.
+Do not introduce a separate workspace/control window. Do not substitute a no-op backend for a release.
 See `doc/architecture.md` and `doc/platforms/` for platform status.
 
 ## Build and validate
@@ -141,6 +171,31 @@ Use `-InternalBuild`; keep VERSION/public semantic versions unchanged. Internal
 builds do not create ZIP packages or tag HEAD. Publishing a proper release,
 changing its public version/tag or packaging requires an explicit request.
 
+Mac development uses Resolve's Qt 5.15.2 runtime and pinned headers prepared by
+`infrastructure/macos/prepare-qt.sh`. Build/test/audit/sign with
+`infrastructure/macos/build.sh` (delegates to `lua/build.sh`).
+Candidates are immutable under `release/mac/lua/`.
+Top-level Mac build/test/audit/install commands delegate to Lua. Native Cocoa
+fixtures require a GUI session; Windows native validation still requires Windows.
+No Resolve app re-signing, public version change or automatic ZIP.
+
+
+Lua loading and automatic startup work in the tested Free Resolve
+configuration; pane undocking, layouts and basic Fusion interaction are validated.
+See `doc/platforms/macos.md` for current limits and next steps, and the approach's
+infrastructure README for installation/recovery commands.
+
+The Lua startup hook calls the private loader once and returns silently. Install
+the runtime under `~/Library/Application Support/Unbound/Runtime/`; only the root
+`Unbound.scriptlib` belongs in Resolve's Scripts tree. Do not install a visible
+Scripts-menu launcher. Normal installation includes startup and migrates the old
+Utility launcher into backups outside Resolve's scan tree, preserving settings. Keep
+its source/infrastructure/tests under the Lua approach's `startup/` directories.
+Do not add a persistent Lua loop or duplicate controller/settings logic. Resolve's
+internal Lua exposes global `ffi` and `os.getenv`, but omits `require`, `package`,
+`debug` and `io`. Queue native attachment onto the Qt GUI thread. Keep fixture
+logs separate from live startup logs using `UNBOUND_LOG_FILE`.
+
 ## Development constraints
 
 - Keep widget/layout manipulation on Resolve's Qt GUI thread. Preserve native
@@ -164,8 +219,12 @@ changing its public version/tag or packaging requires an explicit request.
 
 Keep README.md and doc/Unbound settings.md accurate for current behavior. This repository
 is self-contained for development apart from the installed toolchain and Resolve.
-README.md is the public GitHub landing page. Keep internal build/testing notes
-and development investigations in AGENTS.md, doc/ or the relevant tests directory.
+README.md is the public GitHub landing page. AGENTS.md records durable development
+rules; platform docs summarize current status, meaningful limitations and roadmap;
+test READMEs explain reproducible validation. Keep per-run output in build logs.
+Do not append test-session diaries, PIDs, candidate-by-candidate histories or
+incidental corrections to these documents. Retain investigation details only when
+they explain a lasting constraint, architectural decision or unresolved defect.
 
 ## Local inspection tools
 
@@ -174,15 +233,3 @@ package, `run-gammaray.cmd`, and page snapshots. See its README for capture step
 Edit's page widget is `WStackPage_Conform`; Color is `WStackPage_Color`, Fairlight
 is `WStackPage_Audio`. Use a fresh Resolve session without Unbound for native
 captures, and verify exports have `truncated: false`.
-
-Shared pane metadata lives in `src/core/panecatalogue.h`; discovery, header
-anchors and settings migration consume it. Shared source lists live in
-`src/core/CMakeLists.txt`, and fixture targets in `tests/core/pane-float/targets.cmake`.
-Native fixture operations use `layoutadapter.h` with platform implementations.
-Settings schema and atomic writes remain shared; `src/platform/settingslocation.h`
-selects only the native data directory. Appearance, snap constants and reachable
-geometry policy are shared, with existing Windows native behavior preserved.
-
-Use layout terminology in UI, code and tests; retain the format-7 JSON wire keys
-`presets`, `activePreset` and `nextPresetNumber` for compatibility. Save names
-the current page, e.g. "Save as new Edit layout", using the shared page catalogue.

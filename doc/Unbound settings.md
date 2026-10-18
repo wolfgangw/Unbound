@@ -1,11 +1,19 @@
 # Unbound settings
 
-Location: `%LOCALAPPDATA%\Unbound\Unbound.json`.
+Windows location: `%LOCALAPPDATA%\Unbound\Unbound.json`.
+The experimental macOS build uses
+`~/Library/Application Support/Unbound/Unbound.json`.
+`UNBOUND_SETTINGS_FILE` overrides the path for isolated tests.
 
 The file is readable JSON (format version 7). If you want to edit it directly
 then do it while Resolve is closed, so Unbound's in-memory settings and
 autosave do not overwrite your changes. Settings apply across Resolve projects
-for the current Windows user.
+for the current user. The schema and pane catalogue are shared across platforms;
+window coordinates still depend on the target desktop and monitor layout.
+Both builds use the same settings and layout implementation, including migration,
+validation and atomic saving. Platform adapters only choose the default data
+directory and capture/restore native window placement; the loading mechanism
+does not select a different settings file or format.
 
 The top-level `pages` object uses Resolve widget names: `WStackPage_Conform`, `WStackPage_Color`,
 `WStackPage_Audio`, `WStackPage_Browse`, `WStackPage_Cut`,
@@ -16,7 +24,8 @@ Each page can contain `mainWindow` and `panes`.
 
 Right-click any Unbound Dock/Undock button, docked or floating, to open the
 current page's layout menu, anchored immediately below the button (subject to
-screen-edge placement). **Save as new Edit layout** (or Color/Fairlight for the current page) creates a layout
+screen-edge placement). The menu stays open when you release the opening
+right-click. **Save as new Edit layout** (or Color/Fairlight for the current page) creates a layout
 from the current page's arrangement. To update
 the active layout instead, use the save icon in its row. Save, recall, update and delete keep the menu open, so deleting
 a layout and saving its replacement does not require reopening it. An outside
@@ -158,7 +167,7 @@ Floating Media Pool audition uses an automatic activation correction with no
 additional setting or diagnostic switch. Saved toggle preferences and space
 reclamation behave normally; docking removes the correction.
 
-`mainWindow` contains:
+On Windows, `mainWindow` contains:
 
 - `normalRect`: native Windows position and size, with `x`, `y`, `width`, `height`.
 - `coordinateSpace`: `windows-workspace`; these are Windows placement coordinates,
@@ -169,6 +178,14 @@ reclamation behave normally; docking removes the correction.
 - `qtFallback`: the same readable Qt geometry fields as a pane's `window`, used
   when the monitor arrangement changes. In an unchanged display setup,
   `normalRect` is authoritative. Update the fallback too if changing both cases.
+
+On macOS, `mainWindow` uses the same readable geometry fields as a pane's `window`:
+`clientRect`, `frameRect`, `normalClientRect`, `screenIndex`, `screenWidth`,
+`maximized` and `fullScreen`. Rectangles use logical screen coordinates with a
+top-left origin; the Cocoa adapter converts to/from native points and handles the
+title area. `normalClientRect` preserves the size/position beneath maximization.
+Page switching, startup and layout recall all use this native adapter, with shared
+off-screen recovery and content constraints. Existing records need no migration.
 
 No field contains Base64 data. Qt's binary restoration record is reconstructed
 in memory. This preserves the existing restoration behavior while allowing

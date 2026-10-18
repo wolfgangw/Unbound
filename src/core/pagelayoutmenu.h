@@ -185,7 +185,13 @@ public:
         if(qApp) qApp->removeEventFilter(this);
     }
     QString page() const { return m_page; }
-    void popup(const QPoint &position) {
+    void popup(const QPoint &position,QWidget *invokingButton=nullptr) {
+        // Cocoa delivers the context request on press, Windows on release.
+        // The opening gesture is not a new outside interaction. Keep its release
+        // exempt through both QWindow and QWidget delivery; the next press ends
+        // the exemption. No timer or native platform special case is needed.
+        m_openingButtons=invokingButton ? QApplication::mouseButtons() : Qt::NoButton;
+        m_openingArea=invokingButton ? QRect(invokingButton->mapToGlobal(QPoint()),invokingButton->size()) : QRect();
         adjustSize();
         auto screen=QGuiApplication::screenAt(position);
         if(!screen) screen=QGuiApplication::primaryScreen();
@@ -215,6 +221,7 @@ protected:
         qApp->installEventFilter(this); QFrame::showEvent(event);
     }
     void hideEvent(QHideEvent *event) override {
+        m_openingButtons=Qt::NoButton;
         m_recalling=false;
         finishRename(false);
         if(qApp) qApp->removeEventFilter(this);
@@ -247,15 +254,23 @@ private:
         auto widget=qobject_cast<QWidget *>(object);
         return widget && (widget==this || isAncestorOf(widget));
     }
-    bool outsideInteraction(QObject *object,QEvent *event) const {
+    bool outsideInteraction(QObject *object,QEvent *event) {
         auto outside=[this](QPoint point) { return !geometry().contains(point); };
         switch(event->type()) {
-        case QEvent::MouseButtonPress: case QEvent::MouseButtonRelease: case QEvent::MouseButtonDblClick:
-        case QEvent::NonClientAreaMouseButtonPress: case QEvent::NonClientAreaMouseButtonRelease:
+        case QEvent::MouseButtonPress: case QEvent::MouseButtonDblClick:
+        case QEvent::NonClientAreaMouseButtonPress:
         case QEvent::NonClientAreaMouseButtonDblClick:
+            m_openingButtons=Qt::NoButton;
             return outside(static_cast<QMouseEvent *>(event)->globalPos());
+        case QEvent::MouseButtonRelease: case QEvent::NonClientAreaMouseButtonRelease: {
+            auto mouse=static_cast<QMouseEvent *>(event);
+            if(m_openingButtons & mouse->button()) return false;
+            return outside(mouse->globalPos());
+        }
         case QEvent::MouseMove: case QEvent::NonClientAreaMouseMove: {
             auto mouse=static_cast<QMouseEvent *>(event);
+            if((mouse->buttons() & m_openingButtons) && !(mouse->buttons() & ~m_openingButtons)
+                && m_openingArea.contains(mouse->globalPos())) return false;
             return mouse->buttons()!=Qt::NoButton && outside(mouse->globalPos());
         }
         case QEvent::Wheel: return outside(static_cast<QWheelEvent *>(event)->globalPosition().toPoint());
@@ -425,6 +440,8 @@ private:
     std::function<bool()> m_hasFloating;
     QMap<QString,LayoutRow> m_rows;
     QString m_message,m_editing;
+    Qt::MouseButtons m_openingButtons=Qt::NoButton;
+    QRect m_openingArea;
     bool m_recalling=false,m_refreshQueued=false;
 };
 }
