@@ -1,7 +1,7 @@
 # Unbound settings
 
 Windows location: `%LOCALAPPDATA%\Unbound\Unbound.json`.
-The experimental macOS build uses
+macOS location:
 `~/Library/Application Support/Unbound/Unbound.json`.
 `UNBOUND_SETTINGS_FILE` overrides the path for isolated tests.
 

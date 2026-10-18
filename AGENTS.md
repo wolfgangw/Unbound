@@ -3,7 +3,12 @@
 ## Product
 
 Unbound makes DaVinci Resolve panes independent, movable, resizable windows on
-Windows x64. Edit supports Media Pool, Effects, Sound Library, Keyframe Editor,
+Windows x64 and macOS Apple Silicon, with feature parity. Both use automatic
+startup, native installers and the same shared pane behavior and layouts.
+Windows builds are unsigned; macOS builds are ad-hoc signed without Developer ID
+signing/notarization. These distribution limitations do not imply missing features.
+See `doc/platforms/` for tested configurations and platform validation details.
+Edit supports Media Pool, Effects, Sound Library, Keyframe Editor,
 Edit Index, Inspector, Metadata and Mixer; Color supports Nodes, Gallery, LUTs
 and Media Pool. Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
@@ -75,17 +80,17 @@ Edit's Program and Source viewers use normal header buttons, independent saved
 geometry/floating state and native Single/Dual Viewer controls, without an extra
 control window. Source restoration waits for native availability. An event-driven
 geometry adapter reclaims the viewer region when no visible viewer remains docked.
-Unbound can start first and wait
-silently for Resolve, without launching it.
+Installed Unbound starts automatically with DaVinci Resolve through its Lua
+startup hook; the installer does not launch Resolve.
 Activating the main window or a floating pane raises the visible, non-minimized
 group while preserving selected-window focus. Group activation is event-driven.
 
 ## Architecture
 
-- `src/platforms/windows/launcher.cpp`: Win32 launcher locates a ready Resolve process, loads the
-  adjacent `Unbound.dll` into it and invokes its bootstrap. The launcher then
-  exits; the helper lives inside Resolve. Waiting launchers use a single-instance
-  guard. No network service, temporary DLL extraction or autostart registration.
+- `src/platforms/windows/loading/lua/`: Resolve's startup hook loads the Qt-free
+  `UnboundLuaLoader.dll`, which validates the host and loads adjacent `Unbound.dll`.
+  Attachment is queued onto the Qt GUI thread. The native installer deploys the
+  private runtime and per-user startup hook. No external injection or service.
 - `src/core/controller.cpp`: Qt GUI-thread discovery by widget object names, native
   initialization, pane registration, toggle tracking and deferred page restoration.
 - `sidebarfloatsession.h`, `panefloatsession.h`: reparent existing widgets into
@@ -115,8 +120,8 @@ production source list. Both platform helpers and controller fixtures use
 
 Shared pane behavior and persistence live in `src/core/`. OS contracts live in
 `src/platform/`; CMake selects the implementation under `src/platforms/<platform>/`.
-Keep native APIs out of shared code. Windows bootstrap is in
-`src/platforms/windows/bootstrap.cpp`; native placement is in that directory's
+Keep native APIs out of shared code. Windows attachment is in
+`src/platforms/windows/loading/lua/helperentry.cpp`; native placement is in the Windows directory's
 `windowplacement.cpp`, while per-page tracking remains in core.
 Platform separation must never create independent versions of settings, layouts,
 pane support, visual design or snapping policy. Those mechanisms belong in shared
@@ -135,9 +140,20 @@ Windows build entry points live under `infrastructure/windows/`; macOS entry
 points live under `infrastructure/macos/`. Keep platform build scripts out of the
 repository root.
 macOS source, infrastructure and tests have separate development areas. The
-experimental Cocoa backend loads the unchanged shared controller through
+Cocoa backend loads the unchanged shared controller through
 `loading/lua/`, with matching infrastructure and loader-test directories.
 Keep the existing UI concept and functions.
+Windows uses the Lua startup loader under
+`src/platforms/windows/loading/lua/` and a native installer under `installer/`.
+Its private runtime belongs in `%LOCALAPPDATA%/Unbound/Runtime`; only
+`Unbound.scriptlib` belongs in the per-user Resolve `Support/Fusion/Scripts` root.
+Startup must reuse one GUI-thread controller, including repeated requests.
+Installer transactions require Resolve closed, always preserve settings/layouts and
+must not terminate Resolve. See `infrastructure/windows/installer/README.md`.
+Installer presentation is shared in `src/installer/dialog.json` and
+`presentation.h`; both platform builds generate the same compiled definition.
+Keep wording, control layout, display versions and presentation state there;
+native installers retain platform-specific transactions and process monitoring.
 Do not introduce a separate workspace/control window. Do not substitute a no-op backend for a release.
 See `doc/architecture.md` and `doc/platforms/` for platform status.
 
@@ -151,12 +167,13 @@ Run from this repository root:
 .\infrastructure\windows\build-release.cmd -QtPath C:\Qt\5.15.2\msvc2019_64
 ```
 
-Requires Windows x64, VS2022 C++ tools/Windows SDK, CMake, PowerShell and Qt 5.15.2
+Requires Windows x64, VS2022 C++ tools/Windows SDK, CMake, PowerShell, Python 3 and Qt 5.15.2
 MSVC x64 development files. Runtime uses Resolve's Qt libraries. The script builds
-both binaries, runs `tests/platforms/windows/launcher` and
-`tests/core/pane-float` with the Windows test adapter, and audits dependencies.
-Successful releases contain only `Unbound.exe` and `Unbound.dll` in
-`release/win/<version>/`. Never overwrite published version directories.
+the startup loader/helper and native installer, runs loader, installer and
+`tests/core/pane-float` fixtures with the Windows test adapter, and audits dependencies.
+Successful builds contain one self-contained `Unbound <version>.exe` installer in
+`release/win/<version>/`; internal installer names also include `(yyyy.mm.dd.NNN)`.
+Runtime DLLs and build manifests stay in `build/windows/`. Never overwrite published version directories.
 The default semantic version is read from root `VERSION`; `-Version` overrides it.
 `-BuildNumber` sets the fourth numeric Windows revision (default 0), not the public
 version. Build/release output is ignored
@@ -181,8 +198,8 @@ No Resolve app re-signing, public version change or automatic ZIP.
 The native installer UI lives in `src/platforms/macos/installer/` and delegates to
 Lua install/uninstall scripts. Package it explicitly with
 `infrastructure/macos/installer/build.sh <Lua-candidate>`; its app is self-contained
-and has no persistent service. Uninstall retains settings unless the user explicitly
-chooses their removal. Both actions
+and has no persistent service. Uninstall always retains settings and layouts;
+installers offer no settings-deletion action. Both actions
 require Resolve closed and must not terminate it automatically.
 
 Lua loading and automatic startup work in the tested Free Resolve
@@ -213,7 +230,7 @@ logs separate from live startup logs using `UNBOUND_LOG_FILE`.
   Windows placement coordinates and visible frame/contact bounds differ. Diagnose
   restoration errors at their source before adding positional corrections.
 - Automated fixtures cannot fully model Resolve. Use a fresh Resolve instance
-  to validate a new helper; already injected DLLs are not updated by replacing files.
+  to validate a new helper; already loaded DLLs are not updated by replacing files.
   Do not terminate the user's Resolve session without instruction.
 - Tested configuration: Resolve 21.1.0.14, Windows x64, Qt 5.15.2. Other versions
   need validation. Known issue: Media Pool may widen on startup restoration and

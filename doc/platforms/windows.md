@@ -1,7 +1,12 @@
 # Windows development
 
+Windows and macOS have feature parity: the same panels/viewers, layouts, snapping
+and session restoration, with automatic startup and native installers. Windows
+builds are currently unsigned; see the [README](../../README.md#compatibility)
+for opening downloaded installers.
+
 Supported build toolchain: Windows x64, Visual Studio 2022 C++ tools and Windows SDK,
-CMake, PowerShell and Qt 5.15.2 MSVC x64 development files.
+CMake, PowerShell, Python 3 and Qt 5.15.2 MSVC x64 development files.
 
 From the repository root:
 
@@ -12,9 +17,10 @@ From the repository root:
 The public semantic version comes from the root `VERSION` file; override it with
 `-Version 0.2.0-dev.1`. `-QtPath` overrides the default
 `%USERPROFILE%\Qt\5.15.2\msvc2019_64`. The command configures the
-root CMake project, builds under `build/windows/unbound/<version>/`, runs launcher
-and pane fixtures, audits dependencies and publishes only `Unbound.exe` and
-`Unbound.dll` under `release/win/<version>/`. Existing releases are never overwritten.
+root CMake project, builds under `build/windows/unbound/<version>/`, runs loader,
+installer and pane fixtures, audits dependencies and produces a self-contained
+`Unbound <version>.exe` installer under `release/win/<version>/`.
+Existing releases are never overwritten.
 Pane fixture builds use `build/windows/pane-tests/`.
 
 For feature development, run `./infrastructure/windows/build-release.cmd -InternalBuild`.
@@ -36,7 +42,7 @@ ZIP creation is never automatic. After committing and tagging `v<version>`, run
 `infrastructure/windows/package-release.ps1` explicitly. It checks the clean tagged
 source, embedded versions and manifest hashes, then writes
 `release/packages/Unbound-<version>-windows-x64.zip` with one enclosing folder.
-The package contains the two binaries, MIT license and a short README recording
+The package contains the installer, MIT license and a short README recording
 the source tag and commit. Existing packages are never overwritten.
 
 Source is in `src/platforms/windows/`; shared behavior is in `src/core/`.
@@ -44,9 +50,14 @@ Build/release commands live in `infrastructure/windows/`: `build-release.cmd`
 invokes the adjacent `build-release.ps1`, which can also be called directly.
 Both resolve paths from their own location and work from other directories.
 
-The Windows launcher still waits for Resolve, injects the adjacent DLL and exits.
-The exported `UnboundStart` calling convention and return values are unchanged.
-The export delegates to shared GUI-thread initialization. Floating hosts omit the
+Unbound loads automatically through Resolve's Lua startup mechanism from its
+per-user Scripts root, with a native Install/Update/Uninstall app. Automatic
+attachment, saved Program Viewer restoration and the layout menu have been
+validated in Windows Studio 21.1.1.10. Windows Free remains unvalidated.
+See [installer development](../../infrastructure/windows/installer/README.md)
+and [loader tests](../../tests/platforms/windows/loading/lua/README.md).
+The Qt-free loader validates the host Qt version and loads the adjacent helper;
+`UnboundLuaAttach` queues shared GUI-thread initialization. Floating hosts omit the
 Windows caption while retaining native dark resize borders and shell identity.
 The normal top frame is reduced to a one-physical-pixel outline, which is also
 the native top resize target; side and bottom resize margins remain native.
@@ -84,8 +95,14 @@ Modal dialogs and subsequent focus changes prevent a queued group raise. This is
 event-driven and adds no polling. The native regression test is
 `pane-float-smoke.exe --group-activation-native` with `QT_QPA_PLATFORM=windows`.
 
-For development tools, see the [diagnostic build](../../tests/platforms/windows/diagnostic/README.md)
-and [Inspector probe](../../tests/platforms/windows/inspector-probe/README.md).
+Cinema Viewer from a floating Edit viewer also hides the main window, matching
+Resolve's docked Cinema behavior. Otherwise Windows keeps the main menu's
+application shortcuts eligible alongside Cinema's copies and transport commands
+can stop working. Exit restores only the visibility Unbound changed; shortcuts,
+viewer parenting and geometry are untouched. See the
+[Cinema routing tests](../../tests/platforms/windows/cinema-focus/README.md).
+
+For development tools, see the [Inspector probe](../../tests/platforms/windows/inspector-probe/README.md).
 
 Native windowing fixtures run through `infrastructure/windows/test-input.ps1`.
 Each child process has a 30-second deadline; desktop cursor confinement is

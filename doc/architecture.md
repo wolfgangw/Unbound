@@ -1,9 +1,8 @@
 # Source and platform boundaries
 
 Unbound has one shared Qt core and one selected native backend per build.
-Windows remains the release platform. macOS has a separate experimental Cocoa
-backend and internal Lua startup loading, using the same shared
-controller and UI.
+Windows and macOS have feature parity, using the same shared controller and UI
+with native backends, Lua startup loading and installers for each platform.
 
 The platform split is an implementation boundary, not a product fork. Identical
 logical inputs must use the same settings/layout rules, pane catalogue, controls,
@@ -94,10 +93,12 @@ include directory; there is no runtime backend selection.
 
 ## Platform implementations
 
-`src/platforms/windows/` contains the existing launcher, DLL export, native window
+`src/platforms/windows/` contains the Lua startup loader, installer, native window
 classes, placement hooks and resource templates. Its `windowing.cmake` supplies the
-same backend to production, shared fixtures and Windows diagnostics. The launcher
-remains independent of Qt; the helper uses Resolve's Qt runtime.
+same backend to production, shared fixtures and Windows diagnostics. The startup
+loader and installer are independent of Qt; the helper uses Resolve's Qt runtime.
+Resolve invokes the per-user `Unbound.scriptlib` hook, which loads the private
+runtime and queues shared controller attachment onto the existing Qt GUI thread.
 
 `src/platforms/macos/` implements the contracts in Cocoa/Objective-C++ and loads the
 shared controller through `loading/lua/`. The Qt-free loader validates the host
@@ -129,10 +130,12 @@ macOS build entry points live under `infrastructure/macos/`. Platform-specific
 build scripts do not live in the repository root.
 Each script resolves paths from its own location, not the caller's directory.
 
-Build output is ignored under `build/<platform>/`. Windows release artifacts remain
-exactly `Unbound.exe` and `Unbound.dll` in immutable `release/win/<version>/`
-directories. Internal macOS candidates belong under `release/mac/` and are signed
-ad hoc for local testing; no notarized distribution workflow is implemented yet.
+Build output is ignored under `build/<platform>/`. Windows builds produce a
+self-contained native installer in immutable `release/win/<version>/` directories;
+the private runtime and build records stay under `build/windows/`. Internal macOS
+candidates belong under `release/mac/` and are signed ad hoc. Windows code signing
+and macOS Developer ID signing/notarization remain distribution work; these do
+not change the shared feature set.
 
 Original artwork and shared PNGs live in `src/assets/`. The Windows ICO and resource
 templates live in `src/platforms/windows/resources/`. Source and artwork are covered

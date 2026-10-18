@@ -1,9 +1,9 @@
-# macOS development status
+# macOS development
 
-Unbound has a working experimental Apple Silicon port using the same shared
-controller, pane catalogue, controls, layouts, settings and snapping policy as
-Windows. Windows remains the released platform. The intended macOS experience is
-install once, open Resolve normally, and use Unbound's existing pane controls.
+Unbound on macOS Apple Silicon has feature parity with Windows, using the same
+shared controller, pane catalogue, controls, layouts, settings and snapping policy.
+On both platforms, install once, open Resolve normally and use Unbound's pane
+controls. Remaining signing/notarization work concerns distribution, not features.
 
 ## Current status
 
@@ -12,15 +12,14 @@ Qt 5.15.2.
 
 | Area | Status |
 | --- | --- |
-| Internal Lua loading | Working in Free Resolve |
+| Lua startup loading | Working in Free Resolve |
 | Automatic activation | Working across normal Resolve restarts |
 | Pane controls and layouts | Undocking, save/recall and persistent context-menu interaction validated live |
 | Fusion compatibility | Basic Inspector text input and normal interaction validated live |
 | Shared/native fixtures | Passing, including settings migration, snapping, geometry and loader tests |
-| Distribution | Internal ad-hoc signed installer app with install/update/uninstall; notarized distribution pending |
+| Distribution | Native installer with install/update/uninstall; ad-hoc signed, Developer ID signing/notarization pending |
 
-This is not yet full platform parity. Shared-policy consolidation passes fixtures;
-the latest combined build still needs a live acceptance pass. See
+Shared-policy consolidation passes fixtures. See
 [native tests](../../tests/platforms/macos/README.md) for repeatable checks.
 
 ## Architecture and loading
@@ -61,8 +60,8 @@ Builds do not change VERSION/tags or create ZIPs. The top-level
 See [installation and updates](../../infrastructure/macos/lua/README.md).
 
 A self-contained, version-named **Unbound** app provides Install/Update and Uninstall
-for the current user. Uninstall keeps settings and layouts unless explicitly
-selected for removal. The app requires Resolve to be closed and never terminates
+for the current user. Uninstall always keeps settings and layouts and offers no
+option to delete them. The app requires Resolve to be closed and never terminates
 it automatically. See [installer build and usage](../../infrastructure/macos/installer/README.md).
 Install/update/uninstall and live installation-state detection are validated locally.
 
@@ -71,7 +70,7 @@ Lua installs its private loader and libraries under
 is placed in Resolve's Fusion Scripts root; no Scripts-menu entry is installed.
 Updates migrate the previous Utility-menu layout into backups outside Resolve's
 Scripts tree. Settings are preserved. Startup from the private runtime folder is
-verified; the full live acceptance checklist remains pending.
+verified.
 Diagnostics use `~/Library/Logs/Unbound/lua-bootstrap.log`.
 Fixture output stays under `build/macos/`.
 
@@ -79,8 +78,8 @@ Fixture output stays under `build/macos/`.
 
 - Complete browser-download testing;
   decide on Developer ID signing/notarization for distribution.
-- Complete live acceptance on the latest combined build: supported panes/viewers,
-  layout lifecycle, snapping, playback, page switching and session restoration.
+- Continue regression checks for supported panes/viewers, layouts, snapping,
+  playback, page switching and session restoration as shared code evolves.
 - Validate multiple displays, Retina scaling, display removal and Spaces/fullscreen.
 - Validate broader Fusion workflows.
 - Rerun native Windows checks for shared changes.
@@ -88,7 +87,7 @@ Fixture output stays under `build/macos/`.
 Cocoa uses logical points for geometry and shared snapping policy; native event
 hit testing translates its bottom-left coordinates. Native placement/fullscreen
 eligibility and window activation remain macOS responsibilities. These boundaries
-must be preserved while addressing the remaining platform gaps.
+must be preserved while extending platform validation.
 Main-window gestures and floating-pane resizing observe native frame changes,
 with shared snapping corrections applied separately. Resolve owns movement of its
 integrated main-window title bar; the backend disables Cocoa's competing native

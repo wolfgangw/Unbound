@@ -4,14 +4,16 @@ Unbound lets you undock DaVinci Resolve panels into independent, resizable windo
 Arrange them across your displays and restore your custom workspace between sessions.
 Unbound remembers window positions, sizes, docking and panel-toggle states.
 
-Released builds are available for Windows 10/11. macOS development uses experimental internal Lua loading with automatic startup; see [macOS status](doc/platforms/macos.md) for validation limits. Linux is not supported.
+Unbound supports Windows 10/11 (x64) and macOS (Apple Silicon), with the same
+features on both platforms. Linux is not supported.
 
 ## How to use
 
-Download from [Releases](../../releases), unzip and run
-`Unbound.exe`. Or start Resolve and _then_ run `Unbound.exe`. Unbound waits
-silently if Resolve is not running yet. This will add a Dock/Undock button
-to supported panels.
+Download from [Releases](../../releases), extract the download and run the Unbound
+installer with DaVinci Resolve closed. Choose **Install**, then open DaVinci Resolve.
+Unbound starts automatically and adds a Dock/Undock button to supported panels.
+Run the installer again to update or uninstall. Uninstall always keeps your
+settings and layouts.
 
 Open a project, then use a panel's Dock/Undock button. Resolve's native panel
 toggles remain available to control the space in the main window.
@@ -32,23 +34,43 @@ panels to the main window. The menu stays open while using these actions.
 Native minimum panel sizes apply. Nodes may need panning after docking into a
 narrower area.
 
-Settings are stored in `%LOCALAPPDATA%\Unbound\Unbound.json`.
+Settings are stored in `%LOCALAPPDATA%\Unbound\Unbound.json` on Windows and
+`~/Library/Application Support/Unbound/Unbound.json` on macOS.
 See [settings documentation](<doc/Unbound settings.md>).
 
 ## Compatibility
 
 Unbound is unofficial and depends on Resolve's internal widget hierarchy and layouts.
-Tested configurations from Resolve 20.3.3 to 21.1.1.10 on Windows x64 10 and 11.
+Tested configurations range from Resolve 20.3.3 to 21.1.1.10 on Windows 10/11,
+and include Resolve Free 21.1.1.10 on an Apple M2 with macOS 27.0.1.
 
-Windows may nag about the Unbound helper when running it. That's a good thing - OS
-should notice and say something when DLLs attach to applications. That said: Unbound is
-minimally intrusive - does not do any harm - does not phone home. If unsure: let your
-agent check the open source.
+On Windows and macOS, Unbound starts automatically through DaVinci Resolve's Lua
+startup mechanism. The installer places a small startup script in Resolve's
+per-user scripts folder. That script loads Unbound's native helper, which uses
+Resolve's existing Qt libraries and initializes on its UI thread. No Resolve
+application files are modified, and no background service or separate launcher
+is needed.
+
+Unbound does not contact a server.
+
+Code signing and notarization are still on the paperwork pile: Windows builds
+are unsigned, and macOS builds are ad-hoc signed rather than Developer ID signed
+and notarized. Please indulge this small project's missing official rubber stamps.
+Thankfully, our operating systems still offer ways to decide for ourselves what
+to run. For Unbound downloaded from this repository, please use the per-app
+exception when offered:
+
+- **Windows:** in the SmartScreen warning, choose **More info**, then **Run anyway**.
+  Availability depends on your system's security policy; see
+  [Microsoft's SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+- **macOS:** try opening the app once, then go to **System Settings → Privacy &
+  Security → Open Anyway** and confirm. See
+  [Apple's instructions](https://support.apple.com/en-us/102445).
 
 ## Build
 
 Requires Windows x64, Visual Studio 2022 C++ build tools and Windows SDK, CMake on
-PATH, PowerShell, and **Qt 5.15.2 MSVC x64 development files** (headers, import
+PATH, PowerShell, Python 3, and **Qt 5.15.2 MSVC x64 development files** (headers, import
 libraries and CMake configuration).
 
 ```powershell
@@ -56,7 +78,7 @@ libraries and CMake configuration).
 ```
 
 The script regenerates icons from `src/assets/unbound-symbol.svg`, builds,
-runs regression tests and audits imports, then puts the two release binaries in
+runs regression tests and audits imports, then puts the self-contained installer in
 `release/win/<version>/`. The default semantic version comes from `VERSION`
 (currently `0.3.0`); `-Version 0.3.0-dev.1` overrides it. Existing releases are
 never overwritten. Use `-QtPath` to override the default
@@ -78,16 +100,16 @@ enclosing folder, ready to attach to the matching GitHub release.
 
 - `src/core/`: shared Qt pane behavior, settings and snapping calculations.
 - `src/platform/`: contracts used by shared code.
-- `src/platforms/windows/`: the Windows launcher, bootstrap, native window backend
+- `src/platforms/windows/`: the Windows startup loader, installer, native window backend
   and resources.
-- `src/platforms/macos/`: experimental Cocoa backend with separate loaders under `loading/`.
+- `src/platforms/macos/`: Cocoa backend, startup loader and native installer.
 - `infrastructure/<platform>/`: platform build, audit and packaging workflows.
 - `tests/core/`: shared fixtures; `tests/platforms/<platform>/`: native adapters,
-  launcher tests and diagnostic tools.
+  loader/installer tests and diagnostic tools.
 
 See [architecture](doc/architecture.md), [Windows development](doc/platforms/windows.md)
-and [macOS development status](doc/platforms/macos.md). The root CMake project
-selects one backend; the macOS development build uses the same shared UI and pane behavior.
+and [macOS development](doc/platforms/macos.md). The root CMake project
+selects one backend; both platforms use the same shared UI and pane behavior.
 
 ## License
 
