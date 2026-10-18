@@ -178,7 +178,12 @@ Candidates are immutable under `release/mac/lua/`.
 Top-level Mac build/test/audit/install commands delegate to Lua. Native Cocoa
 fixtures require a GUI session; Windows native validation still requires Windows.
 No Resolve app re-signing, public version change or automatic ZIP.
-
+The native installer UI lives in `src/platforms/macos/installer/` and delegates to
+Lua install/uninstall scripts. Package it explicitly with
+`infrastructure/macos/installer/build.sh <Lua-candidate>`; its app is self-contained
+and has no persistent service. Uninstall retains settings unless the user explicitly
+chooses their removal. Both actions
+require Resolve closed and must not terminate it automatically.
 
 Lua loading and automatic startup work in the tested Free Resolve
 configuration; pane undocking, layouts and basic Fusion interaction are validated.

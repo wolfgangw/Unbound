@@ -17,7 +17,7 @@ Qt 5.15.2.
 | Pane controls and layouts | Undocking, save/recall and persistent context-menu interaction validated live |
 | Fusion compatibility | Basic Inspector text input and normal interaction validated live |
 | Shared/native fixtures | Passing, including settings migration, snapping, geometry and loader tests |
-| Distribution | Internal ad-hoc signed runtime; installer and distribution workflow pending |
+| Distribution | Internal ad-hoc signed installer app with install/update/uninstall; notarized distribution pending |
 
 This is not yet full platform parity. Shared-policy consolidation passes fixtures;
 the latest combined build still needs a live acceptance pass. See
@@ -60,6 +60,11 @@ Builds do not change VERSION/tags or create ZIPs. The top-level
 `infrastructure/macos/{build,test,audit,install}.sh` commands delegate to Lua.
 See [installation and updates](../../infrastructure/macos/lua/README.md).
 
+A self-contained, version-named **Unbound** app provides Install/Update and Uninstall
+for the current user. Uninstall keeps settings and layouts unless explicitly
+selected for removal. The app requires Resolve to be closed and never terminates
+it automatically. See [installer build and usage](../../infrastructure/macos/installer/README.md).
+Install/update/uninstall and live installation-state detection are validated locally.
 
 Lua installs its private loader and libraries under
 `~/Library/Application Support/Unbound/Runtime/`. Only the automatic startup hook
@@ -72,7 +77,7 @@ Fixture output stays under `build/macos/`.
 
 ## Next steps
 
-- Add a graphical installer and complete browser-download testing;
+- Complete browser-download testing;
   decide on Developer ID signing/notarization for distribution.
 - Complete live acceptance on the latest combined build: supported panes/viewers,
   layout lifecycle, snapping, playback, page switching and session restoration.
