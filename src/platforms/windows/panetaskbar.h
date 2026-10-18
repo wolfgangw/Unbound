@@ -5,6 +5,7 @@
 #include <QIcon>
 #include <QPalette>
 #include <QGuiApplication>
+#include "panewindowappearance.h"
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <shobjidl.h>
@@ -26,7 +27,7 @@ inline bool applyPaneDarkCaption(QWidget *host, QWidget *mainWindow)
     const BOOL dark = TRUE;
     DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
     Q_UNUSED(mainWindow);
-    const COLORREF caption = RGB(20, 20, 20);
+    const COLORREF caption = RGB(PaneWindowBackgroundLevel, PaneWindowBackgroundLevel, PaneWindowBackgroundLevel);
     const COLORREF text = host->isActiveWindow() ? RGB(160, 160, 160) : RGB(96, 96, 96);
     const auto captionResult = DwmSetWindowAttribute(handle, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
     const auto textResult = DwmSetWindowAttribute(handle, DWMWA_TEXT_COLOR, &text, sizeof(text));

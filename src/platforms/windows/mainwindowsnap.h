@@ -140,7 +140,7 @@ private:
             if(m_liveTarget) {
                 m_snap.applyAnimated(target,hit,m_limits);
                 if(m_snap.animating()) {
-                    if(!m_frameTimer) m_frameTimer=SetTimer(handle,reinterpret_cast<UINT_PTR>(this),16,nullptr);
+                    if(!m_frameTimer) m_frameTimer=SetTimer(handle,reinterpret_cast<UINT_PTR>(this),PaneSnapFrameIntervalMs,nullptr);
                 } else stopFrames();
             } else { stopFrames(); target=final; }
             m_topAligned = false;

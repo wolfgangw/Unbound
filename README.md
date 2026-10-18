@@ -52,7 +52,7 @@ PATH, PowerShell, and **Qt 5.15.2 MSVC x64 development files** (headers, import
 libraries and CMake configuration).
 
 ```powershell
-.\build-unbound-release.cmd
+.\infrastructure\windows\build-release.cmd
 ```
 
 The script regenerates icons from `src/assets/unbound-symbol.svg`, builds,
@@ -61,7 +61,7 @@ runs regression tests and audits imports, then puts the two release binaries in
 (currently `0.2.0`); `-Version 0.3.0-dev.1` overrides it. Existing releases are
 never overwritten. Use `-QtPath` to override the default
 `%USERPROFILE%\Qt\5.15.2\msvc2019_64`. Windows build output is in `build/windows/`.
-The root command delegates to `infrastructure/windows/`.
+The CMD entry point invokes the adjacent PowerShell script in `infrastructure/windows/`.
 
 Packaging is a separate, explicit step after committing and tagging the release:
 

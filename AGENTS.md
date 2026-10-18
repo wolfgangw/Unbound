@@ -116,9 +116,9 @@ See `doc/architecture.md` and `doc/platforms/` for platform status.
 Run from this repository root:
 
 ```powershell
-.\build-unbound-release.cmd
+.\infrastructure\windows\build-release.cmd
 # Override the default %USERPROFILE%\Qt\5.15.2\msvc2019_64 when needed:
-.\build-unbound-release.cmd -QtPath C:\Qt\5.15.2\msvc2019_64
+.\infrastructure\windows\build-release.cmd -QtPath C:\Qt\5.15.2\msvc2019_64
 ```
 
 Requires Windows x64, VS2022 C++ tools/Windows SDK, CMake, PowerShell and Qt 5.15.2
@@ -174,3 +174,11 @@ package, `run-gammaray.cmd`, and page snapshots. See its README for capture step
 Edit's page widget is `WStackPage_Conform`; Color is `WStackPage_Color`, Fairlight
 is `WStackPage_Audio`. Use a fresh Resolve session without Unbound for native
 captures, and verify exports have `truncated: false`.
+
+Shared pane metadata lives in `src/core/panecatalogue.h`; discovery, header
+anchors and settings migration consume it. Shared source lists live in
+`src/core/CMakeLists.txt`, and fixture targets in `tests/core/pane-float/targets.cmake`.
+Native fixture operations use `layoutadapter.h` with platform implementations.
+Settings schema and atomic writes remain shared; `src/platform/settingslocation.h`
+selects only the native data directory. Appearance, snap constants and reachable
+geometry policy are shared, with existing Windows native behavior preserved.

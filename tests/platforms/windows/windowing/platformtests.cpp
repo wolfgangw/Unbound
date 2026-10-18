@@ -37,6 +37,7 @@ void initializePlatformTests()
 {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 }
+void settlePlatformWindowState(QWidget &) {}
 std::function<unsigned long(void *)> resolveBootstrap(QLibrary &helper)
 {
     auto start=reinterpret_cast<DWORD (WINAPI *)(void *)>(helper.resolve("UnboundStart"));

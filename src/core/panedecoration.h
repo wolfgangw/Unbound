@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #ifndef UNBOUND_PANEDECORATION_H
 #define UNBOUND_PANEDECORATION_H
+#include "panecatalogue.h"
 #include <QWidget>
 #include <QToolButton>
 #include <QAbstractButton>
@@ -175,38 +176,17 @@ protected:
 private:
     bool requiresNativeHeader() const
     {
-        const auto name=m_pane->objectName();
-        return name.startsWith("frameAudioPanel") || name=="frameTimelineMixerContainer"
-            || name=="frameMetadataContainer" || name=="frameInspectorContainer";
+        const auto pane=PaneCatalogue::find(m_pane->objectName());
+        return pane && pane->requireNativeHeader();
     }
-    bool isAnchor(QAbstractButton *b) const
+    bool isAnchor(QAbstractButton *button) const
     {
-        auto pane=m_pane->objectName();
-        const auto name=b->objectName();
-        const auto parent=b->parentWidget() ? b->parentWidget()->objectName() : QString();
-        if(pane=="frameAudioPanelGroupsContainer") return name=="m_BtnMenu" && parent=="frameHeaderTitle";
-        if(pane=="frameAudioPanelAdrContainer") return name=="optionsBtn" && parent=="headerFrame";
-        if(pane=="frameAudioPanelMediaPoolContainer") pane="frameEditPageMediaPool";
-        if(pane=="frameAudioPanelEffectsLibraryContainer") pane="frameEditPageEffectsLibrary";
-        if(pane=="frameAudioPanelIndexContainer") pane="frameEditPageEditIndex";
-        if(pane=="frameAudioPanelSoundLibraryContainer") pane="frameEditPageSoundLibrary";
-        if(pane=="frameTimelineMixerContainer") pane="frameEditAudioMeter";
-        if(pane=="frameMetadataContainer") pane="frameEditPageMetadata";
-        if(pane=="frameInspectorContainer") pane="frameEditPageInspector";
-        if(pane=="frameEditPageMediaPool" || pane=="m_pWidgetMediaPool") return name=="btnMediaPoolOptions" && parent=="frameMediaPoolTitleBarTop";
-        if(pane=="frameEditPageInspector") return name=="btnTitleOptions" && parent=="frameEffectsWidgetsTitle";
-        if(pane=="frameEditAudioMeter") return name=="btnAudioMixerOptions" && (parent=="frameOptions" || parent=="frameHeaderContainer");
-        if(pane=="frameEditPageEffectsLibrary") return name=="btnOptions" && parent=="frameEffectTopBar";
-        if(pane=="frameEditPageSoundLibrary") return name=="m_BtnDisplayOptions" && parent=="frameMenu";
-        if(pane=="frameEditPageKeyframeEditor") return name=="btnCurveSettingsOptions" && parent=="keyframeToolbarButtons";
-        if(pane=="frameEditPageEditIndex") return (name=="btnEdlOptions" && parent=="frameEDLTopBar")
-            || (name=="m_BtnMenu" && (parent=="frameTitlebar" || parent=="frameHeaderTitle"));
-        if(pane=="frameEditPageMetadata") return name=="btnPresetsSelector" && parent=="frameMetadataTop";
-        if(pane=="m_pWidgetLutBrowser") return name=="btnOptions" && parent=="frameLutBrowserTitleBarTop";
-        if(pane=="m_pWidgetGallery") return name=="btnOptions" && parent=="frameTopColorGallery";
-        if(pane=="m_pFrameNodeGraph") return name=="btnOptions" && parent=="rightFrame"
-            && b->parentWidget()->parentWidget() && b->parentWidget()->parentWidget()->objectName()=="m_NGHeaderFrame";
-        return false;
+        const auto pane=PaneCatalogue::find(m_pane->objectName());
+        if(!pane) return false;
+        const auto parent=button->parentWidget();
+        const auto grandparent=parent ? parent->parentWidget() : nullptr;
+        return PaneCatalogue::matchesHeader(pane->header,button->objectName(),
+            parent ? parent->objectName() : QString(),grandparent ? grandparent->objectName() : QString());
     }
     QToolButton *makeButton(QWidget *parent)
     {

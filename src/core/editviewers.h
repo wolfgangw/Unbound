@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QResizeEvent>
+#include <QScreen>
 #include <QScopedValueRollback>
 #include <QTimer>
 #include "windowintegration.h"
@@ -55,8 +56,8 @@ public:
         qDeleteAll(m_drags);
         for (auto pane:{&m_program,&m_source}) for(auto b:pane->buttons) delete b.data();
     }
-    void toggleProgram() { toggle(m_program,"Program Viewer"); }
-    void toggleSource() { toggle(m_source,"Source Viewer"); }
+    void toggleProgram() { toggle(m_program); }
+    void toggleSource() { toggle(m_source); }
     void dockBoth() { restoreArea(); dock(m_source); dock(m_program); }
     bool hasFloating() const { return m_program.host || m_source.host; }
     void flushGeometry() { rememberAll(); }
@@ -122,17 +123,19 @@ private:
             b->setStyleSheet("QToolButton { background: transparent; border: none; padding: 0px; }");
             b->setToolTip("Undock"); b->setAccessibleName("Undock");
             auto p=&pane;
-            connect(b,&QToolButton::clicked,this,[this,p] { toggle(*p,p==&m_program ? "Program Viewer" : "Source Viewer"); });
+            connect(b,&QToolButton::clicked,this,[this,p] { toggle(*p); });
             layout->insertWidget(layout->indexOf(anchor),b,0,Qt::AlignVCenter);
             pane.buttons.append(b); b->show();
             m_drags.append(new Unbound::PaneHeaderDrag(parent->parentWidget(),this));
         }
     }
-    void toggle(Pane &pane,const QString &title)
+    void toggle(Pane &pane)
     {
         if(pane.host) { dock(pane); return; }
         auto content=pane.content;
         if(!content || !m_page || !m_page->isVisible()) return;
+        const auto descriptor=Unbound::PaneCatalogue::find(content->objectName());
+        if(!descriptor) return;
         auto parent=content->parentWidget();
         auto layout=parent ? qobject_cast<QBoxLayout *>(parent->layout()) : nullptr;
         const int index=layout ? layout->indexOf(content) : -1;
@@ -148,7 +151,7 @@ private:
         auto host=new Unbound::PaneFloatingWindow;
         host->setParent(parent,host->windowFlags());
         Unbound::inheritPaneTaskbarIdentity(host,parent->window());
-        host->setObjectName("unboundFloating_"+content->objectName()); host->setWindowTitle(title);
+        host->setObjectName("unboundFloating_"+content->objectName()); host->setWindowTitle(descriptor->label);
         const auto available=QGuiApplication::primaryScreen()->availableGeometry();
         host->resize(content->size().expandedTo(QSize(640,400)).boundedTo(available.size()*0.7));
         auto hl=new QVBoxLayout(host); hl->setContentsMargins(0,0,0,0); hl->addWidget(content);

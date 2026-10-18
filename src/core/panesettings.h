@@ -8,24 +8,26 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QSaveFile>
-#include <QStandardPaths>
+#include "settingslocation.h"
 #include <QMap>
 #include <QSet>
 #include <QUuid>
 #include "geometryjson.h"
+#include "panecatalogue.h"
 namespace Unbound {
 class PaneSettings
 {
 public:
-    explicit PaneSettings(QString path = QString()) : m_path(path)
+    // The optional data root lets shared migration fixtures use an isolated
+    // directory without impersonating a particular OS's environment.
+    explicit PaneSettings(QString path = QString(),
+        const QString &dataDirectory = Platform::settingsDataDirectory()) : m_path(path)
     {
         if (m_path.isEmpty()) m_path=qEnvironmentVariable("UNBOUND_SETTINGS_FILE");
         QString previousPath;
         if (m_path.isEmpty()) {
-            auto base=qEnvironmentVariable("LOCALAPPDATA");
-            if(base.isEmpty()) base=QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-            m_path=QDir(base).filePath(QStringLiteral("Unbound/Unbound.json"));
-            if(!QFile::exists(m_path)) previousPath=QDir(base).filePath(QStringLiteral("Unbound/settings.json"));
+            m_path=QDir(dataDirectory).filePath(QStringLiteral("Unbound/Unbound.json"));
+            if(!QFile::exists(m_path)) previousPath=QDir(dataDirectory).filePath(QStringLiteral("Unbound/settings.json"));
         }
         QFile file(previousPath.isEmpty() ? m_path : previousPath);
         if(!file.exists()) return;
@@ -103,9 +105,8 @@ public:
     static QString pageForPane(const QString &name) { return location(name).first; }
     QString readError() const { return m_readError; }
     static QString pageLabel(const QString &page) {
-        if(page=="WStackPage_Conform") return "Edit";
-        if(page=="WStackPage_Color") return "Color";
-        if(page=="WStackPage_Audio") return "Fairlight";
+        for(const auto &entry:PaneCatalogue::pages())
+            if(entry.supported && entry.objectName==page) return entry.label;
         return {};
     }
     QJsonObject pageConfiguration(const QString &page) const {
@@ -251,29 +252,22 @@ private:
     }
     static QMap<QString,QString> legacyPanes()
     {
-        return {
-            {"frameEditPageMediaPool","mediaPool"},{"frameEditAudioMeter","mixer"},
-            {"frameEditPageInspector","inspector"},{"frameEditPageMetadata","metadata"},
-            {"frameEditPageEffectsLibrary","effects"},{"frameEditPageSoundLibrary","soundLibrary"},
-            {"frameEditPageKeyframeEditor","keyframeEditor"},{"frameEditPageEditIndex","editIndex"},
-            {"Color/m_pFrameNodeGraph","nodes"},{"Color/m_pWidgetGallery","gallery"},
-            {"Color/m_pWidgetLutBrowser","luts"},{"Color/m_pWidgetMediaPool","mediaPool"}};
+        QMap<QString,QString> names;
+        for(const auto &pane:PaneCatalogue::panes())
+            if(!pane.legacyName.isEmpty()) names.insert(pane.settingsKey(),pane.legacyName);
+        return names;
     }
     static QMap<QString,QString> legacyPages()
     {
-        return {{"WStackPage_Conform","edit"},{"WStackPage_Color","color"},
-            {"WStackPage_Audio","fairlight"},{"WStackPage_Browse","media"},{"WStackPage_Cut","cut"},
-            {"WStackPage_Fusion","fusion"},{"WStackPage_Deliver","deliver"}};
+        QMap<QString,QString> names;
+        for(const auto &page:PaneCatalogue::pages()) names.insert(page.objectName,page.legacyName);
+        return names;
     }
     static QPair<QString,QString> location(const QString &name)
     {
         if(name.startsWith("MainWindow/")) return {legacyPages().contains(name.mid(11)) ? name.mid(11) : QString(),"mainWindow"};
-        static const QStringList audioPanes={"frameAudioPanelMediaPoolContainer","frameAudioPanelEffectsLibraryContainer",
-            "frameAudioPanelIndexContainer","frameAudioPanelGroupsContainer","frameAudioPanelSoundLibraryContainer",
-            "frameAudioPanelAdrContainer","frameTimelineMixerContainer","frameMetadataContainer","frameInspectorContainer"};
-        const bool viewer=name==QLatin1String("widgetEditTimelinePlayer") || name==QLatin1String("stackedEditSourceOfflinePlayers");
-        if(!viewer && !legacyPanes().contains(name) && !(name.startsWith("Audio/") && audioPanes.contains(name.mid(6)))) return {};
-        return {name.startsWith("Audio/") ? "WStackPage_Audio" : name.startsWith("Color/") ? "WStackPage_Color" : "WStackPage_Conform",name.section('/',-1)};
+        const auto pane=PaneCatalogue::findSettingsKey(name);
+        return pane ? qMakePair(PaneCatalogue::page(pane->page).objectName,pane->objectName) : QPair<QString,QString>();
     }
     QJsonObject entry(const QString &name) const
     {

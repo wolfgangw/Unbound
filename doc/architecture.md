@@ -64,9 +64,8 @@ infrastructure, tests and documentation directories.
 The root `CMakeLists.txt` selects the platform. Windows resources and native link
 libraries are declared only under `src/platforms/windows/`.
 
-`build-unbound-release.cmd` and `build-unbound-release.ps1` remain compatible public
-entry points. Implementation is in `infrastructure/windows/`, with separate icon
-and dependency-audit helpers. Windows diagnostic build commands live there too.
+Windows build entry points live under `infrastructure/windows/`; platform
+build scripts do not live in the repository root.
 Each script resolves paths from its own location, not the caller's directory.
 
 Build output is ignored under `build/<platform>/`. Windows release artifacts remain
@@ -190,3 +189,11 @@ and dependency audit. Native interactive tests remain manually selectable with
 A successful structural/configuration check on macOS does not validate Windows
 compilation or runtime behavior. Run the Windows release command on its supported
 toolchain and validate a newly built helper in a fresh Resolve process.
+
+Shared pane metadata lives in `src/core/panecatalogue.h`; discovery, header
+anchors and settings migration consume it. Shared source lists live in
+`src/core/CMakeLists.txt`, and fixture targets in `tests/core/pane-float/targets.cmake`.
+Native fixture operations use `layoutadapter.h` with platform implementations.
+Settings schema and atomic writes remain shared; `src/platform/settingslocation.h`
+selects only the native data directory. Appearance, snap constants and reachable
+geometry policy are shared, with existing Windows native behavior preserved.

@@ -3,10 +3,10 @@
 Supported build toolchain: Windows x64, Visual Studio 2022 C++ tools and Windows SDK,
 CMake, PowerShell and Qt 5.15.2 MSVC x64 development files.
 
-From the repository root, the existing entry point is unchanged:
+From the repository root:
 
 ```powershell
-.\build-unbound-release.cmd
+.\infrastructure\windows\build-release.cmd
 ```
 
 The public semantic version comes from the root `VERSION` file; override it with
@@ -17,7 +17,7 @@ and pane fixtures, audits dependencies and publishes only `Unbound.exe` and
 `Unbound.dll` under `release/win/<version>/`. Existing releases are never overwritten.
 Pane fixture builds use `build/windows/pane-tests/`.
 
-For feature development, run `./build-unbound-release.cmd -InternalBuild`.
+For feature development, run `./infrastructure/windows/build-release.cmd -InternalBuild`.
 The same tests and dependency audit run, with output in
 `release/win/<yyyy.mm.dd.daily_counter>/` (three-digit daily counter). `VERSION`
 stays unchanged; embedded semantic version strings carry internal build metadata
@@ -40,8 +40,9 @@ The package contains the two binaries, MIT license and a short README recording
 the source tag and commit. Existing packages are never overwritten.
 
 Source is in `src/platforms/windows/`; shared behavior is in `src/core/`.
-Build/release implementation is in `infrastructure/windows/`. Both root release
-wrappers remain usable from other working directories.
+Build/release commands live in `infrastructure/windows/`: `build-release.cmd`
+invokes the adjacent `build-release.ps1`, which can also be called directly.
+Both resolve paths from their own location and work from other directories.
 
 The Windows launcher still waits for Resolve, injects the adjacent DLL and exits.
 The exported `UnboundStart` calling convention and return values are unchanged.

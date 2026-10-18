@@ -31,7 +31,7 @@ int main(int argc, char **argv)
             check(session.start(slot,"Inspector",&page).isEmpty(),"Inspector detach failed");
             auto host=session.floatingWindow(); host->resize(420,300); app.processEvents();
             check(host->width()==420 && host->minimumWidth()>=360 && host->minimumWidth()<fullWidth,
-                "Filename still constrains floating width or content minimum was lost");
+                qPrintable(QString("Filename still constrains floating width or content minimum was lost: width=%1 minimum=%2 full=%3").arg(host->width()).arg(host->minimumWidth()).arg(fullWidth)));
             check(title->width()<fullWidth && title->text()==filename && title->property("elideMode").toInt()==int(Qt::ElideMiddle),
                 "Native label lost its full text/elision mode or cannot shrink");
             const int narrowTitleWidth=title->width();
@@ -251,13 +251,13 @@ int main(int argc, char **argv)
     }
     if (app.arguments().contains("--settings-json-test")) {
         QTemporaryDir dir;
-        const auto oldLocal=qgetenv("LOCALAPPDATA"), oldOverride=qgetenv("UNBOUND_SETTINGS_FILE");
-        qputenv("LOCALAPPDATA",dir.path().toUtf8()); qunsetenv("UNBOUND_SETTINGS_FILE");
+        const auto oldOverride=qgetenv("UNBOUND_SETTINGS_FILE");
+        qunsetenv("UNBOUND_SETTINGS_FILE");
         QDir().mkpath(dir.filePath("Unbound"));
         QFile oldFile(dir.filePath("Unbound/settings.json"));
         check(oldFile.open(QIODevice::WriteOnly),"Cannot create version 4 settings");
         oldFile.write(R"({"version":4,"pages":{"color":{"panes":{"luts":{"floating":true,"toolbarButtonChecked":false}}},"edit":{"panes":{"mediaPool":{"floating":true}}}}})"); oldFile.close();
-        Unbound::PaneSettings renamed;
+        Unbound::PaneSettings renamed({},dir.path());
         check(renamed.floating("Color/m_pWidgetLutBrowser") && renamed.hasToggle("Color/m_pWidgetLutBrowser")
             && !renamed.toggle("Color/m_pWidgetLutBrowser") && renamed.floating("frameEditPageMediaPool"),"Version 4 migration lost settings");
         check(!oldFile.exists(),"Old filename retained after migration");
@@ -266,7 +266,6 @@ int main(int argc, char **argv)
         const auto migrated=newFile.readAll(); newFile.close();
         check(migrated.contains("WStackPage_Color") && migrated.contains("m_pWidgetLutBrowser")
             && !migrated.contains("\"luts\""),"Migration retained friendly widget aliases");
-        if(oldLocal.isNull()) qunsetenv("LOCALAPPDATA"); else qputenv("LOCALAPPDATA",oldLocal);
         if(oldOverride.isNull()) qunsetenv("UNBOUND_SETTINGS_FILE"); else qputenv("UNBOUND_SETTINGS_FILE",oldOverride);
         const auto path=dir.filePath("Unbound.json");
         QWidget window; window.setGeometry(100,120,434,600); window.show(); app.processEvents();
@@ -374,10 +373,10 @@ int main(int argc, char **argv)
             check(main.isMaximized(),"Per-page maximized state not restored");
             pages->setCurrentWidget(edit); app.processEvents(); placement.flush();
             const auto savedEdit=settings.geometry("MainWindow/WStackPage_Conform");
-            main.showFullScreen(); app.processEvents(); placement.refresh();
+            main.showFullScreen(); app.processEvents(); settlePlatformWindowState(main); placement.refresh();
             pages->setCurrentWidget(color); app.processEvents();
             check(main.isFullScreen() && savedEdit==settings.geometry("MainWindow/WStackPage_Conform"),"Fullscreen overwritten or restored by placement tracking");
-            main.showNormal(); app.processEvents();
+            main.showNormal(); app.processEvents(); settlePlatformWindowState(main);
             pages->setCurrentWidget(edit); app.processEvents();
             dual->show(); placement.refresh();
             main.setGeometry(130,140,440,270); app.processEvents();

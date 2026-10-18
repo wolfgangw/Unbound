@@ -110,7 +110,7 @@ public:
         const QSize minimum(qMax(1, int(limits.ptMinTrackSize.x) - horizontal), qMax(1, int(limits.ptMinTrackSize.y) - vertical));
         const QSize maximum(limits.ptMaxTrackSize.x > 0 ? limits.ptMaxTrackSize.x - horizontal : 16777215,
             limits.ptMaxTrackSize.y > 0 ? limits.ptMaxTrackSize.y - vertical : 16777215);
-        const int distance = qMax(1, MulDiv(24, GetDpiForWindow(m_handle), 96));
+        const int distance = qMax(1, MulDiv(PaneSnapDistance, GetDpiForWindow(m_handle), 96));
         const auto offset = paneSnapOffset(visible, targets, distance, left, right, top, bottom, minimum, maximum, m_workAreas, engaged);
         if (left) target.left += offset.x();
         if (right) target.right += offset.x();

@@ -5,6 +5,11 @@
 #include <QVector>
 #include <limits>
 namespace Unbound {
+// Shared interaction policy. Backends convert logical distance to native units
+// and drive the frame timer using their own event loops.
+inline constexpr int PaneSnapDistance=24;
+inline constexpr int PaneSnapFrameIntervalMs=16;
+inline constexpr int PaneSnapTransitionDurationMs=32;
 // Ease only the magnetic correction. Raw pointer movement never trails behind
 // the cursor. The caller supplies a monotonic clock and drives frames only
 // while transitioning; exact final geometry is committed on release.
@@ -12,11 +17,11 @@ class PaneSnapTransition {
     struct Axis {
         bool engaged=false;
         double start=0,current=0;
-        qint64 began=-32;
+        qint64 began=-PaneSnapTransitionDurationMs;
         bool pending=false;
         int update(int desired,bool active,qint64 now) {
             if(active!=engaged) { start=current; began=now; engaged=active; }
-            const double t=qBound(0.,double(now-began)/32.,1.);
+            const double t=qBound(0.,double(now-began)/PaneSnapTransitionDurationMs,1.);
             // A short accelerating pull: gentle entry, fastest at contact.
             const double eased=t*t;
             current=start+((engaged ? desired : 0)-start)*eased;

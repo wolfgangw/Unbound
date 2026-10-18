@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <functional>
 #include "windowplacement.h"
+#include "panegeometryrestore.h"
 namespace Unbound {
 class MainWindowPlacement : public QObject
 {
@@ -54,18 +55,7 @@ public:
     }
     static QRect reachable(QRect geometry, const QList<QRect> &screens)
     {
-        if (screens.isEmpty()) return geometry;
-        QRect target=screens.first(); int best=-1;
-        for (const auto &screen : screens) {
-            const auto overlap=screen.intersected(geometry);
-            const int area=overlap.width()*overlap.height();
-            if (area>best) { best=area; target=screen; }
-            if (screen.contains(geometry)) return geometry;
-        }
-        geometry.setSize(geometry.size().boundedTo(target.size()));
-        geometry.moveLeft(qBound(target.left(),geometry.left(),target.right()-geometry.width()+1));
-        geometry.moveTop(qBound(target.top(),geometry.top(),target.bottom()-geometry.height()+1));
-        return geometry;
+        return reachableWindowGeometry(geometry,screens);
     }
     void refresh()
     {

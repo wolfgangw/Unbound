@@ -9,6 +9,8 @@
 #include <QScreen>
 #include <QTimer>
 #include "geometryjson.h"
+#include "panegeometryrestore.h"
+#include "panewindowappearance.h"
 #include "panesnapwindows.h"
 #include "paneresizehitfilter.h"
 #include "windowinteraction.h"
@@ -26,7 +28,7 @@ public:
         setAttribute(Qt::WA_QuitOnClose, false);
         // Snap membership belongs to the host, independent of pane identifiers.
         setProperty("unboundFloatingWindow",true);
-        m_snapFrame.setInterval(16);
+        m_snapFrame.setInterval(PaneSnapFrameIntervalMs);
         m_snapFrame.setTimerType(Qt::PreciseTimer);
         connect(&m_snapFrame,&QTimer::timeout,this,[this] {
             if(m_dragHit) updateInteractiveDrag(m_dragCursor);
@@ -39,21 +41,7 @@ public:
         const bool restored = QWidget::restoreGeometry(bytes);
         if (!restored || QGuiApplication::platformName() != QLatin1String("windows")
             || isMaximized() || isFullScreen()) return restored;
-        // Qt's generic restoration reserves a title-bar-height safety margin,
-        // even for this captionless host. Restore the saved client rectangle
-        // exactly when it is reachable on the current monitor layout; retain
-        // Qt's recovery for removed displays or changed screen dimensions.
-        const auto saved = qtGeometryJson(bytes);
-        QRect client;
-        if (!readRectangle(saved.value("clientRect"), client)) return restored;
-        for (auto screen : QGuiApplication::screens()) {
-            if (screen->availableGeometry().contains(client)
-                && (!saved.value("screenWidth").toInt()
-                    || saved.value("screenWidth").toInt() == screen->geometry().width())) {
-                setGeometry(client);
-                break;
-            }
-        }
+        restoreReachablePaneClientGeometry(this,bytes);
         return restored;
     }
     bool beginButtonMove()
@@ -164,7 +152,7 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
-        painter.fillRect(rect(), QColor(20, 20, 20));
+        painter.fillRect(rect(), paneWindowBackground());
     }
     bool nativeEvent(const QByteArray &type, void *message, long *result) override
     {
@@ -197,7 +185,7 @@ protected:
         if (msg->message == WM_ERASEBKGND) {
             RECT client;
             GetClientRect(handle, &client);
-            HBRUSH background = CreateSolidBrush(RGB(20, 20, 20));
+            HBRUSH background = CreateSolidBrush(RGB(PaneWindowBackgroundLevel, PaneWindowBackgroundLevel, PaneWindowBackgroundLevel));
             FillRect(reinterpret_cast<HDC>(msg->wParam), &client, background);
             DeleteObject(background);
             *result = 1;
