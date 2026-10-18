@@ -167,6 +167,12 @@ int main(int argc,char **argv)
         page->show(); app.processEvents();
         require(program->isVisible() && source->isVisible(),"Page return did not restore hosts");
         require(timeline->geometry()==expandedRegion() && players->height()==0,"Page return lost reclamation");
+        // Cinema hides the main window without a native resize. Its inherited
+        // child Hide/Show events must preserve all pre-reclamation baselines.
+        main.hide(); app.processEvents(); app.processEvents();
+        main.show(); app.processEvents(); app.processEvents();
+        require(timeline->geometry()==expandedRegion() && players->height()==0,
+            "Main-window return lost dual-viewer reclamation");
         experiment->dockBoth(); app.processEvents();
         require(players->height()==root->height()/2-1 && timeline->y()==root->height()/2,"Docking did not restore latest native region geometry");
         require(!splitter->isHidden(),"Native divider was not restored");
@@ -182,6 +188,18 @@ int main(int argc,char **argv)
     experiment->dockBoth(); app.processEvents();
     source->hide(); experiment->toggleProgram(); app.processEvents(); app.processEvents();
     require(players->height()==0,"Single Viewer Mode did not reclaim with only Program floating");
+    for(int cycle=0;cycle<3;++cycle) {
+        main.hide(); app.processEvents(); app.processEvents();
+        main.show(); app.processEvents(); app.processEvents();
+        require(players->height()==0 && timeline->geometry()==expandedRegion(),
+            "Repeated Cinema visibility transitions lost single-viewer reclamation");
+    }
+    experiment->toggleProgram(); app.processEvents(); app.processEvents();
+    require(players->height()==root->height()/2-1 && timeline->y()==root->height()/2,
+        "Docking after main hide/show lost the native viewer region baseline");
+    require(program->isVisible() && program->parentWidget()==players,
+        "Docking after main hide/show did not show Program");
+    experiment->toggleProgram(); app.processEvents(); app.processEvents();
     const auto hoverProgramWindow=program->window();
     const auto hoverProgramRect=hoverProgramWindow->geometry();
     program->hide(); source->show(); app.processEvents(); app.processEvents();
@@ -248,4 +266,5 @@ int main(int argc,char **argv)
     delete experiment; app.processEvents();
     qInfo("PASS: independent viewer geometry on dock/re-undock and disk reload; startup floating restoration; shutdown intent; explicit docking");
     qInfo("PASS: viewer whole-widget detachment, source alternatives, page visibility, native order/stretch, close docking and repeated cleanup");
+    qInfo("PASS: docking after Cinema main-window hide/show restores native viewer, timeline and side-region geometry without resizing");
 }

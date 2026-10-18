@@ -155,7 +155,15 @@ protected:
         }
         if (object==m_page && type==QEvent::Show) m_paused=false;
         if (type==QEvent::Move || type==QEvent::Resize || type==QEvent::Show || type==QEvent::Hide) {
-            auto update=[&](Placement &p) { if (object==p.widget) capture(p); };
+            auto update=[&](Placement &p) {
+                if (object!=p.widget) return;
+                // Ancestor hide/show (including Windows Cinema Viewer) also
+                // reaches these regions while they have our adapted geometry.
+                // Visibility events must not replace the native baseline with
+                // the collapsed viewer or expanded timeline/side columns.
+                if(type==QEvent::Move || type==QEvent::Resize) capture(p);
+                else p.hidden=p.widget->isHidden();
+            };
             update(m_viewers); update(m_timeline);
             for (auto &p:m_splitters) update(p);
             for (auto &p:m_sideRegions) update(p);

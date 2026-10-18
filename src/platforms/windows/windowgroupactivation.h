@@ -5,10 +5,12 @@
 #include <QTimer>
 #include <QSet>
 #include "panefloatingwindow.h"
+#include "cinemaviewervisibility.h"
 
 namespace Unbound {
 // Activation is the only trigger. There are no hooks in other processes and
 // no recurring timer or work on painting/playback events.
+// The associated Cinema visibility guard handles native fullscreen transitions.
 class WindowGroupActivation : public QObject
 {
 public:
@@ -17,7 +19,7 @@ public:
         if (QGuiApplication::platformName() == QLatin1String("windows"))
             qApp->installEventFilter(this);
     }
-    void setWindow(QWidget *window) { m_main = window; }
+    void setWindow(QWidget *window) { m_main = window; m_cinema.setWindow(window); }
 protected:
     bool eventFilter(QObject *object, QEvent *event) override
     {
@@ -78,6 +80,7 @@ private:
         m_raising = false;
     }
     QPointer<QWidget> m_main, m_selected;
+    CinemaViewerVisibility m_cinema;
     bool m_pending = false, m_raising = false;
 };
 }

@@ -66,6 +66,7 @@ try {
     $env:PATH = "$QtPath\bin;$env:PATH"
     $env:QT_QPA_PLATFORM = 'offscreen'
     Invoke-Checked (Join-Path $build 'Release\UnboundViewerTests.exe') @()
+    Invoke-Checked (Join-Path $build 'Release\UnboundCinemaTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
     $test = Join-Path $testBuild 'Release\pane-float-smoke.exe'
     Invoke-Checked (Join-Path $testBuild 'Release\audition-activation-test.exe') @()
