@@ -28,10 +28,10 @@
 #include "panesettings.h"
 #include "windowinteraction.h"
 namespace Unbound {
-class PresetActionIcon final : public QIconEngine {
+class LayoutActionIcon final : public QIconEngine {
 public:
-    explicit PresetActionIcon(bool save=false) : m_save(save) {}
-    QIconEngine *clone() const override { return new PresetActionIcon(m_save); }
+    explicit LayoutActionIcon(bool save=false) : m_save(save) {}
+    QIconEngine *clone() const override { return new LayoutActionIcon(m_save); }
     void paint(QPainter *p,const QRect &rect,QIcon::Mode mode,QIcon::State) override {
         p->save(); p->setRenderHint(QPainter::Antialiasing);
         const qreal scale=qMin(rect.width(),rect.height())/20.;
@@ -59,9 +59,9 @@ public:
 private:
     bool m_save=false;
 };
-class PresetNameButton final : public QPushButton {
+class LayoutNameButton final : public QPushButton {
 public:
-    explicit PresetNameButton(QWidget *parent) : QPushButton(parent) {
+    explicit LayoutNameButton(QWidget *parent) : QPushButton(parent) {
         m_hold.setSingleShot(true); m_hold.setInterval(1000); m_hold.setTimerType(Qt::PreciseTimer);
         connect(&m_hold,&QTimer::timeout,this,[this] {
             if(!isDown()) return;
@@ -91,9 +91,9 @@ private:
     QPoint m_press;
     bool m_longPress=false;
 };
-class PresetNameEdit final : public QLineEdit {
+class LayoutNameEdit final : public QLineEdit {
 public:
-    explicit PresetNameEdit(QWidget *parent) : QLineEdit(parent) { setMaxLength(128); }
+    explicit LayoutNameEdit(QWidget *parent) : QLineEdit(parent) { setMaxLength(128); }
     std::function<void(bool)> finish;
     // Only the owning popout calls this, for its focused rename field. Sending
     // the event with sendEvent would re-enter Resolve's application dispatcher,
@@ -121,7 +121,7 @@ protected:
 // A persistent Qt tool popout, deliberately outside Qt's transient-popup stack.
 // Resolve may close that stack while docking panels; our outside-input filter
 // supplies dismissal without an intervening hide/reopen during restoration.
-class PagePresetMenu final : public QFrame {
+class PageLayoutMenu final : public QFrame {
 public:
     std::function<QString(QString &,bool &)> save;
     std::function<QString(const QString &,bool &)> recall;
@@ -129,10 +129,10 @@ public:
     std::function<QString(const QString &)> update;
     std::function<QString()> dockAll;
     std::function<QString(const QString &,const QString &)> rename;
-    PagePresetMenu(PaneSettings &settings,QString page,QWidget *parent,std::function<bool()> hasFloating={})
+    PageLayoutMenu(PaneSettings &settings,QString page,QWidget *parent,std::function<bool()> hasFloating={})
         : QFrame(parent),m_settings(settings),m_page(std::move(page)),m_hasFloating(std::move(hasFloating)) {
         setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-        setObjectName("unboundPresetMenu");
+        setObjectName("unboundLayoutMenu");
         setWindowTitle(PaneSettings::pageLabel(m_page)+" panel configurations");
         setAttribute(Qt::WA_TranslucentBackground);
         setAttribute(Qt::WA_QuitOnClose,false);
@@ -140,22 +140,22 @@ public:
         m_layout=new QVBoxLayout(this); m_layout->setContentsMargins(6,6,6,6); m_layout->setSpacing(0);
         // Resolve supplies the theme; do not maintain a separate popup grey.
         m_background=(parent ? parent->palette() : qApp->palette()).color(QPalette::Window);
-        setStyleSheet("QFrame#unboundPresetMenu { background: transparent; border: none; }"
-            "QFrame#unboundPresetMenu QAbstractButton { color: #dddddd; background: transparent; border: none; border-radius: 3px; padding: 6px 8px; text-align: left; }"
-            "QFrame#unboundPresetMenu QAbstractButton[activePreset='true'] { background: #40566a; color: #ffffff; }"
-            "QFrame#unboundPresetMenu QAbstractButton:hover { background: #414141; }"
-            "QFrame#unboundPresetMenu QAbstractButton:focus { background: #414141; }"
-            "QFrame#unboundPresetMenu QAbstractButton:disabled { color: #777777; }"
-            "QFrame#unboundPresetMenu QToolButton#unboundPresetUpdate { background: #ed4b3f; }"
-            "QFrame#unboundPresetMenu QToolButton#unboundPresetUpdate:hover { background: #f65b4f; }"
-            "QFrame#unboundPresetMenu QToolButton#unboundPresetUpdate:focus { background: #f65b4f; }"
-            "QFrame#unboundPresetMenu QLineEdit { color: #dddddd; background: #292929; border: 1px solid #777777; border-radius: 3px; padding: 4px 7px; selection-background-color: #40566a; }"
-            "QFrame#unboundPresetMenu QLabel { color: #999999; padding: 5px 8px; background: transparent; }");
-        m_save=new QPushButton(this); m_save->setObjectName("unboundPresetSave");
-        m_save->setText("Save as new preset");
+        setStyleSheet("QFrame#unboundLayoutMenu { background: transparent; border: none; }"
+            "QFrame#unboundLayoutMenu QAbstractButton { color: #dddddd; background: transparent; border: none; border-radius: 3px; padding: 6px 8px; text-align: left; }"
+            "QFrame#unboundLayoutMenu QAbstractButton[activeLayout='true'] { background: #40566a; color: #ffffff; }"
+            "QFrame#unboundLayoutMenu QAbstractButton:hover { background: #414141; }"
+            "QFrame#unboundLayoutMenu QAbstractButton:focus { background: #414141; }"
+            "QFrame#unboundLayoutMenu QAbstractButton:disabled { color: #777777; }"
+            "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate { background: #ed4b3f; }"
+            "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate:hover { background: #f65b4f; }"
+            "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate:focus { background: #f65b4f; }"
+            "QFrame#unboundLayoutMenu QLineEdit { color: #dddddd; background: #292929; border: 1px solid #777777; border-radius: 3px; padding: 4px 7px; selection-background-color: #40566a; }"
+            "QFrame#unboundLayoutMenu QLabel { color: #999999; padding: 5px 8px; background: transparent; }");
+        m_save=new QPushButton(this); m_save->setObjectName("unboundLayoutSave");
+        m_save->setText(QStringLiteral("Save as new %1 layout").arg(PaneSettings::pageLabel(m_page)));
         m_save->setAutoDefault(false); m_save->setMinimumWidth(275);
         addWidget(m_save);
-        auto dock=new QPushButton("Dock all",this); dock->setObjectName("unboundPresetDockAll");
+        auto dock=new QPushButton("Dock all",this); dock->setObjectName("unboundLayoutDockAll");
         dock->setAutoDefault(false); m_dock=dock; addWidget(dock);
         connect(dock,&QPushButton::clicked,this,[this] {
             m_recalling=true;
@@ -166,7 +166,7 @@ public:
         auto separator=new QFrame(this); separator->setFixedHeight(1);
         separator->setStyleSheet("background: #444444; border: none;");
         m_layout->addSpacing(4); addWidget(separator); m_layout->addSpacing(4);
-        m_status=new QLabel(this); m_status->setObjectName("unboundPresetStatus");
+        m_status=new QLabel(this); m_status->setObjectName("unboundLayoutStatus");
         m_status->setTextFormat(Qt::PlainText); m_status->setWordWrap(true); m_status->setMaximumWidth(300);
         addWidget(m_status);
         connect(m_save,&QPushButton::clicked,this,[this] {
@@ -177,7 +177,7 @@ public:
         });
         refresh();
     }
-    ~PagePresetMenu() override {
+    ~PageLayoutMenu() override {
         // Focus-out can occur while QWidget destroys its children, after our
         // members have gone. Disconnect inline-edit callbacks before that.
         for(const auto &row:m_rows) { row.editor->finish={}; row.load->renameRequested={}; }
@@ -302,19 +302,19 @@ private:
             m_message.clear(); adjustSize();
         });
     }
-    struct PresetRow {
+    struct LayoutRow {
         QWidget *widget=nullptr;
-        PresetNameButton *load=nullptr;
+        LayoutNameButton *load=nullptr;
         QToolButton *update=nullptr,*trash=nullptr;
         QStackedWidget *nameArea=nullptr;
-        PresetNameEdit *editor=nullptr;
+        LayoutNameEdit *editor=nullptr;
     };
     void beginRename(const QString &id) {
         if(!m_rows.contains(id)) return;
         finishRename(false);
         const auto &row=m_rows[id];
         m_editing=id;
-        row.editor->setText(m_settings.presetName(m_page,id));
+        row.editor->setText(m_settings.layoutName(m_page,id));
         row.nameArea->setCurrentWidget(row.editor);
         // A persistent tool popout can remain inactive while Resolve owns
         // keyboard focus. setFocus alone then only selects a future focus
@@ -330,7 +330,7 @@ private:
         const auto id=m_editing;
         const auto &row=m_rows[id];
         if(submit) {
-            const auto error=rename ? rename(id,row.editor->text()) : m_settings.renamePreset(m_page,id,row.editor->text());
+            const auto error=rename ? rename(id,row.editor->text()) : m_settings.renameLayout(m_page,id,row.editor->text());
             if(!error.isEmpty()) { m_status->setText(error); row.editor->setFocus(); return; }
         }
         m_editing.clear();
@@ -339,24 +339,24 @@ private:
         if(focused) setFocus(Qt::OtherFocusReason);
         if(submit || isVisible()) afterAction({});
     }
-    PresetRow makeRow(const QString &id) {
+    LayoutRow makeRow(const QString &id) {
         auto row=new QWidget(this); auto layout=new QHBoxLayout(row);
         layout->setContentsMargins(0,2,0,2); layout->setSpacing(5);
         auto nameArea=new QStackedWidget(row); layout->addWidget(nameArea,1);
-        auto load=new PresetNameButton(nameArea); load->setObjectName("unboundPresetRecall"); load->setAutoDefault(false);
+        auto load=new LayoutNameButton(nameArea); load->setObjectName("unboundLayoutRecall"); load->setAutoDefault(false);
         load->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); nameArea->addWidget(load);
-        load->setProperty("presetId",id);
-        auto editor=new PresetNameEdit(nameArea); editor->setObjectName("unboundPresetNameEdit");
-        editor->setProperty("presetId",id); nameArea->addWidget(editor);
+        load->setProperty("layoutId",id);
+        auto editor=new LayoutNameEdit(nameArea); editor->setObjectName("unboundLayoutNameEdit");
+        editor->setProperty("layoutId",id); nameArea->addWidget(editor);
         load->renameRequested=[this,id] { beginRename(id); };
         editor->finish=[this](bool submit) { finishRename(submit); };
-        auto updateButton=new QToolButton(row); updateButton->setObjectName("unboundPresetUpdate");
-        updateButton->setProperty("presetId",id);
-        updateButton->setIcon(QIcon(new PresetActionIcon(true))); updateButton->setIconSize(QSize(18,18));
+        auto updateButton=new QToolButton(row); updateButton->setObjectName("unboundLayoutUpdate");
+        updateButton->setProperty("layoutId",id);
+        updateButton->setIcon(QIcon(new LayoutActionIcon(true))); updateButton->setIconSize(QSize(18,18));
         updateButton->setFixedSize(30,30); layout->addWidget(updateButton);
-        auto trash=new QToolButton(row); trash->setObjectName("unboundPresetDelete");
-        trash->setProperty("presetId",id);
-        trash->setIcon(QIcon(new PresetActionIcon)); trash->setIconSize(QSize(18,18)); trash->setFixedSize(30,30);
+        auto trash=new QToolButton(row); trash->setObjectName("unboundLayoutDelete");
+        trash->setProperty("layoutId",id);
+        trash->setIcon(QIcon(new LayoutActionIcon)); trash->setIconSize(QSize(18,18)); trash->setFixedSize(30,30);
         layout->addWidget(trash);
         m_layout->insertWidget(m_layout->indexOf(m_status),row);
         connect(load,&QPushButton::clicked,this,[this,id] {
@@ -368,12 +368,12 @@ private:
             afterAction(error);
         });
         connect(updateButton,&QToolButton::clicked,this,[this,id] {
-            const auto error=update ? update(id) : m_settings.updatePreset(m_page,id);
+            const auto error=update ? update(id) : m_settings.updateLayout(m_page,id);
             afterAction(error);
         });
         connect(trash,&QToolButton::clicked,this,[this,id] {
-            const auto name=m_settings.presetName(m_page,id);
-            const auto error=remove ? remove(id) : m_settings.deletePreset(m_page,id);
+            const auto name=m_settings.layoutName(m_page,id);
+            const auto error=remove ? remove(id) : m_settings.deleteLayout(m_page,id);
             afterAction(error.isEmpty() ? "Deleted "+name : error);
         });
         return {row,load,updateButton,trash,nameArea,editor};
@@ -384,7 +384,7 @@ private:
         if(painting) setUpdatesEnabled(false);
         const bool floating=m_hasFloating && m_hasFloating();
         m_dock->setEnabled(floating); m_dock->setVisible(floating);
-        const auto entries=m_settings.presets(m_page);
+        const auto entries=m_settings.layouts(m_page);
         QSet<QString> ids;
         for(const auto &value:entries) ids.insert(value.toObject().value("id").toString());
         for(auto it=m_rows.begin();it!=m_rows.end();) {
@@ -400,19 +400,19 @@ private:
             const auto &row=m_rows[id];
             auto label=name; label.replace("&","&&"); row.load->setText(label);
             row.load->setAccessibleName("Recall "+name); row.load->setToolTip(name.toHtmlEscaped()+"<br/>Hold 1 second to rename");
-            row.editor->setAccessibleName("Preset name: "+name);
+            row.editor->setAccessibleName("Layout name: "+name);
             row.update->setToolTip("<qt>"+("Update "+name).toHtmlEscaped()+"</qt>"); row.update->setAccessibleName("Update "+name);
             row.trash->setToolTip("<qt>"+("Delete "+name).toHtmlEscaped()+"</qt>"); row.trash->setAccessibleName("Delete "+name);
-            const bool active=m_settings.activePreset(m_page)==id;
-            if(!row.load->property("activePreset").isValid() || row.load->property("activePreset").toBool()!=active) {
-                row.load->setProperty("activePreset",active);
+            const bool active=m_settings.activeLayout(m_page)==id;
+            if(!row.load->property("activeLayout").isValid() || row.load->property("activeLayout").toBool()!=active) {
+                row.load->setProperty("activeLayout",active);
                 row.load->style()->unpolish(row.load); row.load->style()->polish(row.load); row.load->update();
             }
-            row.update->setVisible(active && m_settings.presetDirty(m_page,id));
+            row.update->setVisible(active && m_settings.layoutDirty(m_page,id));
         }
         m_save->setEnabled(entries.size()<5);
-        m_save->setToolTip(entries.size()<5 ? QStringLiteral("Create a new preset. Use the save icon beside the active preset to update it.") : QStringLiteral("Delete a preset to make room."));
-        m_status->setText(entries.isEmpty() ? "No saved configurations" : QStringLiteral("%1 / 5 presets").arg(entries.size()));
+        m_save->setToolTip(entries.size()<5 ? QStringLiteral("Create a new layout. Use the save icon beside the active layout to update it.") : QStringLiteral("Delete a layout to make room."));
+        m_status->setText(entries.isEmpty() ? "No saved layouts" : QStringLiteral("%1 / 5 layouts").arg(entries.size()));
         if(painting) setUpdatesEnabled(true);
     }
     QColor m_background;
@@ -423,7 +423,7 @@ private:
     QPushButton *m_dock=nullptr;
     QVBoxLayout *m_layout=nullptr;
     std::function<bool()> m_hasFloating;
-    QMap<QString,PresetRow> m_rows;
+    QMap<QString,LayoutRow> m_rows;
     QString m_message,m_editing;
     bool m_recalling=false,m_refreshQueued=false;
 };

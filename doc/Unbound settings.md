@@ -12,14 +12,14 @@ The top-level `pages` object uses Resolve widget names: `WStackPage_Conform`, `W
 `WStackPage_Fusion`, and `WStackPage_Deliver` as page names. Entries appear as they are used.
 Each page can contain `mainWindow` and `panes`.
 
-## Panel configuration presets
+## Panel configuration layouts
 
 Right-click any Unbound Dock/Undock button, docked or floating, to open the
-current page's preset menu, anchored immediately below the button (subject to
-screen-edge placement). **Save as new preset** creates a preset
+current page's layout menu, anchored immediately below the button (subject to
+screen-edge placement). **Save as new Edit layout** (or Color/Fairlight for the current page) creates a layout
 from the current page's arrangement. To update
-the active preset instead, use the save icon in its row. Save, recall, update and delete keep the menu open, so deleting
-a preset and saving its replacement does not require reopening it. An outside
+the active layout instead, use the save icon in its row. Save, recall, update and delete keep the menu open, so deleting
+a layout and saving its replacement does not require reopening it. An outside
 click dismisses the menu; Escape and switching to another application also dismiss it.
 
 Edit, Color and Fairlight each have five slots. Names are generated per page
@@ -27,34 +27,38 @@ Edit, Color and Fairlight each have five slots. Names are generated per page
 When all five slots are occupied, delete one before saving another. Saving an
 identical stored configuration reports its existing name without adding a duplicate.
 
-The active preset is highlighted, even after manual changes. When it differs
+The active layout is highlighted, even after manual changes. When it differs
 from its snapshot, a save icon appears immediately left of its trash button.
 The button uses a red matching Resolve's playhead. Click it to
-update that preset in place. Changes are checked when opening the
+update that layout in place. Changes are checked when opening the
 menu, including geometry whose autosave is still pending.
 
 **Dock all** appears only while this page has at least one floating panel
 (including Edit viewers). It docks this page's floating panels and cancels pending undocking.
-It clears the active preset selection, preserves saved presets and does not
+It clears the active layout selection, preserves saved layouts and does not
 reset Resolve's layout or consume a slot. A fully docked arrangement can also
-be saved explicitly as an ordinary preset.
+be saved explicitly as an ordinary layout.
 
-Hold a preset name for one second to edit it inline. A short click still recalls.
+Hold a layout name for one second to edit it inline. A short click still recalls.
 The editor receives keyboard focus immediately and selects the full name.
 Unmodified Left/Right collapse the selection to its start/end; typing replaces it.
-Enter submits the name only, including for an inactive preset; it never recalls
-that preset. Escape cancels editing while leaving the popout open. Moving focus
+Enter submits the name only, including for an inactive layout; it never recalls
+that layout. Escape cancels editing while leaving the popout open. Moving focus
 away or dismissing the popout cancels an unsubmitted edit. Names are trimmed,
 must not be blank, and may contain up to 128 characters. Duplicate names are
 allowed, even for all five slots. Renaming does not change active/dirty state,
 geometry or the saved configuration.
 
+The format-7 JSON keys below retain their original spelling for compatibility;
+the UI and code call these saved configurations layouts. No migration is needed
+for the wording change, and existing names, IDs and snapshots stay intact.
+
 Each page can also contain:
 
 - `presets`: an array of objects with stable `id`, display `name`, and `configuration`. Each configuration
   contains a snapshot of that page's `mainWindow` and `panes`, using the same fields
-  as the active layout. Presets do not contain other presets.
-- `activePreset`: the ID of the last saved or recalled preset. Manual layout changes
+  as the active layout. Layouts do not contain other layouts.
+- `activePreset`: the ID of the last saved or recalled layout. Manual layout changes
   preserve this identity; deleting it or choosing Dock all clears it. It is not
   included in snapshots. Older settings may omit it.
 - `nextPresetNumber`: the next generated name number for this page.
@@ -62,33 +66,33 @@ Each page can also contain:
 Saving flushes pending main/floating-window geometry and captures supported pane
 docking and native toggle states. Recall restores main placement, reuses existing
 floating hosts where possible, and docks or undocks changed panes through normal
-restoration. Other pages and archived presets are left unchanged.
+restoration. Other pages and archived layouts are left unchanged.
 
-Clicking the already active, unchanged preset does nothing. If it is dirty,
+Clicking the already active, unchanged layout does nothing. If it is dirty,
 clicking its name restores the saved snapshot; clicking its save icon updates it.
-Recalling another preset discards unsaved changes to the outgoing arrangement.
-There are no separate per-preset drafts: its snapshot stays unchanged, and
+Recalling another layout discards unsaved changes to the outgoing arrangement.
+There are no separate per-layout drafts: its snapshot stays unchanged, and
 returning to it recalls that snapshot with no retained dirty status.
-The popup retains its rows while switching presets.
+The popup retains its rows while switching layouts.
 Any interaction outside the popup dismisses it, including scrolling and moving
 or resizing a window. Hovering outside leaves it open.
 
-Subsequent manual changes autosave to the active layout; the preset changes only
-when its update icon is used. Explicit updates preserve the preset name and slot. Duplicate
-suppression applies to saving a new preset, not overwriting an existing one.
+Subsequent manual changes autosave the current arrangement; the saved layout changes
+only when its update icon is used. Explicit updates preserve the layout name and slot. Duplicate
+suppression applies to saving a new layout, not overwriting an existing one.
 
-Presets cover Unbound's tracked window/pane state. They do not capture Resolve's
+Layouts cover Unbound's tracked window/pane state. They do not capture Resolve's
 internal panel split positions, timeline contents, or Single/Dual Viewer Mode.
 Source floating intent still waits until Source becomes natively available.
 Existing minimum sizes and monitor-recovery behavior apply.
 
 Older settings formats (1-6) migrate automatically to version 7 with their current
-layouts preserved. Existing version 6 presets receive UUIDs, and their active
-preset name is translated to its ID. Names, snapshots and the generated-name
+layouts preserved. Existing version 6 layouts receive UUIDs, and their active
+layout name is translated to its ID. Names, snapshots and the generated-name
 counter are preserved. Recall/update/delete use IDs exclusively; labels can be
-duplicated or changed freely. Migration does not create presets or force any layout change.
+duplicated or changed freely. Migration does not create layouts or force any layout change.
 Writes remain atomic. Unsupported/corrupt settings are left unchanged; malformed
-preset records are rejected rather than recalled as empty configurations.
+layout records are rejected rather than recalled as empty configurations.
 
 ## Active layout
 

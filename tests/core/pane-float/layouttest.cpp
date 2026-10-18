@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-#include "pagepresetmenu.h"
+#include "pagelayoutmenu.h"
 #include "panedecoration.h"
 #include "controller.h"
 #include <QApplication>
@@ -59,7 +59,7 @@ static void context(QWidget *button) {
     QContextMenuEvent event(QContextMenuEvent::Mouse,point,button->mapToGlobal(point));
     QApplication::sendEvent(button,&event); settle();
 }
-static QAbstractButton *control(PagePresetMenu *menu,const QString &object,const QString &text={}) {
+static QAbstractButton *control(PageLayoutMenu *menu,const QString &object,const QString &text={}) {
     for(auto button:menu->findChildren<QAbstractButton *>(object))
         if(button->isVisible() && (text.isEmpty() || button->text()==text || button->accessibleName()==text)) return button;
     return nullptr;
@@ -76,9 +76,9 @@ static void hold(QWidget *widget,bool activate=true) {
     QMouseEvent release(QEvent::MouseButtonRelease,point,global,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
     QApplication::sendEvent(widget,&release); settle();
 }
-static QString presetId(const PaneSettings &settings,const QString &page,const QString &name) {
+static QString layoutId(const PaneSettings &settings,const QString &page,const QString &name) {
     QString id;
-    for(const auto &value:settings.presets(page)) if(value.toObject().value("name").toString()==name) {
+    for(const auto &value:settings.layouts(page)) if(value.toObject().value("name").toString()==name) {
         require(id.isEmpty(),"Test expected a unique layout label"); id=value.toObject().value("id").toString();
     }
     require(!id.isEmpty(),"Test could not find the layout ID"); return id;
@@ -96,51 +96,51 @@ static void storage() {
     QFile migrated(path); require(migrated.open(QIODevice::ReadOnly),"Cannot read migrated settings");
     const auto root=QJsonDocument::fromJson(migrated.readAll()).object(); migrated.close();
     require(root.value("version").toInt()==7 && root.value("pages").toObject()==pages,
-        "Preset migration changed existing layouts or invented layouts");
+        "Layout migration changed existing layouts or invented layouts");
     QString name; bool duplicate=false;
-    require(settings.savePreset(edit,name,duplicate).isEmpty() && name=="Edit-1" && !duplicate,"First layout naming failed");
-    require(settings.savePreset(edit,name,duplicate).isEmpty() && duplicate && settings.presets(edit).size()==1,
+    require(settings.saveLayout(edit,name,duplicate).isEmpty() && name=="Edit-1" && !duplicate,"First layout naming failed");
+    require(settings.saveLayout(edit,name,duplicate).isEmpty() && duplicate && settings.layouts(edit).size()==1,
         "Identical page configuration consumed a layout slot");
-    require(settings.savePreset(color,name,duplicate).isEmpty() && name=="Color-1","Preset names were not page-local");
-    const auto first=settings.preset(edit,presetId(settings,edit,"Edit-1"));
+    require(settings.saveLayout(color,name,duplicate).isEmpty() && name=="Color-1","Layout names were not page-local");
+    const auto first=settings.layout(edit,layoutId(settings,edit,"Edit-1"));
     for(int i=2;i<=5;++i) {
         sample.move(70+i*20,90+i*15); settings.save("frameEditPageMediaPool",sample.saveGeometry());
-        require(settings.savePreset(edit,name,duplicate).isEmpty() && !duplicate,"Could not fill five layout slots");
+        require(settings.saveLayout(edit,name,duplicate).isEmpty() && !duplicate,"Could not fill five layout slots");
     }
     sample.move(240,220); settings.save("frameEditPageMediaPool",sample.saveGeometry());
-    require(!settings.savePreset(edit,name,duplicate).isEmpty() && settings.presets(edit).size()==5,"Preset limit was not enforced");
-    require(settings.deletePreset(edit,presetId(settings,edit,"Edit-3")).isEmpty(),"Cannot delete layout");
-    require(settings.savePreset(edit,name,duplicate).isEmpty() && name=="Edit-6","Deletion reused a name or prevented saving");
+    require(!settings.saveLayout(edit,name,duplicate).isEmpty() && settings.layouts(edit).size()==5,"Layout limit was not enforced");
+    require(settings.deleteLayout(edit,layoutId(settings,edit,"Edit-3")).isEmpty(),"Cannot delete layout");
+    require(settings.saveLayout(edit,name,duplicate).isEmpty() && name=="Edit-6","Deletion reused a name or prevented saving");
     const auto colorBefore=settings.pageConfiguration(color);
-    require(settings.activatePreset(edit,presetId(settings,edit,"Edit-1")).isEmpty() && settings.pageConfiguration(edit)==first,
-        "Preset recall did not restore the saved configuration");
-    require(settings.pageConfiguration(color)==colorBefore && settings.presets(edit).size()==5,
-        "Preset recall modified another page or its archived layouts");
+    require(settings.activateLayout(edit,layoutId(settings,edit,"Edit-1")).isEmpty() && settings.pageConfiguration(edit)==first,
+        "Layout recall did not restore the saved configuration");
+    require(settings.pageConfiguration(color)==colorBefore && settings.layouts(edit).size()==5,
+        "Layout recall modified another page or its archived layouts");
     PaneSettings reloaded(path);
-    require(reloaded.preset(edit,presetId(reloaded,edit,"Edit-1"))==first && reloaded.presets(edit).size()==5 && reloaded.presets(color).size()==1,
+    require(reloaded.layout(edit,layoutId(reloaded,edit,"Edit-1"))==first && reloaded.layouts(edit).size()==5 && reloaded.layouts(color).size()==1,
         "Saved layouts did not survive disk reload");
-    require(reloaded.activePreset(edit)==presetId(reloaded,edit,"Edit-1") && !reloaded.presetDirty(edit,presetId(reloaded,edit,"Edit-1")),
+    require(reloaded.activeLayout(edit)==layoutId(reloaded,edit,"Edit-1") && !reloaded.layoutDirty(edit,layoutId(reloaded,edit,"Edit-1")),
         "Active layout did not persist or was dirty immediately after recall");
     reloaded.saveFloating("frameEditPageMediaPool",false);
-    require(reloaded.activePreset(edit)==presetId(reloaded,edit,"Edit-1") && reloaded.presetDirty(edit,presetId(reloaded,edit,"Edit-1")),
+    require(reloaded.activeLayout(edit)==layoutId(reloaded,edit,"Edit-1") && reloaded.layoutDirty(edit,layoutId(reloaded,edit,"Edit-1")),
         "Manual changes lost active identity or failed to mark it dirty");
-    require(reloaded.updatePreset(edit,presetId(reloaded,edit,"Edit-1")).isEmpty() && !reloaded.presetDirty(edit,presetId(reloaded,edit,"Edit-1")) &&
-        reloaded.presets(edit).size()==5 && reloaded.preset(edit,presetId(reloaded,edit,"Edit-2"))==settings.preset(edit,presetId(settings,edit,"Edit-2")),
+    require(reloaded.updateLayout(edit,layoutId(reloaded,edit,"Edit-1")).isEmpty() && !reloaded.layoutDirty(edit,layoutId(reloaded,edit,"Edit-1")) &&
+        reloaded.layouts(edit).size()==5 && reloaded.layout(edit,layoutId(reloaded,edit,"Edit-2"))==settings.layout(edit,layoutId(settings,edit,"Edit-2")),
         "Update did not replace only the selected layout in place");
-    require(reloaded.deletePreset(edit,presetId(reloaded,edit,"Edit-1")).isEmpty() && reloaded.activePreset(edit).isEmpty(),
+    require(reloaded.deleteLayout(edit,layoutId(reloaded,edit,"Edit-1")).isEmpty() && reloaded.activeLayout(edit).isEmpty(),
         "Deleting the active layout retained its identity");
     QFile invalid(temporary.filePath("future.json")); require(invalid.open(QIODevice::WriteOnly),"Cannot seed future format");
     const QByteArray future="{\"version\":99,\"pages\":{}}"; invalid.write(future); invalid.close();
     PaneSettings unsupported(invalid.fileName());
-    require(!unsupported.savePreset(edit,name,duplicate).isEmpty(),"Future settings format was overwritten by layout save");
+    require(!unsupported.saveLayout(edit,name,duplicate).isEmpty(),"Future settings format was overwritten by layout save");
     require(invalid.open(QIODevice::ReadOnly) && invalid.readAll()==future,"Unsupported settings were modified"); invalid.close();
     QFile blocking(temporary.filePath("not-a-directory")); require(blocking.open(QIODevice::WriteOnly),"Cannot seed failed-write test"); blocking.close();
     PaneSettings unwritable(blocking.fileName()+"/layouts.json");
-    require(!unwritable.savePreset(edit,name,duplicate).isEmpty() && unwritable.presets(edit).isEmpty(),
+    require(!unwritable.saveLayout(edit,name,duplicate).isEmpty() && unwritable.layouts(edit).isEmpty(),
         "Failed layout write changed the in-memory layout list");
     std::puts("PASS: v5 migration, page-local naming, duplicate suppression, five-layout limit, delete/save, immutable recall and disk reload");
 }
-static void presetIdentity() {
+static void layoutIdentity() {
     QTemporaryDir directory; const auto path=directory.filePath("identity.json");
     const QString page="WStackPage_Conform";
     PaneSettings settings(path); QWidget sample;
@@ -148,32 +148,36 @@ static void presetIdentity() {
     for(int i=0;i<5;++i) {
         sample.setGeometry(50+i*20,70,400,300); settings.save("frameEditPageMediaPool",sample.saveGeometry());
         QString name; bool duplicate=false;
-        require(settings.savePreset(page,name,duplicate).isEmpty(),"Cannot create identity fixture");
-        ids.append(settings.activePreset(page)); configurations.append(settings.pageConfiguration(page));
+        require(settings.saveLayout(page,name,duplicate).isEmpty(),"Cannot create identity fixture");
+        ids.append(settings.activeLayout(page)); configurations.append(settings.pageConfiguration(page));
     }
-    const auto active=settings.activePreset(page); const auto working=settings.pageConfiguration(page);
-    for(const auto &id:ids) require(settings.renamePreset(page,id,"doodoo").isEmpty(),"Duplicate name was rejected");
-    require(settings.activePreset(page)==active && settings.pageConfiguration(page)==working && settings.presets(page).size()==5,
+    const auto active=settings.activeLayout(page); const auto working=settings.pageConfiguration(page);
+    for(const auto &id:ids) require(settings.renameLayout(page,id,"doodoo").isEmpty(),"Duplicate name was rejected");
+    require(settings.activeLayout(page)==active && settings.pageConfiguration(page)==working && settings.layouts(page).size()==5,
         "Rename changed the active configuration or merged duplicate names");
-    for(int i=0;i<ids.size();++i) require(settings.activatePreset(page,ids[i]).isEmpty() &&
+    for(int i=0;i<ids.size();++i) require(settings.activateLayout(page,ids[i]).isEmpty() &&
         settings.pageConfiguration(page)==configurations[i],"Duplicate-name recall selected the wrong layout");
     settings.saveFloating("frameEditPageMediaPool",true);
-    const auto untouched=settings.preset(page,ids[1]);
-    require(settings.updatePreset(page,ids[0]).isEmpty() && settings.preset(page,ids[1])==untouched &&
-        settings.preset(page,ids[0])!=configurations[0],"Duplicate-name update changed the wrong layout");
-    require(!settings.renamePreset(page,ids[0],"   ").isEmpty() && !settings.renamePreset(page,ids[0],QString(129,'x')).isEmpty(),
+    const auto untouched=settings.layout(page,ids[1]);
+    require(settings.updateLayout(page,ids[0]).isEmpty() && settings.layout(page,ids[1])==untouched &&
+        settings.layout(page,ids[0])!=configurations[0],"Duplicate-name update changed the wrong layout");
+    require(!settings.renameLayout(page,ids[0],"   ").isEmpty() && !settings.renameLayout(page,ids[0],QString(129,'x')).isEmpty(),
         "Blank or overlong name accepted");
-    require(settings.renamePreset(page,ids[0],"  & wow  ").isEmpty() && settings.presetName(page,ids[0])=="& wow",
+    require(settings.renameLayout(page,ids[0],"  & wow  ").isEmpty() && settings.layoutName(page,ids[0])=="& wow",
         "Name normalization failed");
-    require(settings.deletePreset(page,ids[2]).isEmpty() && settings.presets(page).size()==4 &&
-        settings.preset(page,ids[2]).isEmpty() && settings.preset(page,ids[1])==untouched,"Duplicate-name deletion targeted the wrong layout");
+    require(settings.deleteLayout(page,ids[2]).isEmpty() && settings.layouts(page).size()==4 &&
+        settings.layout(page,ids[2]).isEmpty() && settings.layout(page,ids[1])==untouched,"Duplicate-name deletion targeted the wrong layout");
     PaneSettings reloaded(path);
-    require(reloaded.presets(page)==settings.presets(page) && reloaded.activePreset(page)==ids[0],"Preset IDs were not stable on reload");
+    require(reloaded.layouts(page)==settings.layouts(page) && reloaded.activeLayout(page)==ids[0],"Layout IDs were not stable on reload");
     // Version 6 used names as identities. Migrate its active name and every
     // archived snapshot without changing the working layout or generated counter.
     QFile file(path); require(file.open(QIODevice::ReadOnly),"Cannot read identity fixture");
     auto root=QJsonDocument::fromJson(file.readAll()).object(); file.close();
     auto pages=root.value("pages").toObject(); auto state=pages.value(page).toObject();
+    require(root.value("version").toInt()==7 && state.value("presets").toArray()==reloaded.layouts(page)
+        && state.value("activePreset").toString()==reloaded.activeLayout(page)
+        && state.value("nextPresetNumber").toInt()==6 && !state.contains("layouts") && !state.contains("activeLayout"),
+        "Layout terminology changed the format-7 wire keys, identities or generated counter");
     auto saved=state.value("presets").toArray();
     for(int i=0;i<saved.size();++i) {
         auto item=saved[i].toObject(); item.remove("id"); item.insert("name",QString("Legacy-%1").arg(i)); saved[i]=item;
@@ -183,11 +187,11 @@ static void presetIdentity() {
     require(file.open(QIODevice::WriteOnly|QIODevice::Truncate),"Cannot seed v6 fixture"); file.write(QJsonDocument(root).toJson()); file.close();
     PaneSettings migrated(path);
     require(migrated.readError().isEmpty() && migrated.pageConfiguration(page)==settings.pageConfiguration(page) &&
-        migrated.activePreset(page)==presetId(migrated,page,"Legacy-1"),"v6 migration changed layout or lost active identity");
-    for(int i=0;i<saved.size();++i) require(migrated.preset(page,presetId(migrated,page,QString("Legacy-%1").arg(i)))==
+        migrated.activeLayout(page)==layoutId(migrated,page,"Legacy-1"),"v6 migration changed layout or lost active identity");
+    for(int i=0;i<saved.size();++i) require(migrated.layout(page,layoutId(migrated,page,QString("Legacy-%1").arg(i)))==
         saved[i].toObject().value("configuration").toObject(),"v6 migration changed an archived snapshot");
-    const auto migratedIds=migrated.presets(page); PaneSettings migratedAgain(path);
-    require(migratedAgain.presets(page)==migratedIds,"Migration regenerated persisted IDs");
+    const auto migratedIds=migrated.layouts(page); PaneSettings migratedAgain(path);
+    require(migratedAgain.layouts(page)==migratedIds,"Migration regenerated persisted IDs");
     std::puts("PASS: five duplicate names, independent ID recall/update/delete, stable reload and v6 active-ID migration");
 }
 class PopupEvents final : public QObject {
@@ -226,7 +230,7 @@ void testPaneCatalogue();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
-    HostApplication app(argc,argv); LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); presetIdentity();
+    HostApplication app(argc,argv); LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("layouts.json").toUtf8());
     auto mainOwner=LayoutTest::makeMainWindow();
@@ -255,27 +259,27 @@ int main(int argc,char **argv) {
     require(poolButton,"Controller did not decorate Media Pool");
     auto popup=[&]() {
         static int checkNumber=0; ++checkNumber;
-        auto menu=main.findChild<PagePresetMenu *>("unboundPresetMenu");
+        auto menu=main.findChild<PageLayoutMenu *>("unboundLayoutMenu");
         if(!menu || !menu->isVisible()) std::fprintf(stderr,"Popup check %d; menu exists=%d\n",checkNumber,menu!=nullptr);
-        require(menu && menu->isVisible(),"Preset popup did not open or closed unexpectedly"); return menu;
+        require(menu && menu->isVisible(),"Layout popup did not open or closed unexpectedly"); return menu;
     };
     context(poolButton); auto menu=popup();
-    require(control(menu,"unboundPresetSave")->text()=="Save as new preset","New layout save label is incorrect");
+    require(control(menu,"unboundLayoutSave")->text()=="Save as new Edit layout","New layout save label is incorrect");
     const auto anchor=poolButton->mapToGlobal(QPoint(0,poolButton->height()));
     require(menu->pos().y()==anchor.y() && !menu->geometry().intersects(QRect(poolButton->mapToGlobal(QPoint()),poolButton->size())),
         "Popup overlaps its button instead of starting directly below it");
-    require(!control(menu,"unboundPresetDockAll"),"Dock all appears with no floating panels");
+    require(!control(menu,"unboundLayoutDockAll"),"Dock all appears with no floating panels");
     const auto background=menu->grab().toImage().pixelColor(2,menu->height()/2);
     require(background.alpha()==255 && background.rgb()==main.palette().color(QPalette::Window).rgb(),
         "Popout body is transparent or has the wrong theme background");
     const auto originalMainGeometry=main.geometry();
     require(poolButton->isChecked()==false,"Right-click toggled docking");
-    click(control(menu,"unboundPresetSave")); popup();
-    require(control(menu,"unboundPresetRecall","Edit-1"),"Save did not update the open menu");
-    require(control(menu,"unboundPresetRecall","Edit-1")->property("activePreset").toBool() &&
-        !control(menu,"unboundPresetUpdate"),"Saved layout is not highlighted and clean");
-    click(control(menu,"unboundPresetSave")); popup();
-    require(main.findChild<QLabel *>("unboundPresetStatus")->text().contains("Already saved"),"Duplicate save was not reported");
+    click(control(menu,"unboundLayoutSave")); popup();
+    require(control(menu,"unboundLayoutRecall","Edit-1"),"Save did not update the open menu");
+    require(control(menu,"unboundLayoutRecall","Edit-1")->property("activeLayout").toBool() &&
+        !control(menu,"unboundLayoutUpdate"),"Saved layout is not highlighted and clean");
+    click(control(menu,"unboundLayoutSave")); popup();
+    require(main.findChild<QLabel *>("unboundLayoutStatus")->text().contains("Already saved"),"Duplicate save was not reported");
     menu->hide(); click(poolButton); settle();
     require(poolButton->isChecked() && pool.content->window()!=&main,"Pool did not float");
     auto floating=pool.content->window(); floating->setGeometry(120,150,440,320); settle();
@@ -283,9 +287,9 @@ int main(int argc,char **argv) {
     main.setGeometry(70,80,680,460); settle();
     const auto savedMainGeometry=main.geometry();
     context(poolButton); menu=popup();
-    require(control(menu,"unboundPresetDockAll"),"Dock all is unavailable with a floating panel");
-    click(control(menu,"unboundPresetSave")); popup();
-    require(control(menu,"unboundPresetRecall","Edit-2"),"Floating configuration was not saved");
+    require(control(menu,"unboundLayoutDockAll"),"Dock all is unavailable with a floating panel");
+    click(control(menu,"unboundLayoutSave")); popup();
+    require(control(menu,"unboundLayoutRecall","Edit-2"),"Floating configuration was not saved");
     LayoutTest::verifyGestureDismissal(*floating,main,*menu,[&]() -> QWidget * { context(poolButton); menu=popup(); return menu; });
     PopupEvents popupEvents; menu->installEventFilter(&popupEvents);
     const auto realRecall=menu->recall; int appliedRecalls=0; bool internalDismissal=false;
@@ -300,13 +304,13 @@ int main(int argc,char **argv) {
         }
         return error;
     };
-    auto inactive=control(menu,"unboundPresetRecall","Edit-1");
-    const auto inactiveId=inactive->property("presetId").toString();
+    auto inactive=control(menu,"unboundLayoutRecall","Edit-1");
+    const auto inactiveId=inactive->property("layoutId").toString();
     WindowKeyInterceptor interceptor; interceptor.target=menu->windowHandle();
     qApp->installEventFilter(&interceptor);
     hold(inactive,false); popup();
-    auto editor=menu->findChild<PresetNameEdit *>("unboundPresetNameEdit");
-    for(auto candidate:menu->findChildren<PresetNameEdit *>()) if(candidate->isVisible()) editor=candidate;
+    auto editor=menu->findChild<LayoutNameEdit *>("unboundLayoutNameEdit");
+    for(auto candidate:menu->findChildren<LayoutNameEdit *>()) if(candidate->isVisible()) editor=candidate;
     require(editor && editor->isVisible() && appliedRecalls==0,"Long hold recalled instead of editing");
     app.blockedEditor=editor;
     require(editor->hasFocus() && QApplication::focusWidget()==editor && menu->isActiveWindow(),
@@ -331,26 +335,26 @@ int main(int argc,char **argv) {
     routeKey(Qt::Key_Return); popup();
     require(app.blocked==0,"Rename sent keys back through the host's blocked editor dispatch");
     app.blockedEditor=nullptr;
-    require(!editor->isVisible() && control(menu,"unboundPresetRecall","doodoo")==inactive &&
-        control(menu,"unboundPresetRecall","Edit-2")->property("activePreset").toBool() && appliedRecalls==0 && poolButton->isChecked(),
+    require(!editor->isVisible() && control(menu,"unboundLayoutRecall","doodoo")==inactive &&
+        control(menu,"unboundLayoutRecall","Edit-2")->property("activeLayout").toBool() && appliedRecalls==0 && poolButton->isChecked(),
         "Enter on an inactive layout renamed and recalled it");
     hold(inactive); editor->setText("cancelled"); QKeyEvent cancel(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);
     QApplication::sendEvent(editor,&cancel); settle(); popup();
     require(!editor->isVisible() && inactive->text()=="doodoo" && appliedRecalls==0,"Escape did not cancel rename without recall/dismissal");
     hold(inactive); editor->setText("Edit-1"); QApplication::sendEvent(editor,&submit); settle();
-    require(inactive->property("presetId").toString()==inactiveId && appliedRecalls==0,"Renaming replaced the layout identity");
-    QPointer<QAbstractButton> retainedEdit1=control(menu,"unboundPresetRecall","Edit-1");
-    QPointer<QAbstractButton> retainedEdit2=control(menu,"unboundPresetRecall","Edit-2");
+    require(inactive->property("layoutId").toString()==inactiveId && appliedRecalls==0,"Renaming replaced the layout identity");
+    QPointer<QAbstractButton> retainedEdit1=control(menu,"unboundLayoutRecall","Edit-1");
+    QPointer<QAbstractButton> retainedEdit2=control(menu,"unboundLayoutRecall","Edit-2");
     for(int repeat=0;repeat<3;++repeat) click(retainedEdit2);
     require(appliedRecalls==0 && retainedEdit2 && popupEvents.hides==0 && popupEvents.shows==0,
         "Repeated clean recall performed restoration or disturbed the popup");
     internalDismissal=true;
     floating->move(300,250); settle();
     main.setGeometry(90,100,640,420); settle();
-    click(control(menu,"unboundPresetRecall","Edit-2")); popup();
+    click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
     internalDismissal=false;
     require(appliedRecalls==1,"Dirty active layout recall was incorrectly skipped");
-    require(retainedEdit1 && retainedEdit2 && control(menu,"unboundPresetRecall","Edit-2")==retainedEdit2,
+    require(retainedEdit1 && retainedEdit2 && control(menu,"unboundLayoutRecall","Edit-2")==retainedEdit2,
         "Recall replaced the menu rows instead of updating them in place");
     require(pool.content->window()==floating && floating->geometry()==savedGeometry,
         "Recall rebuilt an already-floating panel or failed to restore its geometry");
@@ -359,7 +363,7 @@ int main(int argc,char **argv) {
         savedMainGeometry.x(),savedMainGeometry.y(),savedMainGeometry.width(),savedMainGeometry.height(),pool.toggle->isChecked());
     require(main.geometry()==savedMainGeometry && !pool.toggle->isChecked(),
         "Recall did not restore main-window geometry and the native pane toggle");
-    click(control(menu,"unboundPresetRecall","Edit-1")); popup();
+    click(control(menu,"unboundLayoutRecall","Edit-1")); popup();
     require(!poolButton->isChecked() && pool.content->window()==&main,"Recall did not dock the changed panel");
     require(retainedEdit1 && retainedEdit2,"Switching layouts destroyed retained menu rows");
     require(popupEvents.hides==0 && popupEvents.shows==0,"Switching layouts hid/reopened the popup");
@@ -368,38 +372,38 @@ int main(int argc,char **argv) {
         originalMainGeometry.x(),originalMainGeometry.y(),originalMainGeometry.width(),originalMainGeometry.height(),pool.toggle->isChecked());
     require(main.geometry()==originalMainGeometry && pool.toggle->isChecked(),
         "Docked layout did not restore main geometry or native visibility");
-    require(LayoutTest::nativeBounds(main)==initialNative,"Preset recall changed the native main-window bounds");
-    click(control(menu,"unboundPresetRecall","Edit-2")); popup();
+    require(LayoutTest::nativeBounds(main)==initialNative,"Layout recall changed the native main-window bounds");
+    click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
     require(poolButton->isChecked() && pool.content->window()->geometry()==savedGeometry,"Recall did not restore floating geometry");
-    click(control(menu,"unboundPresetDelete","Delete Edit-1")); popup();
-    require(!control(menu,"unboundPresetRecall","Edit-1"),"Delete did not update the open menu");
+    click(control(menu,"unboundLayoutDelete","Delete Edit-1")); popup();
+    require(!control(menu,"unboundLayoutRecall","Edit-1"),"Delete did not update the open menu");
     pool.content->window()->move(350,280); settle();
-    click(control(menu,"unboundPresetSave")); popup();
-    require(control(menu,"unboundPresetRecall","Edit-3"),"Delete-then-save sequence failed without dismissal");
+    click(control(menu,"unboundLayoutSave")); popup();
+    require(control(menu,"unboundLayoutRecall","Edit-3"),"Delete-then-save sequence failed without dismissal");
     menu->hide(); pool.content->window()->move(320,260); settle();
     const auto updatedGeometry=pool.content->window()->geometry();
     context(poolButton); menu=popup();
-    require(control(menu,"unboundPresetRecall","Edit-3")->property("activePreset").toBool() &&
-        control(menu,"unboundPresetUpdate","Update Edit-3"),"Dirty active layout has no update button");
-    click(control(menu,"unboundPresetUpdate","Update Edit-3")); popup();
-    require(!control(menu,"unboundPresetUpdate"),"Update left the layout dirty");
-    click(control(menu,"unboundPresetDockAll")); popup();
+    require(control(menu,"unboundLayoutRecall","Edit-3")->property("activeLayout").toBool() &&
+        control(menu,"unboundLayoutUpdate","Update Edit-3"),"Dirty active layout has no update button");
+    click(control(menu,"unboundLayoutUpdate","Update Edit-3")); popup();
+    require(!control(menu,"unboundLayoutUpdate"),"Update left the layout dirty");
+    click(control(menu,"unboundLayoutDockAll")); popup();
     require(!poolButton->isChecked() && pool.toggle->isChecked() &&
-        !control(menu,"unboundPresetRecall","Edit-3")->property("activePreset").toBool(),
+        !control(menu,"unboundLayoutRecall","Edit-3")->property("activeLayout").toBool(),
         "Dock all did not dock/show panels and clear active identity");
-    require(!control(menu,"unboundPresetDockAll"),"Dock all remained visible after docking every panel");
-    click(control(menu,"unboundPresetRecall","Edit-3")); popup();
+    require(!control(menu,"unboundLayoutDockAll"),"Dock all remained visible after docking every panel");
+    click(control(menu,"unboundLayoutRecall","Edit-3")); popup();
     require(poolButton->isChecked() && pool.content->window()->geometry()==updatedGeometry,
         "Update was not recalled or Dock all overwrote the saved layout");
-    require(!main.findChild<QLabel *>("unboundPresetStatus")->text().contains("Recalled"),
+    require(!main.findChild<QLabel *>("unboundLayoutStatus")->text().contains("Recalled"),
         "Recall still shows redundant feedback");
     menu->hide(); pool.content->window()->move(340,270); settle();
     context(poolButton); menu=popup();
-    require(control(menu,"unboundPresetUpdate","Update Edit-3"),"Modified layout was not dirty before switching away");
-    click(control(menu,"unboundPresetRecall","Edit-2")); popup();
-    require(!control(menu,"unboundPresetUpdate","Update Edit-3"),"Inactive layout retained a dirty update control");
-    click(control(menu,"unboundPresetRecall","Edit-3")); popup();
-    require(pool.content->window()->geometry()==updatedGeometry && !control(menu,"unboundPresetUpdate"),
+    require(control(menu,"unboundLayoutUpdate","Update Edit-3"),"Modified layout was not dirty before switching away");
+    click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
+    require(!control(menu,"unboundLayoutUpdate","Update Edit-3"),"Inactive layout retained a dirty update control");
+    click(control(menu,"unboundLayoutRecall","Edit-3")); popup();
+    require(pool.content->window()->geometry()==updatedGeometry && !control(menu,"unboundLayoutUpdate"),
         "Switching away retained an unsaved draft or changed the layout snapshot");
     const auto outside=menu->geometry().topLeft()-QPoint(20,20);
     QMouseEvent outsidePress(QEvent::MouseButtonPress,menu->mapFromGlobal(outside),outside,
@@ -409,32 +413,32 @@ int main(int argc,char **argv) {
     menu->hide(); stack->setCurrentWidget(color); settle();
     const auto galleryButton=gallery.pane->findChild<QToolButton *>("resolvePaneUndockButton");
     context(galleryButton); menu=popup();
-    require(!control(menu,"unboundPresetDockAll"),"Another page's floating panel enabled Dock all");
-    click(control(menu,"unboundPresetSave")); popup();
-    require(control(menu,"unboundPresetRecall","Color-1") && !control(menu,"unboundPresetRecall","Edit-2"),
-        "Preset popup mixed page configurations");
+    require(!control(menu,"unboundLayoutDockAll"),"Another page's floating panel enabled Dock all");
+    click(control(menu,"unboundLayoutSave")); popup();
+    require(control(menu,"unboundLayoutRecall","Color-1") && !control(menu,"unboundLayoutRecall","Edit-2"),
+        "Layout popup mixed page configurations");
     menu->hide(); click(galleryButton); settle();
     require(galleryButton->isChecked(),"Color Gallery failed to float for layout test");
-    context(galleryButton); menu=popup(); click(control(menu,"unboundPresetSave")); popup();
-    click(control(menu,"unboundPresetRecall","Color-1")); popup();
+    context(galleryButton); menu=popup(); click(control(menu,"unboundLayoutSave")); popup();
+    click(control(menu,"unboundLayoutRecall","Color-1")); popup();
     require(!galleryButton->isChecked() && gallery.toggle->isChecked(),"Color layout did not dock Gallery with native visibility");
-    click(control(menu,"unboundPresetRecall","Color-2")); popup();
+    click(control(menu,"unboundLayoutRecall","Color-2")); popup();
     require(galleryButton->isChecked() && !gallery.toggle->isChecked() && gallery.content->isVisible(),
         "Color layout did not restore floating Gallery and native toggle state");
     menu->hide(); stack->setCurrentWidget(audio); settle();
     const auto groupsButton=groups.pane->findChild<QToolButton *>("resolvePaneUndockButton");
     context(groupsButton); menu=popup();
-    click(control(menu,"unboundPresetSave")); popup();
-    require(control(menu,"unboundPresetRecall","Fairlight-1"),"Fairlight header button did not expose layouts");
+    click(control(menu,"unboundLayoutSave")); popup();
+    require(control(menu,"unboundLayoutRecall","Fairlight-1"),"Fairlight header button did not expose layouts");
     menu->hide(); click(groupsButton); settle();
     require(groupsButton->isChecked(),"Fairlight Groups failed to float for layout test");
-    context(groupsButton); menu=popup(); click(control(menu,"unboundPresetSave")); popup();
-    click(control(menu,"unboundPresetRecall","Fairlight-1")); popup();
+    context(groupsButton); menu=popup(); click(control(menu,"unboundLayoutSave")); popup();
+    click(control(menu,"unboundLayoutRecall","Fairlight-1")); popup();
     require(!groupsButton->isChecked() && groups.toggle->isChecked(),"Fairlight layout failed to dock Groups");
-    click(control(menu,"unboundPresetRecall","Fairlight-2")); popup();
+    click(control(menu,"unboundLayoutRecall","Fairlight-2")); popup();
     require(groupsButton->isChecked() && !groups.toggle->isChecked() && groups.content->isVisible(),
         "Fairlight layout did not restore floating Groups and native toggle state");
-    click(control(menu,"unboundPresetDockAll")); popup();
+    click(control(menu,"unboundLayoutDockAll")); popup();
     require(!groupsButton->isChecked() && groups.toggle->isChecked(),"Fairlight Dock all did not restore Groups");
     menu->hide(); stack->setCurrentWidget(edit); settle();
     require(poolButton->isChecked(),"Fairlight Dock all affected Edit panels");
@@ -479,8 +483,8 @@ int main(int argc,char **argv) {
         main.move(main.pos()+QPoint(12,0)); settle();
         context(effects.pane->findChild<QToolButton *>("resolvePaneUndockButton"));
         if(app.arguments().contains("--preview-rename")) {
-            auto preview=main.findChild<PagePresetMenu *>("unboundPresetMenu");
-            hold(control(preview,"unboundPresetRecall","Edit-2"));
+            auto preview=main.findChild<PageLayoutMenu *>("unboundLayoutMenu");
+            hold(control(preview,"unboundLayoutRecall","Edit-2"));
         }
         QTimer::singleShot(45000,&app,&QCoreApplication::quit); return app.exec();
     }

@@ -61,11 +61,11 @@ public:
     void dockBoth() { restoreArea(); dock(m_source); dock(m_program); }
     bool hasFloating() const { return m_program.host || m_source.host; }
     void flushGeometry() { rememberAll(); }
-    void preparePreset(const QJsonObject &panes) {
+    void prepareLayout(const QJsonObject &panes) {
         for(auto pane:{&m_source,&m_program}) if(pane->host &&
             !panes.value(pane->content->objectName()).toObject().value("floating").toBool()) dock(*pane);
     }
-    void restorePreset() {
+    void restoreLayout() {
         m_saveTimer.stop();
         for(auto pane:{&m_program,&m_source}) if(pane->host && pane->content) {
             const auto geometry=m_settings.geometry(pane->content->objectName());

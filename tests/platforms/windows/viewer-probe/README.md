@@ -3,7 +3,7 @@
 Viewer undocking now lives in `src/core/editviewers.h`; reclamation lives in
 `src/core/viewergeometryadapter.h`. The normal controller installs both viewer
 header buttons. There is no experiment control window or feature build switch.
-Build an internal version with `./build-unbound-release.cmd -InternalBuild`.
+Build an internal version with `./infrastructure/windows/build-release.cmd -InternalBuild`.
 Program and Source use the normal settings instance, independent geometry and
 floating intent. Source restoration waits for native availability; native
 Single/Dual Viewer Mode remains controlled by Resolve.

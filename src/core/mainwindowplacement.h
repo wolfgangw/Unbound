@@ -102,7 +102,7 @@ public:
         if (!message.isEmpty() && error) error(message);
     }
     void reloadCurrent() {
-        // The selected preset has already replaced the saved placement. Drop
+        // The selected layout has already replaced the saved placement. Drop
         // the outgoing cache before entering the normal page restoration path.
         m_save.stop(); m_page.clear(); m_last.clear(); refresh();
     }

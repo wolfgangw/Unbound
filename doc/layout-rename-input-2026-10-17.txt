@@ -1,7 +1,7 @@
-Preset rename keyboard investigation, 2026-10-17
+Layout rename keyboard investigation, 2026-10-17
 
 Symptom
-Holding a preset name opens its editor with all text selected, but keys do
+Holding a layout name opens its editor with all text selected, but keys do
 nothing until an additional real mouse click inside the editor. Internal 024
 activated the popout explicitly; 025 forwarded popout window keys with
 QCoreApplication::sendEvent. Neither corrected the live Resolve behavior.
@@ -22,7 +22,7 @@ or prove which internal policy its real-click handling changes.
 
 Change
 Keep the handoff restricted to the active Unbound popout, while the visible
-rename editor actually has focus. Invoke that owned PresetNameEdit's public
+rename editor actually has focus. Invoke that owned LayoutNameEdit's public
 handoff, which calls QLineEdit::event directly. This preserves the Qt editor
 and our rename/arrow handlers without sending keys back through host dispatch.
 No synthetic clicks, native keyboard hook, Resolve private call or global
@@ -34,7 +34,7 @@ The fixture now models an additional host dispatch interception specifically
 for the editor's key presses. With 025's sendEvent forwarding, it fails at
 "Left did not collapse selection to the start", matching the reported symptom.
 Window-level keys exercise selection collapse, Shift selection, replacement
-typing and Enter on an inactive preset, rather than sending directly to the
+typing and Enter on an inactive layout, rather than sending directly to the
 editor and bypassing the failure. Build checks and fresh Resolve validation
 must still be assessed separately: fixtures cannot fully model Resolve.
 

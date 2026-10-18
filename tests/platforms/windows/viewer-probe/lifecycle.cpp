@@ -224,25 +224,25 @@ int main(int argc,char **argv)
     app.processEvents(); app.processEvents(); app.processEvents();
     require(program->window()!=&main && source->window()!=&main,"Saved floating viewers were not restored");
     require(program->window()->geometry()==programRect && source->window()->geometry()==sourceRect,"Startup did not recall independent viewer geometry");
-    QString presetName; bool duplicate=false;
-    require(reloaded.savePreset("WStackPage_Conform",presetName,duplicate).isEmpty(),"Cannot save viewer preset");
+    QString layoutName; bool duplicate=false;
+    require(reloaded.saveLayout("WStackPage_Conform",layoutName,duplicate).isEmpty(),"Cannot save viewer layout");
     const auto programHost=program->window(),sourceHost=source->window();
     programHost->move(250,200); sourceHost->move(450,260); app.processEvents();
-    experiment->restorePreset(); app.processEvents(); app.processEvents();
+    experiment->restoreLayout(); app.processEvents(); app.processEvents();
     require(program->window()==programHost && source->window()==sourceHost &&
         programHost->geometry()==programRect && sourceHost->geometry()==sourceRect,
-        "Viewer preset restoration rebuilt hosts or lost saved geometry");
-    const auto presetId=reloaded.activePreset("WStackPage_Conform");
-    auto dockedPanes=reloaded.preset("WStackPage_Conform",presetId).value("panes").toObject();
+        "Viewer layout restoration rebuilt hosts or lost saved geometry");
+    const auto layoutId=reloaded.activeLayout("WStackPage_Conform");
+    auto dockedPanes=reloaded.layout("WStackPage_Conform",layoutId).value("panes").toObject();
     for(auto key:{program->objectName(),source->objectName()}) {
         auto value=dockedPanes.value(key).toObject(); value.insert("floating",false); dockedPanes.insert(key,value);
     }
-    experiment->preparePreset(dockedPanes); app.processEvents();
-    require(program->window()==&main && source->window()==&main,"Viewer preset docking differences were not applied");
-    require(reloaded.activatePreset("WStackPage_Conform",presetId).isEmpty(),"Cannot activate viewer preset");
-    experiment->restorePreset(); app.processEvents(); app.processEvents(); app.processEvents();
+    experiment->prepareLayout(dockedPanes); app.processEvents();
+    require(program->window()==&main && source->window()==&main,"Viewer layout docking differences were not applied");
+    require(reloaded.activateLayout("WStackPage_Conform",layoutId).isEmpty(),"Cannot activate viewer layout");
+    experiment->restoreLayout(); app.processEvents(); app.processEvents(); app.processEvents();
     require(program->window()!=&main && source->window()!=&main && program->window()->geometry()==programRect &&
-        source->window()->geometry()==sourceRect,"Viewer preset did not restore through startup floating intent");
+        source->window()->geometry()==sourceRect,"Viewer layout did not restore through startup floating intent");
     program->window()->close(); app.processEvents();
     require(!reloaded.floating(program->objectName()) && reloaded.floating(source->objectName()),"User docking did not preserve separate floating states");
     delete experiment; app.processEvents();

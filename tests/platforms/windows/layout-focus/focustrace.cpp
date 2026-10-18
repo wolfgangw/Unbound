@@ -50,7 +50,7 @@ class FocusTrace final : public QObject, public QAbstractNativeEventFilter {
             {"mouseGrabber",describe(QWidget::mouseGrabber())},
             {"appClass",qApp->metaObject()->className()},
             {"nativeFocus",id(GetFocus())},{"nativeActive",id(GetActiveWindow())},{"foreground",id(GetForegroundWindow())}};
-        if(menu) for(auto editor:menu->findChildren<QLineEdit *>("unboundPresetNameEdit")) if(editor->isVisible()) {
+        if(menu) for(auto editor:menu->findChildren<QLineEdit *>("unboundLayoutNameEdit")) if(editor->isVisible()) {
             r.insert("editor",describe(editor)); r.insert("selected",editor->selectedText().size());
             r.insert("length",editor->text().size()); r.insert("cursor",editor->cursorPosition());
         }
@@ -66,7 +66,7 @@ public:
             auto r=state(); r.insert("kind","widget-filter"); r.insert("target",describe(object));
             r.insert("event",int(event->type())); record(r);
         };
-        for(auto w:QApplication::allWidgets()) if(w->objectName()=="unboundPresetMenu") menu=w;
+        for(auto w:QApplication::allWidgets()) if(w->objectName()=="unboundLayoutMenu") menu=w;
         qApp->installEventFilter(this); qApp->installNativeEventFilter(this);
         auto initial=state(); initial.insert("kind","start"); record(initial);
         // Allow time to return to Resolve; start the focused capture on rename.
@@ -83,9 +83,9 @@ public:
     }
     bool eventFilter(QObject *object,QEvent *event) override {
         const auto type=event->type();
-        if(type==QEvent::Show && object->objectName()=="unboundPresetMenu") menu=qobject_cast<QWidget *>(object);
+        if(type==QEvent::Show && object->objectName()=="unboundLayoutMenu") menu=qobject_cast<QWidget *>(object);
         if(done || !menu || !menu->isVisible()) return false;
-        if(type==QEvent::Show && object->objectName()=="unboundPresetNameEdit") {
+        if(type==QEvent::Show && object->objectName()=="unboundLayoutNameEdit") {
             object->installEventFilter(&widgetKeys);
             if(!capturing) { capturing=true; QTimer::singleShot(90000,this,[this] { finish(); }); }
         }
