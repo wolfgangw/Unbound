@@ -65,16 +65,15 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         path.write_text('#!/usr/bin/env python3\n' + body + '\n')
         path.chmod(0o755)
 
-    def run_script(self, script=None, *, success=True, remove_settings=False, **env):
+    def run_script(self, script=None, *, success=True, extra_args=(), **env):
         script = script or INSTALL
         args = ['/bin/bash', str(script)]
         if script.name in ('install.sh', 'enable.sh'):
             args.append(str(self.candidate))
-        if remove_settings:
-            args.append('--remove-settings')
+        args.extend(extra_args)
         result = subprocess.run(args, env=dict(self.env, **env), text=True, capture_output=True)
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
-        for path in ((self.other,) if remove_settings else (self.settings, self.other)):
+        for path in (self.settings, self.other):
             self.assertEqual(path.read_text(), 'untouched')
         return result
 
@@ -163,26 +162,24 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         self.run_script()  # A reinstall keeps saved settings available.
         self.assert_installed()
 
-    def test_uninstall_removes_settings_only_when_requested(self):
+    def test_uninstall_rejects_obsolete_settings_removal_option(self):
         self.run_script()
         self.write(self.support / 'settings.json', 'legacy settings')
         self.write(self.support / 'unrelated.txt', 'keep')
-        self.run_script(UNINSTALL, remove_settings=True)
-        self.assertFalse(self.settings.exists())
-        self.assertFalse(self.support.joinpath('settings.json').exists())
+        self.run_script(UNINSTALL, success=False, extra_args=('--remove-settings',))
+        self.assertEqual(self.support.joinpath('settings.json').read_text(), 'legacy settings')
         self.assertEqual(self.support.joinpath('unrelated.txt').read_text(), 'keep')
-        self.assertFalse(self.runtime.exists())
-        self.assertFalse(self.hook.exists())
+        self.assert_installed()
 
-    def test_remove_retained_settings_after_uninstall(self):
+    def test_repeated_uninstall_preserves_current_and_legacy_settings(self):
         self.run_script()
         self.write(self.support / 'settings.json', 'legacy settings')
         self.run_script(UNINSTALL)
         self.assertFalse(self.runtime.exists())
         self.assertEqual(self.settings.read_text(), 'untouched')
-        self.run_script(UNINSTALL, remove_settings=True)
-        self.assertFalse(self.settings.exists())
-        self.assertFalse(self.support.joinpath('settings.json').exists())
+        self.run_script(UNINSTALL)
+        self.assertEqual(self.settings.read_text(), 'untouched')
+        self.assertEqual(self.support.joinpath('settings.json').read_text(), 'legacy settings')
         self.assertFalse(self.runtime.exists())
         self.assertFalse(self.hook.exists())
 

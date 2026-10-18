@@ -5,6 +5,7 @@
 #include <QWindow>
 #include <QCursor>
 #include <QLineEdit>
+#include <QElapsedTimer>
 
 // Model Resolve's main frame: client content reaches the outer top edge even
 // though the native style still includes a caption and resize frame.
@@ -40,9 +41,20 @@ void initializePlatformTests()
 void settlePlatformWindowState(QWidget &) {}
 std::function<unsigned long(void *)> resolveBootstrap(QLibrary &helper)
 {
-    auto start=reinterpret_cast<DWORD (WINAPI *)(void *)>(helper.resolve("UnboundStart"));
+    auto start=reinterpret_cast<int (*)(void (*)(int))>(helper.resolve("UnboundLuaAttach"));
     if (!start) return {};
-    return [start](void *argument) { return start(argument); };
+    return [start](void *argument) -> unsigned long {
+        if (argument) return 0;
+        // The production Lua entry queues attachment and reports completion.
+        // Drain that queue here so existing pane fixtures begin after attachment.
+        static int completed;
+        completed=0;
+        const auto accepted=start([](int result) { completed=result; });
+        if (!accepted) return 0;
+        QElapsedTimer deadline; deadline.start();
+        while (!completed && deadline.elapsed()<3000) QCoreApplication::processEvents();
+        return completed==2 || completed==3 ? 1 : 0;
+    };
 }
 QRect nativeWindowBounds(QWidget &window)
 {
@@ -76,12 +88,13 @@ bool runPlatformDiscoveryTests(QApplication &app)
         qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("Unbound.json").toUtf8());
         QLibrary helper(app.arguments().last()); helper.setLoadHints(QLibrary::PreventUnloadHint);
         check(helper.load(),qPrintable(helper.errorString()));
-        auto start=reinterpret_cast<DWORD (WINAPI *)(void *)>(helper.resolve("UnboundStart"));
-        check(start && start(reinterpret_cast<void *>(1))==0,"Normal helper accepted a startup mode argument");
+        auto attach=reinterpret_cast<int (*)(void (*)(int))>(helper.resolve("UnboundLuaAttach"));
+        check(attach && attach(nullptr)==0,"Helper accepted a missing completion callback");
+        auto start=resolveBootstrap(helper);
         check(start(nullptr)==1,"Discovery bootstrap failed");
         app.processEvents();
         auto settle=[] { for (int i=0;i<8;++i) QCoreApplication::processEvents(); };
-        // The project main window and its panes do not exist at injection time.
+        // The project main window and its panes do not exist at startup.
         QWidget main; main.setObjectName("UiMainWindow"); main.show(); settle();
         auto page=new QWidget(&main); page->setObjectName("frameEditPageWidgetsContainer"); page->show();
         auto makePane=[&] {
@@ -116,7 +129,7 @@ bool runPlatformDiscoveryTests(QApplication &app)
             check(!timer->isActive() || timer->isSingleShot(),"Recurring controller timer remains active");
         check(pane->findChildren<QToolButton *>("resolvePaneUndockButton").size()==1,"Page switching duplicated decoration");
         delete controller;
-        std::puts("PASS: injection before project, late pane/toggle/layout, replacement, page switching and no recurring discovery timer");
+        std::puts("PASS: startup before project, late pane/toggle/layout, replacement, page switching and no recurring discovery timer");
         return true;
     }
     return false;

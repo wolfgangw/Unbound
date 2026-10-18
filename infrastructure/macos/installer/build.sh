@@ -17,6 +17,7 @@ runtime_build=$(head -n 1 "$candidate/BUILD" | tr -d '\r\n')
 for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do codesign --verify --strict "$candidate/runtime/$library"; done
 build="$root/build/macos/installer"
 mkdir -p "$build" "$root/release/mac/installer"
+python3 "$root/infrastructure/installer/generate.py" "$root/src/installer/dialog.json" "$build/installer-ui.generated.h"
 stamp=$(date +%Y.%m.%d)
 counter=1
 while :; do
@@ -33,6 +34,7 @@ app="$destination/$app_name.app"
 resources="$app/Contents/Resources"
 mkdir -p "$app/Contents/MacOS" "$resources/payload" "$resources/scripts/startup"
 xcrun clang++ -std=c++17 -fobjc-arc -arch arm64 -mmacosx-version-min=11.0 -framework AppKit \
+    -I"$build" \
     "$root/src/platforms/macos/installer/main.mm" -o "$app/Contents/MacOS/UnboundInstaller"
 sed -e "s/@VERSION@/$version/g" -e "s/@BUILD@/$(date +%Y%m%d).$counter/g" \
     -e "s/@RUNTIME_BUILD@/$runtime_build/g" \
@@ -66,6 +68,7 @@ cp -R "$app" "$fixture/Unbound Installer Test.app"
 test_app="$fixture/Unbound Installer Test.app"
 xcrun clang++ -std=c++17 -fobjc-arc -arch arm64 -mmacosx-version-min=11.0 -framework AppKit \
     -DUNBOUND_INSTALLER_TEST -I"$root/tests/platforms/macos/installer" \
+    -I"$build" \
     "$root/src/platforms/macos/installer/main.mm" -o "$test_app/Contents/MacOS/UnboundInstaller"
 codesign --force --sign - "$test_app"
 "$test_app/Contents/MacOS/UnboundInstaller" --smoke-test --snapshot "$build/window.png"

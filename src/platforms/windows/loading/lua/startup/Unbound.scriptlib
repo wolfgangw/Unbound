@@ -1,0 +1,29 @@
+-- SPDX-License-Identifier: MIT
+-- One-shot startup. Use Unicode Win32 paths even for non-ASCII account names.
+if not (ffi and ffi.cdef and ffi.cast) then return end
+local ok, failure = pcall(function()
+    ffi.cdef[[
+        unsigned long GetEnvironmentVariableW(const uint16_t *, uint16_t *, unsigned long);
+        void *LoadLibraryExW(const uint16_t *, void *, unsigned long);
+        void *GetProcAddress(void *, const char *);
+        int FreeLibrary(void *);
+    ]]
+    local function wide(text)
+        local value = ffi.new("uint16_t[?]", #text + 1)
+        for i = 1, #text do value[i-1] = text:byte(i) end
+        return value
+    end
+    local path = ffi.new("uint16_t[32768]")
+    local length = tonumber(ffi.C.GetEnvironmentVariableW(wide("LOCALAPPDATA"), path, 32768))
+    local suffix = "\\Unbound\\Runtime\\UnboundLuaLoader.dll"
+    assert(length > 0 and length + #suffix < 32768, "Cannot locate Unbound runtime")
+    for i = 1, #suffix do path[length+i-1] = suffix:byte(i) end
+    local library = ffi.C.LoadLibraryExW(path, nil, 0x1100)
+    assert(library ~= nil, "Cannot load Unbound runtime")
+    local entry = ffi.C.GetProcAddress(library, "UnboundLuaStart")
+    if entry == nil then ffi.C.FreeLibrary(library); error("Invalid Unbound loader") end
+    local result = ffi.cast("int (*)(void)", entry)()
+    ffi.C.FreeLibrary(library)
+    assert(result >= 0, "Unbound startup rejected (" .. result .. "); see Unbound/lua-bootstrap.log")
+end)
+if not ok and print then print("Unbound automatic startup failed: " .. tostring(failure)) end

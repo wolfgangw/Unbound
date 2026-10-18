@@ -3,9 +3,8 @@ Fairlight audition focus/context trace (Windows diagnostic only)
 
 Purpose
 -------
-Compare Resolve's logical focus context and player signals in docked Media Pool,
-the working child overlay, and the failing independent floating window.
-This observer is separate from Unbound and works alongside either build.
+Compare Resolve's logical focus context and player signals in docked and floating
+Media Pool. This observer is separate from the installed Unbound runtime.
 
 Build from the repository root:
   .\tests\platforms\windows\audition-trace\build.cmd
@@ -17,12 +16,10 @@ including its private headers. Output:
 The DLL name distinguishes it from an earlier, inactive inventory prototype
 already loaded in the development Resolve session. No icons are regenerated.
 
-First capture: working child host
---------------------------------
-The existing Resolve session already has the child-host build loaded; use it.
-If starting fresh: start Resolve, load the project and open Fairlight, then run
-  .\build\windows\audition-child\Release\Unbound.exe
-Do not load a second Unbound build into that same Resolve process.
+Capture: docked and floating Media Pool
+--------------------------------------
+Install the candidate with DaVinci Resolve closed, then open Resolve normally,
+load the project and open Fairlight. Unbound starts automatically.
 
 1. Dock Media Pool using Unbound's Dock button. Select an auditionable clip and
    stop playback. Keep the same clip/timeline for both captures.
@@ -31,22 +28,14 @@ Do not load a second Unbound build into that same Resolve process.
 3. Return to Resolve. Click the timeline and press Space to start it. Click the
    docked audition player's Play button: note audio and timeline handoff.
 4. While audition is playing, click Undock. Note whether playback stops. Click
-   audition Play in the child overlay; note audio, waveform and Control Room.
+   audition Play in the floating pane; note audio, waveform and Control Room.
 5. Click inside Media Pool and press Space twice, pausing between presses. Note
    which player responds. Then click the timeline and press Space to start it;
    click audition Play again to test the handoff from timeline to audition.
 6. Dock Media Pool while audition is playing, then click audition Play again.
 7. Run:
      .\tests\platforms\windows\audition-trace\stop.cmd
-   Note that this capture was CHILD and record any unexpected observations.
-
-Second capture: normal floating host
-------------------------------------
-After saving your work, close Resolve yourself and start it fresh. Load the same
-project, open Fairlight, then run the normal build:
-  .\release\win\2026.10.13.001\Unbound.exe
-Repeat steps 1-7 above. Undock now creates the normal independent window.
-Note that this capture was FLOATING. Do not run the child-host launcher here.
+   Record the installed candidate and any unexpected observations.
 
 Keep each capture under three minutes. No markers are required for the sequence
 above; mouse, Space, focus and player events provide its ordering. An optional

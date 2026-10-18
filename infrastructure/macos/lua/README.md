@@ -34,7 +34,7 @@ previous files if publishing fails. Backups stay outside Resolve's Scripts tree.
 Settings are not part of the installation transaction.
 
 Uninstall with Resolve closed using `infrastructure/macos/lua/uninstall.sh`.
-Pass `--remove-settings` only to remove saved settings and layouts as well.
+Settings and layouts are always retained; there is no option to delete them.
 Removal also clears Lua installation/startup backups and legacy menu files; it
 preserves other scripts and diagnostic logs.
 

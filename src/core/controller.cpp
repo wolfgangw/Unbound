@@ -599,7 +599,11 @@ bool Unbound::startController()
     auto app = qobject_cast<QApplication *>(QCoreApplication::instance());
     if (!app || QCoreApplication::closingDown()) return 0;
     if (started.exchange(true)) return 1;
-    if (!QMetaObject::invokeMethod(app, [] { new Controller; }, Qt::QueuedConnection)) {
+    if (!QMetaObject::invokeMethod(app, [app] {
+        // The GUI thread owns one controller, including repeated startup requests
+        // from separate helper images with independent guards.
+        if (!app->findChild<QObject *>(QStringLiteral("UnboundPaneController"))) new Controller;
+    }, Qt::QueuedConnection)) {
         started = false;
         return 0;
     }

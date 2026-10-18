@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "size": [540, 252],
+  "fonts": { "body": 16, "title": 28, "status": 14 },
+  "rects": {
+    "icon": [28, 32, 48, 48],
+    "title": [92, 22, 420, 36],
+    "subtitle": [92, 62, 420, 24],
+    "uninstall": [28, 108, 234, 68],
+    "install": [278, 108, 234, 68],
+    "separator": [28, 190, 484, 1],
+    "status": [28, 205, 484, 36],
+    "progress": [496, 217, 16, 16]
+  },
+  "text": {
+    "app": "Unbound",
+    "subtitle": "Floating panels for DaVinci Resolve",
+    "install": "Install",
+    "update": "Update",
+    "uninstall": "Uninstall",
+    "unknownVersion": "Version unknown",
+    "running": "Close DaVinci Resolve to install or uninstall Unbound.",
+    "installed": "Unbound is installed. It starts automatically with DaVinci Resolve.",
+    "ready": "Ready to install.",
+    "installedSuccess": "Installed. Open DaVinci Resolve to use Unbound.",
+    "updatedSuccess": "Updated. Open DaVinci Resolve to use Unbound.",
+    "removedSuccess": "Unbound removed. Settings and layouts kept.",
+    "installing": "Installing...",
+    "updating": "Updating...",
+    "uninstalling": "Uninstalling...",
+    "installFailed": "Installation could not finish.",
+    "updateFailed": "Update could not finish.",
+    "uninstallFailed": "Uninstallation could not finish.",
+    "retry": "Please try again after closing DaVinci Resolve.",
+    "confirmUninstall": "Uninstall Unbound?",
+    "confirmKeep": "Unbound will be removed from this account. Your settings and layouts will be kept for a future installation.",
+    "cancel": "Cancel",
+    "ok": "OK"
+  }
+}

@@ -82,7 +82,7 @@ It does not discover UiFocusedWidgetManager or record its state/signals.
 
 No Resolve offsets, code fingerprints, private memory reads/writes, private
 function calls, or Qt-private headers. The Qt 5.15.2 ABI requirement remains the
-same as Unbound's existing injected helper. Widget names and native event behavior
+same as Unbound's startup-loaded helper. Widget names and native event behavior
 are still application compatibility assumptions, so other Resolve versions need
 ordinary validation even though there is no memory-layout dependency.
 

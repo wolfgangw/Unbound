@@ -15,12 +15,15 @@ packaging run. Current candidates are internal builds; public releases will use
 `Unbound <version>.app` without the internal-build suffix.
 This explicit packaging step preserves the input candidate and installed files.
 It does not create a ZIP, publish a release or change the public version.
-The footer shows the installed version below Uninstall and the bundled version
-below Install/Update, aligned left and right respectively. The bundled version and
-internal build identifier come from the candidate's `VERSION` and `BUILD` metadata;
+Layout, labels and feedback come from the [shared installer definition](../../installer/README.md),
+also used by Windows. The installed version is the second line inside Uninstall
+on the left; the candidate version is inside Install/Update on the right. Internal
+versions display `yyyy.mm.dd.NNN`, without a prefix. The status line is at the
+bottom beneath a thin divider.
+The bundled version and internal build identifier come from the candidate's `VERSION` and `BUILD` metadata;
 installation copies them into the private runtime alongside its libraries.
 Older installations without metadata show "Version unknown" until updated;
-the installed-version footer is hidden when Unbound is absent. Rebuild older candidates
+the installed-version line is omitted when Unbound is absent. Rebuild older candidates
 without that metadata before packaging; the current checkout's version is never
 substituted for the bundled runtime's version.
 Update is disabled when both installed version and internal build identifier match
@@ -33,13 +36,10 @@ normal Resolve launch; no permanent installer service or Resolve menu entry is
 created. The app can be run directly from its downloaded location.
 
 Uninstall removes the private runtime, startup hook, legacy Utility-menu files
-and Lua installation/startup backups. Settings and layouts are kept by default;
-**Also remove settings and layouts when uninstalling** explicitly removes both
-current and legacy settings files. Other Resolve scripts and unrelated files
-are preserved. Existing diagnostic logs remain.
-When only retained settings remain, the checkbox is hidden and the action becomes
-**Remove settings and layouts…**, with a separate confirmation. With no installation
-or saved settings, Uninstall is disabled and the checkbox stays hidden.
+and Lua installation/startup backups. Settings and layouts are always kept,
+including legacy settings files. Other Resolve scripts, unrelated files and
+diagnostic logs are preserved. There is no settings-deletion action.
+With no installation, Uninstall is disabled even when saved settings remain.
 
 The native AppKit UI lives in `src/platforms/macos/installer/`. It bundles and runs
 the existing Lua `install.sh` and `uninstall.sh`; it owns no duplicate installation
@@ -48,6 +48,9 @@ uses only macOS system frameworks. No development toolchain is needed to use it.
 
 Builds run isolated filesystem tests against the bundled scripts and a separate
 Cocoa UI fixture, then verify the app's ad-hoc signature. The release app excludes
-test-only switches and snapshot code. These internal builds are not notarized;
-a browser-download test in another user account is useful but does not reset this
+test-only switches and snapshot code. Builds are ad-hoc signed, without Developer ID
+signing or notarization; see the [README](../../../README.md#compatibility) for
+the per-app Open Anyway procedure. These distribution limits do not affect
+feature parity with Windows. A browser-download test in another user account
+is useful but does not reset this
 Mac's Gatekeeper history. See [platform status](../../../doc/platforms/macos.md).

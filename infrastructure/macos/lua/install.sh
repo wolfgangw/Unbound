@@ -5,7 +5,7 @@ candidate=${1:?Usage: install.sh /absolute/path/to/Lua-candidate}
 [[ "$candidate" == /* && -f "$candidate/runtime/load.lua" && -f "$candidate/startup/Unbound.scriptlib" ]] || {
     echo 'Expected a Lua candidate with runtime/ and startup/.' >&2; exit 1;
 }
-if pgrep -x Resolve >/dev/null; then echo 'Close Resolve normally before installing Unbound.' >&2; exit 1; fi
+if pgrep -x Resolve >/dev/null; then echo 'Close DaVinci Resolve normally before installing Unbound.' >&2; exit 1; fi
 for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do
     codesign --verify --strict "$candidate/runtime/$library"
 done
@@ -30,7 +30,7 @@ done
 cmp "$candidate/runtime/load.lua" "$transaction/runtime/load.lua"
 cmp "$candidate/startup/Unbound.scriptlib" "$transaction/Unbound.scriptlib"
 # Recheck after staging in case Resolve was started during verification.
-if pgrep -x Resolve >/dev/null; then echo 'Resolve started during installation; existing files were left in place.' >&2; exit 1; fi
+if pgrep -x Resolve >/dev/null; then echo 'DaVinci Resolve started during installation; existing files were left in place.' >&2; exit 1; fi
 saved_count=0
 published_count=0
 originals=()
@@ -72,4 +72,4 @@ published[published_count]="$runtime"; published_count=$((published_count+1))
 mv "$transaction/Unbound.scriptlib" "$hook"
 published[published_count]="$hook"; published_count=$((published_count+1))
 committed=1
-printf 'Installed automatic Unbound startup. Open Resolve normally.\nBackup: %s\n' "$transaction"
+printf 'Installed automatic Unbound startup. Open DaVinci Resolve normally.\nBackup: %s\n' "$transaction"

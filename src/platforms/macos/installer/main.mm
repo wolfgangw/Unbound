@@ -1,5 +1,22 @@
 // SPDX-License-Identifier: MIT
 #import <AppKit/AppKit.h>
+#include "../../../installer/presentation.h"
+
+static NSString *string(const std::string &value) { return [NSString stringWithUTF8String:value.c_str()]; }
+static std::string utf8(NSString *value) { return value.UTF8String ?: ""; }
+static NSRect frame(InstallerUI::Rect r) {
+    // Shared coordinates start at the top left; AppKit starts at the bottom.
+    return NSMakeRect(r.x,InstallerUI::height-r.y-r.height,r.width,r.height);
+}
+static void buttonText(NSButton *button,const std::string &value) {
+    button.title=string(value);
+    button.font=[NSFont systemFontOfSize:InstallerUI::fonts::body];
+    button.bezelStyle=NSBezelStyleRegularSquare;
+    NSButtonCell *cell=(NSButtonCell *)button.cell;
+    cell.usesSingleLineMode=NO;
+    cell.wraps=YES;
+    cell.lineBreakMode=NSLineBreakByWordWrapping;
+}
 
 static BOOL exists(NSString *path) { return [NSFileManager.defaultManager fileExistsAtPath:path]; }
 static NSString *applicationName() {
@@ -39,9 +56,7 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
 @property(strong) NSTextField *status;
 @property(strong) NSButton *installButton;
 @property(strong) NSButton *uninstallButton;
-@property(strong) NSButton *removeSettings;
 @property(strong) NSProgressIndicator *progress;
-@property(strong) NSTextField *installedVersion;
 @property BOOL busy;
 @property(copy) NSString *support;
 @property(copy) NSString *scripts;
@@ -53,53 +68,40 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
     self.support = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Unbound"];
     self.scripts = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts"];
     self.resources = NSBundle.mainBundle.resourcePath;
-    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 480, 250)
+    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, InstallerUI::width, InstallerUI::height)
         styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
         backing:NSBackingStoreBuffered defer:NO];
     self.window.title = applicationName();
     self.window.delegate = self;
     self.window.releasedWhenClosed = NO;
     [self.window center];
-    self.window.contentView = [[InstallerContent alloc] initWithFrame:NSMakeRect(0, 0, 480, 250)];
+    self.window.contentView = [[InstallerContent alloc] initWithFrame:NSMakeRect(0, 0, InstallerUI::width, InstallerUI::height)];
     NSView *view = self.window.contentView;
     NSImage *icon = [[NSImage alloc] initWithContentsOfFile:[self.resources stringByAppendingPathComponent:@"unbound-128.png"]];
-    NSImageView *image = [[NSImageView alloc] initWithFrame:NSMakeRect(28, 182, 48, 48)];
+    NSImageView *image = [[NSImageView alloc] initWithFrame:frame(InstallerUI::rects::icon)];
     image.image = icon;
     [view addSubview:image];
-    [view addSubview:label(@"Unbound", NSMakeRect(90, 201, 330, 29), 24, YES)];
-    NSTextField *subtitle = label(@"Floating panels for DaVinci Resolve", NSMakeRect(90, 179, 350, 22), 13);
+    [view addSubview:label(string(InstallerUI::text::app), frame(InstallerUI::rects::title), InstallerUI::fonts::title, YES)];
+    NSTextField *subtitle = label(string(InstallerUI::text::subtitle), frame(InstallerUI::rects::subtitle), InstallerUI::fonts::body);
     subtitle.textColor = NSColor.secondaryLabelColor;
     [view addSubview:subtitle];
-    self.status = label(@"", NSMakeRect(28, 130, 424, 30), 12);
+    NSBox *separator=[[NSBox alloc] initWithFrame:frame(InstallerUI::rects::separator)];
+    separator.boxType=NSBoxSeparator;
+    [view addSubview:separator];
+    self.status = label(@"", frame(InstallerUI::rects::status), InstallerUI::fonts::status);
     self.status.textColor = NSColor.secondaryLabelColor;
     [view addSubview:self.status];
-    self.removeSettings = [NSButton checkboxWithTitle:@"Also remove settings and layouts when uninstalling"
-        target:self action:@selector(refresh:)];
-    self.removeSettings.frame = NSMakeRect(28, 89, 424, 26);
-    self.removeSettings.font = [NSFont systemFontOfSize:12];
-    self.removeSettings.state = NSControlStateValueOff;
-    [view addSubview:self.removeSettings];
-    self.installButton = [NSButton buttonWithTitle:@"Install Unbound" target:self action:@selector(install:)];
-    self.installButton.frame = NSMakeRect(292, 25, 160, 34);
+    self.installButton = [NSButton buttonWithTitle:@"" target:self action:@selector(install:)];
+    self.installButton.frame = frame(InstallerUI::rects::install);
     self.installButton.keyEquivalent = @"\r";
     [view addSubview:self.installButton];
-    self.uninstallButton = [NSButton buttonWithTitle:@"Uninstall" target:self action:@selector(uninstall:)];
-    self.uninstallButton.frame = NSMakeRect(28, 25, 110, 34);
+    self.uninstallButton = [NSButton buttonWithTitle:@"" target:self action:@selector(uninstall:)];
+    self.uninstallButton.frame = frame(InstallerUI::rects::uninstall);
     [view addSubview:self.uninstallButton];
-    self.progress = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(259, 33, 16, 16)];
+    self.progress = [[NSProgressIndicator alloc] initWithFrame:frame(InstallerUI::rects::progress)];
     self.progress.style = NSProgressIndicatorStyleSpinning;
     self.progress.displayedWhenStopped = NO;
     [view addSubview:self.progress];
-    NSString *version = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    NSString *build = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"];
-    NSTextField *versionLabel = label([NSString stringWithFormat:@"Version %@ · %@", version, build],
-        NSMakeRect(244, 6, 208, 18), 11);
-    versionLabel.textColor = NSColor.secondaryLabelColor;
-    versionLabel.alignment = NSTextAlignmentRight;
-    [view addSubview:versionLabel];
-    self.installedVersion = label(@"", NSMakeRect(28, 6, 208, 18), 11);
-    self.installedVersion.textColor = NSColor.secondaryLabelColor;
-    [view addSubview:self.installedVersion];
     [NSWorkspace.sharedWorkspace.notificationCenter addObserver:self selector:@selector(refresh:)
         name:NSWorkspaceDidTerminateApplicationNotification object:nil];
     [NSWorkspace.sharedWorkspace.notificationCenter addObserver:self selector:@selector(refresh:)
@@ -121,78 +123,55 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
         || exists([self.scripts stringByAppendingPathComponent:@"Utility/Unbound.lua"])
         || exists([self.scripts stringByAppendingPathComponent:@"Utility/UnboundLua"]);
 }
-- (BOOL)hasSettings {
-    return exists([self.support stringByAppendingPathComponent:@"Unbound.json"])
-        || exists([self.support stringByAppendingPathComponent:@"settings.json"]);
-}
 - (void)refresh:(NSNotification *)notification {
     if (self.busy) return;
     BOOL running = resolveRunning();
     BOOL installed = self.installed;
-    BOOL settingsOnly = !installed && self.hasSettings;
     NSString *runtime = [self.support stringByAppendingPathComponent:@"Runtime"];
     NSCharacterSet *whitespace = NSCharacterSet.whitespaceAndNewlineCharacterSet;
     NSString *version = [[NSString stringWithContentsOfFile:[runtime stringByAppendingPathComponent:@"VERSION"]
         encoding:NSUTF8StringEncoding error:nil] stringByTrimmingCharactersInSet:whitespace];
     NSString *build = [[NSString stringWithContentsOfFile:[runtime stringByAppendingPathComponent:@"BUILD"]
         encoding:NSUTF8StringEncoding error:nil] stringByTrimmingCharactersInSet:whitespace];
-    self.installedVersion.hidden = !installed;
-    self.installedVersion.stringValue = version.length
-        ? (build.length ? [NSString stringWithFormat:@"Version %@ · %@", version, build]
-                        : [NSString stringWithFormat:@"Version %@", version])
-        : @"Version unknown";
-    self.installButton.title = installed ? @"Update Unbound" : @"Install Unbound";
     BOOL sameBuild = installed
         && [version isEqualToString:[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]]
         && [build isEqualToString:[NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"]];
-    self.installButton.enabled = !running && !sameBuild;
-    self.uninstallButton.title = settingsOnly ? @"Remove settings and layouts…" : @"Uninstall";
-    self.uninstallButton.frame = NSMakeRect(28, 25, settingsOnly ? 224 : 110, 34);
-    self.uninstallButton.enabled = !running && (installed || settingsOnly);
-    self.removeSettings.hidden = !installed;
-    if (!installed) self.removeSettings.state = NSControlStateValueOff;
-    self.removeSettings.enabled = !running;
-    self.status.stringValue = running ? @"Quit DaVinci Resolve to install or uninstall Unbound."
-        : installed ? @"Unbound is already installed."
-        : self.hasSettings ? @"Unbound is not installed. Your saved settings are available."
-        : @"Ready to install.";
+    const auto ui=InstallerUI::present({bool(installed),bool(running),bool(sameBuild)},
+        InstallerUI::version(utf8(version),utf8(build)),
+        InstallerUI::version(utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]),
+            utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"])));
+    buttonText(self.installButton,ui.install); buttonText(self.uninstallButton,ui.uninstall);
+    self.installButton.enabled=ui.installEnabled; self.uninstallButton.enabled=ui.uninstallEnabled;
+    self.status.stringValue=string(ui.status);
 }
 - (void)applicationDidBecomeActive:(NSNotification *)notification { [self refresh:nil]; }
-- (void)install:(id)sender { [self runOperation:NO removeSettings:NO]; }
+- (void)install:(id)sender { [self runOperation:NO]; }
 - (void)uninstall:(id)sender {
     if (self.busy || resolveRunning()) { [self refresh:nil]; return; }
     [self refresh:nil];
     if (!self.uninstallButton.enabled) return;
-    BOOL settingsOnly = !self.installed && self.hasSettings;
-    BOOL remove = settingsOnly || self.removeSettings.state == NSControlStateValueOn;
+    const InstallerUI::Operation op{true,bool(self.installed)};
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = settingsOnly ? @"Remove settings and layouts?" : @"Uninstall Unbound?";
-    alert.informativeText = settingsOnly ? @"Your saved Unbound settings and layouts will be permanently removed."
-        : remove ? @"Unbound and your saved settings and layouts will be removed from this account."
-                 : @"Unbound will be removed from this account. Your settings and layouts will be kept for a future installation.";
-    [alert addButtonWithTitle:@"Cancel"];
-    [alert addButtonWithTitle:settingsOnly ? @"Remove" : @"Uninstall"];
+    alert.messageText=string(op.confirmationTitle()); alert.informativeText=string(op.confirmationText());
+    [alert addButtonWithTitle:string(InstallerUI::text::cancel)];
+    [alert addButtonWithTitle:string(InstallerUI::text::uninstall)];
     [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
-        // A settings-only confirmation must not remove a newly installed runtime.
-        if (settingsOnly && self.installed) { [self refresh:nil]; return; }
-        if (response == NSAlertSecondButtonReturn) [self runOperation:YES removeSettings:remove];
+        if (response == NSAlertSecondButtonReturn) [self runOperation:YES];
     }];
 }
-- (void)runOperation:(BOOL)uninstall removeSettings:(BOOL)remove {
+- (void)runOperation:(BOOL)uninstall {
     if (self.busy || resolveRunning()) { [self refresh:nil]; return; }
     [self refresh:nil];
     if (uninstall ? !self.uninstallButton.enabled : !self.installButton.enabled) return;
     // Use the same installed-state check as the controls, before files change.
     BOOL installed = self.installed;
-    BOOL updating = !uninstall && installed;
-    BOOL settingsOnly = uninstall && !installed && remove;
+    const InstallerUI::Operation op{bool(uninstall),bool(installed)};
     self.busy = YES;
-    self.installButton.enabled = self.uninstallButton.enabled = self.removeSettings.enabled = NO;
-    self.status.stringValue = settingsOnly ? @"Removing settings and layouts…"
-        : uninstall ? @"Uninstalling…" : updating ? @"Updating…" : @"Installing…";
+    self.installButton.enabled = self.uninstallButton.enabled = NO;
+    self.status.stringValue=string(op.progress());
     [self.progress startAnimation:nil];
     NSString *script = [self.resources stringByAppendingPathComponent:uninstall ? @"scripts/uninstall.sh" : @"scripts/install.sh"];
-    NSArray<NSString *> *arguments = uninstall ? (remove ? @[script, @"--remove-settings"] : @[script])
+    NSArray<NSString *> *arguments = uninstall ? @[script]
         : @[script, [self.resources stringByAppendingPathComponent:@"payload"]];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSTask *task = [[NSTask alloc] init];
@@ -221,20 +200,13 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
             [self.progress stopAnimation:nil];
             [self refresh:nil];
             if (status == 0) {
-                self.removeSettings.state = NSControlStateValueOff;
-                [self refresh:nil];
-                self.status.stringValue = settingsOnly ? @"Settings and layouts removed." : uninstall
-                    ? (remove ? @"Unbound, settings and layouts removed." : @"Unbound removed. Settings and layouts kept.")
-                    : updating ? @"Updated. Open DaVinci Resolve to use Unbound."
-                               : @"Installed. Open DaVinci Resolve to use Unbound.";
+                self.status.stringValue=string(op.success());
             } else {
-                self.status.stringValue = settingsOnly ? @"Settings and layouts could not be removed."
-                    : uninstall ? @"Uninstallation could not finish."
-                    : updating ? @"Update could not finish." : @"Installation could not finish.";
+                self.status.stringValue=string(op.failure());
                 NSAlert *alert = [[NSAlert alloc] init];
                 alert.messageText = self.status.stringValue;
-                alert.informativeText = output.length ? output : @"Please try again after closing Resolve.";
-                [alert addButtonWithTitle:@"OK"];
+                alert.informativeText = output.length ? output : string(InstallerUI::text::retry);
+                [alert addButtonWithTitle:string(InstallerUI::text::ok)];
                 [alert beginSheetModalForWindow:self.window completionHandler:nil];
             }
         });

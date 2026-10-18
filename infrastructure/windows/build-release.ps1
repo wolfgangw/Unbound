@@ -45,11 +45,10 @@ try {
         '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath",
         "-DUNBOUND_VERSION=$version", "-DUNBOUND_BUILD=$BuildNumber", "-DUNBOUND_BUILD_ID=$buildId")
     Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--', '/m:1', '/nr:false')
-    Invoke-Checked (Join-Path $build 'Release\UnboundLauncherTests.exe') @()
     & (Join-Path $repoRoot 'tests\platforms\windows\version\main.ps1')
-    $exe = Join-Path $build 'Release\Unbound.exe'
+    $loader = Join-Path $build 'Release\UnboundLuaLoader.dll'
     $dll = Join-Path $build 'Release\Unbound.dll'
-    foreach ($file in @($exe, $dll)) {
+    foreach ($file in @($loader, $dll)) {
         $info = (Get-Item -LiteralPath $file).VersionInfo
         if ($info.ProductVersion -ne $version -or $info.FileVersion -ne $version -or
             $info.FileMajorPart -ne $releaseVersion.Major -or $info.FileMinorPart -ne $releaseVersion.Minor -or
@@ -57,14 +56,20 @@ try {
             throw "Version resource mismatch: $file"
         }
     }
-    $dependencyReport = Get-UnboundDependencies -exe $exe -dll $dll
-    # Tests exercise the same shared pane code plus the standalone DLL bootstrap.
+    $dependencyReport = Get-UnboundDependencies -loader $loader -dll $dll
+    # Tests exercise the shared pane code and production Lua attachment entry.
     $testBuild = Join-Path $repoRoot 'build\windows\pane-tests'
     Invoke-Checked 'cmake' @('-S', (Join-Path $repoRoot 'tests\core\pane-float'), '-B', $testBuild,
         '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath")
     Invoke-Checked 'cmake' @('--build', $testBuild, '--config', 'Release', '--', '/m:1', '/nr:false')
     $env:PATH = "$QtPath\bin;$env:PATH"
     $env:QT_QPA_PLATFORM = 'offscreen'
+    $env:UNBOUND_LOG_FILE = Join-Path $build 'lua-fixture.log'
+    try {
+        Invoke-Checked (Join-Path $build 'Release\UnboundLuaLoaderTests.exe') @((Join-Path $build 'Release\UnboundLuaLoader.dll'))
+        Invoke-Checked (Join-Path $build 'Release\UnboundLuaLoaderTests.exe') @((Join-Path $build 'Release\UnboundLuaLoader.dll'), '--existing')
+        Invoke-Checked (Join-Path $build 'Release\UnboundInstallerTests.exe') @()
+    } finally { Remove-Item Env:UNBOUND_LOG_FILE -ErrorAction SilentlyContinue }
     Invoke-Checked (Join-Path $build 'Release\UnboundViewerTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundCinemaTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
@@ -95,12 +100,19 @@ try {
         Invoke-UnboundNativeTest $test @('--frame-paint-native')
     }
     finally { $env:QT_QPA_PLATFORM = 'offscreen' }
-    # Only these two runtime files are distributed; build records stay in build/.
-    New-Item -ItemType Directory -Path $destination | Out-Null
-    Copy-Item -LiteralPath $exe, $dll -Destination $destination
-    $hashes = @(Get-FileHash -LiteralPath (Join-Path $destination 'Unbound.exe'), (Join-Path $destination 'Unbound.dll'))
-    @{ Version=$version; BuildId=$buildId; Revision=$BuildNumber; BuiltAt=(Get-Date).ToString('o'); Qt=$QtPath; Files=$hashes; Dependencies=$dependencyReport } |
+    # Runtime files stay in build/; the only deliverable is the native installer.
+    $hashes = @(Get-FileHash -LiteralPath $loader, $dll)
+    $manifest = @{ Version=$version; BuildId=$buildId; Revision=$BuildNumber; BuiltAt=(Get-Date).ToString('o'); Qt=$QtPath; Files=$hashes; Dependencies=$dependencyReport }
+    $manifest |
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $build 'release-manifest.json')
+    $installerArguments = @{ OutputDirectory=$destination }
+    if ($InternalBuild) { $installerArguments.InternalBuild=$outputVersion }
+    else { $installerArguments.Version=$version }
+    & (Join-Path $PSScriptRoot 'installer/build.ps1') @installerArguments
+    $installer = @(Get-ChildItem -LiteralPath $destination -Filter '*.exe')
+    if ($installer.Count -ne 1) { throw 'Expected one installer deliverable.' }
+    $manifest.Installer = Get-FileHash -LiteralPath $installer[0].FullName
+    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $build 'release-manifest.json')
     Write-Host "Unbound $version ready: $destination"
 } finally {
     if ($locked) { $mutex.ReleaseMutex() }
