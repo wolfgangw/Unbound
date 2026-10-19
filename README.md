@@ -4,14 +4,13 @@ Unbound lets you undock DaVinci Resolve panels into independent, resizable windo
 Arrange them across your displays and restore your custom workspace between sessions.
 Unbound remembers window positions, sizes, docking and panel-toggle states.
 
-Unbound supports Windows 10/11 (x64) and macOS, with the same features on both
-platforms. The universal Mac app includes Apple Silicon and Intel code. Linux is
-not supported.
+Unbound supports Windows 10/11 (x64) and macOS. The universal Mac app includes Apple
+Silicon and Intel code. No Linux port yet.
 
 ## How to use
 
 Download from [Releases](../../releases), extract the download and run the Unbound
-installer with DaVinci Resolve closed. Choose **Install**, then open DaVinci Resolve.
+installer. Choose **Install**, then open DaVinci Resolve.
 Unbound starts automatically and adds a Dock/Undock button to supported panels.
 Run the installer again to update or uninstall. Uninstall always keeps your
 settings and layouts.
@@ -25,12 +24,13 @@ timeline expands into the viewer area when no visible viewer remains docked.
 Windows snap together and align their edges across gaps, with smooth snap
 transitions. Hold Alt while moving or resizing to bypass snapping.
 
-Right-click any Dock/Undock button to save or recall a panel configuration for
+Right-click any Dock/Undock button to save or recall layouts for
 the current page. Each page has five layout slots; use a layout's trash button
 to delete it. Hold a layout name for one second to rename it; Enter saves the
-name and Escape cancels. Duplicate names are allowed. The active layout is highlighted; when its configuration changes,
-a save icon lets you update it. **Dock all** returns the current page's floating
-panels to the main window. The menu stays open while using these actions.
+name and Escape cancels. Duplicate names are allowed. The active layout is highlighted;
+when its configuration changes, a save icon lets you update it. **Dock all** returns
+the current page's floating panels to the main window. The menu stays open while
+using these actions.
 
 Native minimum panel sizes apply. Nodes may need panning after docking into a
 narrower area.
@@ -47,9 +47,8 @@ and include Resolve Free 21.1.1.10 on an Apple M2 with macOS 27.0.1.
 
 **Intel Mac support is untested.** The universal build includes Intel code, but
 we do not have an Intel Mac to validate it. It is offered for users willing to
-try it and [report their results](../../issues), including their Mac model,
-macOS and Resolve versions, and Unbound version. Apple Silicon remains the
-tested Mac configuration.
+try it and report their results, including their Mac model, macOS and Resolve versions,
+and Unbound version. Apple Silicon remains the tested Mac configuration.
 
 On Windows and macOS, Unbound starts automatically through DaVinci Resolve's Lua
 startup mechanism. The installer places a small startup script in Resolve's
