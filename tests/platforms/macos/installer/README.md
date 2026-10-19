@@ -9,8 +9,12 @@ preservation and unrelated-file protection.
 `smoketest.h` is included only in a separate build of the actual AppKit controller.
 It opens its own window, verifies the Resolve guard, action availability and
 bundled resources, and writes a window snapshot under `build/macos/installer/`.
-Isolated runtime metadata checks fresh/unknown installations, matching builds and
-different versions/builds: only matching installed builds disable Update.
+Isolated payload checks cover fresh/unknown installations and different
+versions/builds. Only a complete byte-for-byte match disables Update. Each runtime
+file and the startup hook is independently removed, restored and modified without
+changing its length; the UI must allow repair, then disable Update after restoration.
+The Resolve-running guard still disables repair actions. An orphaned startup hook
+also remains removable/updatable.
 The UI fixture also checks installed, retained-settings (current and legacy) and empty
 states. Only an installation enables Uninstall; there is no settings-deletion action.
 Shell fixtures verify that repeated uninstall preserves current and legacy settings

@@ -45,7 +45,47 @@
     valid = [[version stringByAppendingString:@"\n"] writeToFile:versionPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
     valid = [[build stringByAppendingString:@"\n"] writeToFile:buildPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
     [self refresh:nil];
+    valid = valid && self.installButton.enabled; // Matching metadata alone cannot certify a complete installation.
+    NSString *payload = [self.resources stringByAppendingPathComponent:@"payload"];
+    NSString *hook = [self.scripts stringByAppendingPathComponent:@"Unbound.scriptlib"];
+    valid = [files createDirectoryAtPath:self.scripts withIntermediateDirectories:YES attributes:nil error:nil] && valid;
+    NSDictionary<NSString *, NSString *> *payloadFiles = @{
+        versionPath: @"VERSION", buildPath: @"BUILD",
+        [runtime stringByAppendingPathComponent:@"load.lua"]: @"runtime/load.lua",
+        [runtime stringByAppendingPathComponent:@"UnboundLuaLoader.dylib"]: @"runtime/UnboundLuaLoader.dylib",
+        [runtime stringByAppendingPathComponent:@"UnboundHelper.dylib"]: @"runtime/UnboundHelper.dylib",
+        hook: @"startup/Unbound.scriptlib"
+    };
+    for (NSString *path in payloadFiles) {
+        NSData *contents = [NSData dataWithContentsOfFile:[payload stringByAppendingPathComponent:payloadFiles[path]]];
+        valid = [contents writeToFile:path atomically:YES] && valid;
+    }
+    [self refresh:nil];
     valid = valid && !self.installButton.enabled && self.uninstallButton.enabled == !resolveRunning();
+    // Each required file independently controls repair availability, even when
+    // version/build metadata still matches. Restoring it disables Update again.
+    for (NSString *path in payloadFiles) {
+        NSData *contents = [NSData dataWithContentsOfFile:path];
+        if (!contents.length) { valid = NO; continue; }
+        valid = [files removeItemAtPath:path error:nil] && valid;
+        [self refresh:nil];
+        valid = valid && self.installButton.enabled && self.uninstallButton.enabled;
+        valid = [contents writeToFile:path atomically:YES] && valid;
+        [self refresh:nil];
+        valid = valid && !self.installButton.enabled;
+        NSMutableData *changed = [contents mutableCopy];
+        ((unsigned char *)changed.mutableBytes)[0] ^= 1; // Same length, different contents.
+        valid = [changed writeToFile:path atomically:YES] && valid;
+        [self refresh:nil];
+        valid = valid && self.installButton.enabled;
+        fixtureResolveRunning = 1;
+        [self refresh:nil];
+        valid = valid && !self.installButton.enabled && !self.uninstallButton.enabled;
+        fixtureResolveRunning = 0;
+        valid = [contents writeToFile:path atomically:YES] && valid;
+        [self refresh:nil];
+        valid = valid && !self.installButton.enabled && self.uninstallButton.enabled;
+    }
     valid = [@"different-build\n" writeToFile:buildPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
     [self refresh:nil];
     valid = valid && self.installButton.enabled == !resolveRunning(); // Same release, different internal build.
@@ -61,6 +101,9 @@
     valid = valid && self.installButton.enabled && self.uninstallButton.enabled;
     // Retained settings never enable an uninstall or deletion action.
     valid = [files removeItemAtPath:runtime error:nil] && valid;
+    [self refresh:nil];
+    valid = valid && self.installButton.enabled && self.uninstallButton.enabled; // Orphaned startup hook.
+    valid = [files removeItemAtPath:hook error:nil] && valid;
     NSString *settings = [self.support stringByAppendingPathComponent:@"Unbound.json"];
     valid = [@"{}" writeToFile:settings atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
     [self refresh:nil];
@@ -86,7 +129,7 @@
     self.scripts = originalScripts;
     [self refresh:nil];
     if (snapshot) valid = [self writeSnapshot:snapshot] && valid;
-    fprintf(stdout, "%s: installer UI, retained settings, version/build comparison, Resolve guard and bundled payload\n", valid ? "PASS" : "FAIL");
+    fprintf(stdout, "%s: installer UI, retained settings, exact payload comparison, missing/altered files, Resolve guard and bundled payload\n", valid ? "PASS" : "FAIL");
     fflush(stdout);
     exit(valid ? 0 : 1);
 }

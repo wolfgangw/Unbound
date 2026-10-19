@@ -19,6 +19,12 @@ static void buttonText(NSButton *button,const std::string &value) {
 }
 
 static BOOL exists(NSString *path) { return [NSFileManager.defaultManager fileExistsAtPath:path]; }
+static BOOL sameContents(NSString *installed, NSString *bundled) {
+    NSData *actual = [NSData dataWithContentsOfFile:installed];
+    NSData *expected = [NSData dataWithContentsOfFile:bundled];
+    // Missing or unreadable files must leave Update available for repair.
+    return actual && expected && [actual isEqualToData:expected];
+}
 static NSString *applicationName() {
     return [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
 }
@@ -123,6 +129,18 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
         || exists([self.scripts stringByAppendingPathComponent:@"Utility/Unbound.lua"])
         || exists([self.scripts stringByAppendingPathComponent:@"Utility/UnboundLua"]);
 }
+- (BOOL)matchesPayload {
+    NSString *runtime = [self.support stringByAppendingPathComponent:@"Runtime"];
+    NSString *payload = [self.resources stringByAppendingPathComponent:@"payload"];
+    for (NSString *name in @[@"VERSION", @"BUILD", @"load.lua", @"UnboundLuaLoader.dylib", @"UnboundHelper.dylib"]) {
+        NSString *source = [@[@"VERSION", @"BUILD"] containsObject:name]
+            ? name : [@"runtime" stringByAppendingPathComponent:name];
+        if (!sameContents([runtime stringByAppendingPathComponent:name],
+                          [payload stringByAppendingPathComponent:source])) return NO;
+    }
+    return sameContents([self.scripts stringByAppendingPathComponent:@"Unbound.scriptlib"],
+                        [payload stringByAppendingPathComponent:@"startup/Unbound.scriptlib"]);
+}
 - (void)refresh:(NSNotification *)notification {
     if (self.busy) return;
     BOOL running = resolveRunning();
@@ -133,9 +151,7 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
         encoding:NSUTF8StringEncoding error:nil] stringByTrimmingCharactersInSet:whitespace];
     NSString *build = [[NSString stringWithContentsOfFile:[runtime stringByAppendingPathComponent:@"BUILD"]
         encoding:NSUTF8StringEncoding error:nil] stringByTrimmingCharactersInSet:whitespace];
-    BOOL sameBuild = installed
-        && [version isEqualToString:[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]]
-        && [build isEqualToString:[NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"]];
+    BOOL sameBuild = installed && [self matchesPayload];
     const auto ui=InstallerUI::present({bool(installed),bool(running),bool(sameBuild)},
         InstallerUI::version(utf8(version),utf8(build)),
         InstallerUI::version(utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]),

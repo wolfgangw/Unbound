@@ -26,8 +26,10 @@ Older installations without metadata show "Version unknown" until updated;
 the installed-version line is omitted when Unbound is absent. Rebuild older candidates
 without that metadata before packaging; the current checkout's version is never
 substituted for the bundled runtime's version.
-Update is disabled when both installed version and internal build identifier match
-the bundled runtime; unknown versions and different builds remain updatable.
+Update is disabled only when the installed VERSION, BUILD, loader script, both
+native libraries and startup hook match the bundled payload byte-for-byte.
+Missing, unreadable or changed files remain updatable, including installations
+whose version metadata still matches, so Update can repair them.
 
 Open the app in Finder. It offers **Install/Update** and **Uninstall** for the
 current macOS account, and asks the user to close Resolve before making changes.
