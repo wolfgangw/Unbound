@@ -9,8 +9,8 @@ Silicon and Intel code. No Linux port yet.
 
 ## How to use
 
-Download from [Releases](../../releases), extract the download and run the Unbound
-installer. Choose **Install**, then open DaVinci Resolve.
+Download from [Releases](../../releases) and run the Unbound installer.
+Choose **Install**, then open DaVinci Resolve.
 Unbound starts automatically and adds a Dock/Undock button to supported panels.
 Run the installer again to update or uninstall. Uninstall always keeps your
 settings and layouts.
@@ -21,18 +21,17 @@ toggles remain available to control the space in the main window.
 On the Edit page, Program and Source viewers can float independently. The
 timeline expands into the viewer area when no visible viewer remains docked.
 
-Windows snap together and align their edges across gaps, with smooth snap
-transitions. Hold Alt while moving or resizing to bypass snapping.
+Windows snap together and align their edges across gaps. Hold Alt while moving
+or resizing to bypass snapping.
 
 Right-click any Dock/Undock button to save or recall layouts for
 the current page. Each page has five layout slots; use a layout's trash button
 to delete it. Hold a layout name for one second to rename it; Enter saves the
 name and Escape cancels. Duplicate names are allowed. The active layout is highlighted;
 when its configuration changes, a save icon lets you update it. **Dock all** returns
-the current page's floating panels to the main window. The menu stays open while
-using these actions.
+the current page's floating panels to the main window.
 
-Native minimum panel sizes apply. Nodes may need panning after docking into a
+Native minimum panel sizes apply. Nodes may need Cleanup after docking into a
 narrower area.
 
 Settings are stored in `%LOCALAPPDATA%\Unbound\Unbound.json` on Windows and
@@ -54,10 +53,8 @@ On Windows and macOS, Unbound starts automatically through DaVinci Resolve's Lua
 startup mechanism. The installer places a small startup script in Resolve's
 per-user scripts folder. That script loads Unbound's native helper, which uses
 Resolve's existing Qt libraries and initializes on its UI thread. No Resolve
-application files are modified, and no background service or separate launcher
-is needed.
-
-Unbound does not contact a server.
+application files are modified, and no background service, network contact or
+separate launcher is needed.
 
 Code signing and notarization are still on the paperwork pile: Windows builds
 are unsigned, and macOS builds are ad-hoc signed rather than Developer ID signed
@@ -72,6 +69,8 @@ exception when offered:
 - **macOS:** try opening the app once, then go to **System Settings → Privacy &
   Security → Open Anyway** and confirm. See
   [Apple's instructions](https://support.apple.com/en-us/102445).
+
+In this day and age, of course, just let your agent check code and application files.
 
 ## Build
 
