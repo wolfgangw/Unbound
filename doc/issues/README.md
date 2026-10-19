@@ -1,0 +1,14 @@
+# Issues and investigations
+
+User reports, reproduction evidence and follow-up investigations live here.
+Distinguish confirmed findings from hypotheses; historical investigation records
+may describe intermediate experiments rather than the current implementation.
+
+- [Floating panels after leaving Dual Screen mode](dual-screen-floating-panels.md):
+  unconfirmed Resolve report; a matching lifecycle weakness reproduced in a fixture.
+- [Fairlight Media Pool audition](fairlight-audition-investigation-2026-10-13.txt):
+  investigation of lost audio and playback handoff while floating.
+- [Layout rename input](layout-rename-input-2026-10-17.txt):
+  keyboard routing during inline name editing.
+- [Corner resize crash](resize-corner-crash-2026-10-17.txt):
+  crash evidence, root cause and correction.

@@ -244,6 +244,7 @@ is self-contained for development apart from the installed toolchain and Resolve
 README.md is the public GitHub landing page. AGENTS.md records durable development
 rules; platform docs summarize current status, meaningful limitations and roadmap;
 test READMEs explain reproducible validation. Keep per-run output in build logs.
+User reports and their follow-up investigations belong in `doc/issues/`.
 Do not append test-session diaries, PIDs, candidate-by-candidate histories or
 incidental corrections to these documents. Retain investigation details only when
 they explain a lasting constraint, architectural decision or unresolved defect.
