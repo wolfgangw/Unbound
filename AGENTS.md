@@ -3,7 +3,9 @@
 ## Product
 
 Unbound makes DaVinci Resolve panes independent, movable, resizable windows on
-Windows x64 and macOS Apple Silicon, with feature parity. Both use automatic
+Windows x64 and macOS, with feature parity. Universal Mac builds include arm64 and
+x86_64; Intel support is offered for community testing without native Intel
+validation. Keep this limitation explicit in public documentation. Both use automatic
 startup, native installers and the same shared pane behavior and layouts.
 Windows builds are unsigned; macOS builds are ad-hoc signed without Developer ID
 signing/notarization. These distribution limitations do not imply missing features.
@@ -192,6 +194,14 @@ Mac development uses Resolve's Qt 5.15.2 runtime and pinned headers prepared by
 `infrastructure/macos/prepare-qt.sh`. Build/test/audit/sign with
 `infrastructure/macos/build.sh` (delegates to `lua/build.sh`).
 Candidates are immutable under `release/mac/lua/`.
+Mac builds default to universal; `UNBOUND_MAC_ARCHS` selects `universal`, `arm64`
+or `x86_64`, with separate build directories. Both slices use the same source,
+settings and Lua hook. Audit each slice and sign only after combining binaries.
+Tests explicitly select executable architecture. `UNBOUND_MAC_ALLOW_UNTESTED=1`
+permits unavailable architecture execution, records NOT RUN and never suppresses
+test failures. `--release` explicitly prepares a universal candidate using VERSION;
+it does not tag, publish or create a ZIP. Internal runtime and packaging identifiers
+use `yyyy.mm.dd.NNN` with a three-digit minimum, zero-padded daily counter on both OSes.
 Top-level Mac build/test/audit/install commands delegate to Lua. Native Cocoa
 fixtures require a GUI session; Windows native validation still requires Windows.
 No Resolve app re-signing, public version change or automatic ZIP.

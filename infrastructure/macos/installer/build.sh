@@ -11,9 +11,12 @@ root=$(cd "$(dirname "$0")/../../.." && pwd)
 }
 version=$(head -n 1 "$candidate/VERSION" | tr -d '\r\n')
 runtime_build=$(head -n 1 "$candidate/BUILD" | tr -d '\r\n')
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$runtime_build" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{3,}$ ]] || {
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && ( "$runtime_build" == "$version" || "$runtime_build" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{3,}$ ) ]] || {
     echo 'Invalid candidate version metadata.' >&2; exit 1;
 }
+source "$root/infrastructure/macos/architectures.sh"
+mac_architectures "${UNBOUND_MAC_ARCHS:-universal}"
+"$root/infrastructure/macos/lua/audit.sh" "$candidate" "${UNBOUND_MAC_ARCHS:-universal}"
 for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do codesign --verify --strict "$candidate/runtime/$library"; done
 build="$root/build/macos/installer"
 mkdir -p "$build" "$root/release/mac/installer"
@@ -27,18 +30,18 @@ while :; do
     [[ -d "$destination" ]] || exit 1
     counter=$((counter+1))
 done
-# Current Lua candidates are internal builds; identify the bundled runtime,
-# not this packaging run. Public releases will use just Unbound <version>.
-app_name="Unbound $version ($runtime_build)"
+app_name="Unbound $version"
+if [[ "$runtime_build" != "$version" ]]; then app_name+=" ($runtime_build)"; fi
 app="$destination/$app_name.app"
 resources="$app/Contents/Resources"
 mkdir -p "$app/Contents/MacOS" "$resources/payload" "$resources/scripts/startup"
-xcrun clang++ -std=c++17 -fobjc-arc -arch arm64 -mmacosx-version-min=11.0 -framework AppKit \
+xcrun clang++ -std=c++17 -fobjc-arc "${MAC_ARCH_FLAGS[@]}" -mmacosx-version-min=11.0 -framework AppKit \
     -I"$build" \
     "$root/src/platforms/macos/installer/main.mm" -o "$app/Contents/MacOS/UnboundInstaller"
 sed -e "s/@VERSION@/$version/g" -e "s/@BUILD@/$(date +%Y%m%d).$counter/g" \
     -e "s/@RUNTIME_BUILD@/$runtime_build/g" \
     -e "s/@APP_NAME@/$app_name/g" \
+    -e "s/@PACKAGE_BUILD@/$name/g" \
     "$root/src/platforms/macos/installer/Info.plist.in" > "$app/Contents/Info.plist"
 cp -R "$candidate/runtime" "$candidate/startup" "$resources/payload/"
 cp "$candidate/VERSION" "$candidate/BUILD" "$resources/payload/"
@@ -66,15 +69,20 @@ codesign --verify --deep --strict "$app"
 fixture=$(mktemp -d "$build/ui.XXXXXX")
 cp -R "$app" "$fixture/Unbound Installer Test.app"
 test_app="$fixture/Unbound Installer Test.app"
-xcrun clang++ -std=c++17 -fobjc-arc -arch arm64 -mmacosx-version-min=11.0 -framework AppKit \
+xcrun clang++ -std=c++17 -fobjc-arc "${MAC_ARCH_FLAGS[@]}" -mmacosx-version-min=11.0 -framework AppKit \
     -DUNBOUND_INSTALLER_TEST -I"$root/tests/platforms/macos/installer" \
     -I"$build" \
     "$root/src/platforms/macos/installer/main.mm" -o "$test_app/Contents/MacOS/UnboundInstaller"
 codesign --force --sign - "$test_app"
-"$test_app/Contents/MacOS/UnboundInstaller" --smoke-test --snapshot "$build/window.png"
-[[ $(lipo -archs "$app/Contents/MacOS/UnboundInstaller") == arm64 ]]
+for architecture in "${MAC_ARCHS[@]}"; do
+    if mac_test_architecture "$architecture"; then
+        /usr/bin/arch "-$architecture" "$test_app/Contents/MacOS/UnboundInstaller" --smoke-test --snapshot "$build/window-$architecture.png"
+    fi
+done | tee "$destination/validation.log"
+mac_verify_architectures "$app/Contents/MacOS/UnboundInstaller"
 otool -L "$app/Contents/MacOS/UnboundInstaller"
 cp "$candidate/source-head.txt" "$destination/runtime-source-head.txt"
 printf '%s\n' "$candidate" > "$destination/runtime-candidate.txt"
+printf '%s\n' "$name" > "$destination/BUILD"
 git -C "$root" status --short > "$destination/source-status.txt"
 printf '%s\n' "$app"

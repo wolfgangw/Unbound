@@ -2,6 +2,17 @@
 set(UNBOUND_QT_SOURCE "${UNBOUND_ROOT}/build/macos/qtbase-source" CACHE PATH "Configured Qt 5.15.2 source tree")
 set(UNBOUND_RESOLVE_APP "/Applications/DaVinci Resolve/DaVinci Resolve.app" CACHE PATH "Resolve application")
 set(_frameworks "${UNBOUND_RESOLVE_APP}/Contents/Frameworks")
+foreach(architecture IN LISTS CMAKE_OSX_ARCHITECTURES)
+    foreach(library "Frameworks/libQt5Core.5.dylib" "Frameworks/libQt5Gui.5.dylib"
+            "Frameworks/libQt5Widgets.5.dylib" "Libraries/Fusion/libluajit-5.1.2.dylib"
+            "PlugIns/platforms/libqcocoa.dylib")
+        execute_process(COMMAND lipo -verify_arch "${architecture}" "${UNBOUND_RESOLVE_APP}/Contents/${library}"
+            RESULT_VARIABLE _architecture_result OUTPUT_QUIET ERROR_QUIET)
+        if(NOT _architecture_result EQUAL 0)
+            message(FATAL_ERROR "Resolve's ${library} lacks required ${architecture} code")
+        endif()
+    endforeach()
+endforeach()
 if(NOT EXISTS "${UNBOUND_QT_SOURCE}/src/corelib/global/qconfig.h")
     message(FATAL_ERROR "Run infrastructure/macos/prepare-qt.sh first (headers only)")
 endif()

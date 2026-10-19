@@ -38,8 +38,10 @@
         && NSEqualRects(self.status.frame,frame(InstallerUI::rects::status))
         && [self.installButton.title isEqualToString:string(std::string(InstallerUI::text::update)+"\n"+
             InstallerUI::version(utf8(version),utf8(build)))];
-    valid = valid && [self.window.title isEqualToString:
-        [NSString stringWithFormat:@"Unbound %@ (%@)", version, build]];
+    NSString *expectedTitle = [version isEqualToString:build]
+        ? [NSString stringWithFormat:@"Unbound %@", version]
+        : [NSString stringWithFormat:@"Unbound %@ (%@)", version, build];
+    valid = valid && [self.window.title isEqualToString:expectedTitle];
     NSString *versionPath = [runtime stringByAppendingPathComponent:@"VERSION"];
     NSString *buildPath = [runtime stringByAppendingPathComponent:@"BUILD"];
     valid = [[version stringByAppendingString:@"\n"] writeToFile:versionPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;

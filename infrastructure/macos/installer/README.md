@@ -11,8 +11,18 @@ The immutable output is
 `release/mac/installer/yyyy.mm.dd.NNN/Unbound <version> (<runtime-build>).app`.
 The app name, window title and application menu identify the bundled runtime,
 for example `Unbound 0.3.0 (2026.10.18.018)`. The outer directory identifies the
-packaging run. Current candidates are internal builds; public releases will use
-`Unbound <version>.app` without the internal-build suffix.
+packaging run. Public candidates created with `build.sh --release` produce
+`Unbound <version>.app` without the internal-build suffix. Internal runtime and
+packaging identifiers both use `yyyy.mm.dd.NNN`, the same convention as Windows.
+The bundle's `UnboundPackageBuild` and the packaging directory's BUILD record
+identify packaging separately; CFBundleVersion is Apple-specific numeric metadata.
+The installer and both runtime libraries are universal by default. Native loading
+selects the slice matching the running Resolve process; the Lua script and
+installation paths are identical on Intel and Apple Silicon. For a single-slice
+development candidate, pass the same `UNBOUND_MAC_ARCHS` to both build commands.
+Packaging verifies every payload slice and runs the UI fixture for each runnable
+architecture. `UNBOUND_MAC_ALLOW_UNTESTED=1` permits an unavailable execution
+architecture with an explicit NOT RUN record, never a false test pass.
 This explicit packaging step preserves the input candidate and installed files.
 It does not create a ZIP, publish a release or change the public version.
 Layout, labels and feedback come from the [shared installer definition](../../installer/README.md),

@@ -9,6 +9,7 @@
     <key>CFBundleShortVersionString</key><string>@VERSION@</string>
     <key>CFBundleVersion</key><string>@BUILD@</string>
     <key>UnboundRuntimeBuild</key><string>@RUNTIME_BUILD@</string>
+    <key>UnboundPackageBuild</key><string>@PACKAGE_BUILD@</string>
     <key>CFBundleIconFile</key><string>Unbound</string>
     <key>LSMinimumSystemVersion</key><string>11.0</string>
     <key>NSHighResolutionCapable</key><true/>

@@ -5,6 +5,18 @@ Build through root CMake or `infrastructure/macos/build.sh`. Run
 short-lived Cocoa windows and isolated temporary settings; they do not manipulate
 an editing session. Resolve's installed Cocoa platform plugin is required.
 
+The default build is universal under `build/macos/lua/universal/`; arm64 and
+x86_64 development builds use their respective directories. The runner selects
+each binary slice with `arch`, so a universal executable cannot silently test
+only the host architecture. Each architecture gets its own native startup log.
+Intel execution on Apple Silicon uses Rosetta. If execution is unavailable,
+`UNBOUND_MAC_ALLOW_UNTESTED=1` explicitly allows it to be recorded as NOT RUN;
+otherwise the build fails. Any fixture failure still fails the build. The same
+rules apply to the installer UI fixture. Native Intel hardware/Resolve validation
+must be reported separately from compilation or translated fixture execution.
+`architecture_test.py` audits copies of the built Mach-O files, thins individual
+slices and verifies that universal audits reject incomplete or mixed payloads.
+
 `platformtests.mm` adapts the shared pane fixtures and checks captionless Cocoa
 keyboard focus, gestures/cancellation, programmatic geometry isolation, and the
 shared layout popout's save/update/rename/focus/dismissal behavior.

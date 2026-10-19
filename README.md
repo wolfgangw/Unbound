@@ -4,8 +4,9 @@ Unbound lets you undock DaVinci Resolve panels into independent, resizable windo
 Arrange them across your displays and restore your custom workspace between sessions.
 Unbound remembers window positions, sizes, docking and panel-toggle states.
 
-Unbound supports Windows 10/11 (x64) and macOS (Apple Silicon), with the same
-features on both platforms. Linux is not supported.
+Unbound supports Windows 10/11 (x64) and macOS, with the same features on both
+platforms. The universal Mac app includes Apple Silicon and Intel code. Linux is
+not supported.
 
 ## How to use
 
@@ -43,6 +44,12 @@ See [settings documentation](<doc/Unbound settings.md>).
 Unbound is unofficial and depends on Resolve's internal widget hierarchy and layouts.
 Tested configurations range from Resolve 20.3.3 to 21.1.1.10 on Windows 10/11,
 and include Resolve Free 21.1.1.10 on an Apple M2 with macOS 27.0.1.
+
+**Intel Mac support is untested.** The universal build includes Intel code, but
+we do not have an Intel Mac to validate it. It is offered for users willing to
+try it and [report their results](../../issues), including their Mac model,
+macOS and Resolve versions, and Unbound version. Apple Silicon remains the
+tested Mac configuration.
 
 On Windows and macOS, Unbound starts automatically through DaVinci Resolve's Lua
 startup mechanism. The installer places a small startup script in Resolve's

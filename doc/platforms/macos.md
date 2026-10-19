@@ -10,6 +10,12 @@ controls. Remaining signing/notarization work concerns distribution, not feature
 Tested configuration: Apple M2, macOS 27.0.1, DaVinci Resolve Free 21.1.1.10,
 Qt 5.15.2.
 
+The universal app contains arm64 and x86_64 slices built from the same sources.
+Intel Mac support is offered for community testing: no Intel hardware is available
+to the project, and native Intel operation has not been validated. Reports should
+include Mac model, macOS, Resolve and Unbound versions. Building an Intel slice
+does not establish that it works inside Intel Resolve.
+
 | Area | Status |
 | --- | --- |
 | Lua startup loading | Working in Free Resolve |
@@ -48,7 +54,8 @@ requires a normal Resolve restart.
 
 ## Development and installation
 
-Requires an arm64 Mac, Xcode command-line tools, CMake, Git and Resolve. Prepare
+Requires a Mac, Xcode command-line tools, CMake, Git and a Resolve installation
+whose Qt, LuaJIT and Cocoa plug-in libraries contain the requested architectures. Prepare
 pinned Qt 5.15.2 headers with `infrastructure/macos/prepare-qt.sh`; no replacement
 Qt runtime is built or shipped. `UNBOUND_QT_SOURCE` and `UNBOUND_RESOLVE_APP`
 override local toolchain paths.
@@ -58,6 +65,17 @@ an immutable internal candidate under `release/mac/lua/yyyy.mm.dd.NNN/`.
 Builds do not change VERSION/tags or create ZIPs. The top-level
 `infrastructure/macos/{build,test,audit,install}.sh` commands delegate to Lua.
 See [installation and updates](../../infrastructure/macos/lua/README.md).
+
+The default build is universal. `UNBOUND_MAC_ARCHS=arm64` or `x86_64` selects a
+single architecture for development; each variant has its own build directory.
+`infrastructure/macos/build.sh --release` explicitly creates an immutable universal
+candidate under `release/mac/lua/<VERSION>/`, without changing VERSION or tagging
+or publishing. Package that candidate with the installer build script.
+Tests run each executable slice, using Rosetta for Intel on Apple Silicon when
+available. Unavailable execution is an error unless `UNBOUND_MAC_ALLOW_UNTESTED=1`
+is explicitly set; the validation log records those slices as NOT RUN. Actual
+test failures still fail the build. This exception permits the unvalidated Intel
+offering; it must not be described as successful Intel testing.
 
 A self-contained, version-named **Unbound** app provides Install/Update and Uninstall
 for the current user. Uninstall always keeps settings and layouts and offers no
@@ -76,6 +94,7 @@ Fixture output stays under `build/macos/`.
 
 ## Next steps
 
+- Collect Intel Mac installation, startup and interaction reports.
 - Complete browser-download testing;
   decide on Developer ID signing/notarization for distribution.
 - Continue regression checks for supported panes/viewers, layouts, snapping,

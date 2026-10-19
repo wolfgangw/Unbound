@@ -14,6 +14,19 @@ infrastructure/macos/lua/build.sh
 infrastructure/macos/lua/install.sh /absolute/path/to/release/mac/lua/yyyy.mm.dd.NNN
 ```
 
+Builds default to universal arm64+x86_64. Architecture-specific development uses
+`UNBOUND_MAC_ARCHS=arm64` or `x86_64`; output directories are separate. Internal
+IDs use `yyyy.mm.dd.NNN`, matching Windows, with a daily counter padded to at
+least three digits. Runtime and installer packaging counters are independent.
+
+An explicitly requested public candidate is built with
+`infrastructure/macos/build.sh --release`. Its directory and BUILD value use
+the unchanged root VERSION. `ARCHITECTURES` and `validation.log` record the
+candidate's slices and test coverage. No published directory is overwritten.
+On Apple Silicon the Intel fixture suite requires working Rosetta execution.
+`UNBOUND_MAC_ALLOW_UNTESTED=1` explicitly allows unavailable execution and records
+NOT RUN; Intel hardware validation remains outstanding even if Rosetta passes.
+
 Open Resolve normally. The installer places:
 
 - `runtime/` at `~/Library/Application Support/Unbound/Runtime/`, containing
