@@ -257,8 +257,12 @@ logs separate from live startup logs using `UNBOUND_LOG_FILE`.
 - Source and symbol artwork license is MIT. Preserve applicable third-party
   notices. GammaRay is a local inspection tool and is not shipped with Unbound.
 
-Keep README.md and doc/Unbound settings.md accurate for current behavior. This repository
-is self-contained for development apart from the installed toolchain and Resolve.
+The root README.md belongs to the user. Do not add to or modify it; the user
+typically edits it on GitHub and pulls those changes into the local repository.
+Keep technical documentation in AGENTS.md and doc/, and always communicate what
+you are adding or modifying. Keep doc/Unbound settings.md accurate for current
+behavior. This repository is self-contained for development apart from the
+installed toolchain and Resolve.
 README.md is the public GitHub landing page. AGENTS.md records durable development
 rules; platform docs summarize current status, meaningful limitations and roadmap;
 test READMEs explain reproducible validation. Keep per-run output in build logs.
