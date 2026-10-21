@@ -47,14 +47,14 @@ static void click(QWidget *widget) {
     // focus to another application and correctly dismiss the popup.
     auto window=widget->window();
     if(qobject_cast<QMenu *>(window) && window->parentWidget()) window=window->parentWidget()->window();
-    window->raise(); window->activateWindow(); settle();
+    LayoutTest::activate(*window);
     const auto point=widget->rect().center();
     QMouseEvent press(QEvent::MouseButtonPress,point,widget->mapToGlobal(point),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
     QMouseEvent release(QEvent::MouseButtonRelease,point,widget->mapToGlobal(point),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
     QApplication::sendEvent(widget,&press); QApplication::sendEvent(widget,&release); settle();
 }
 static void context(QWidget *button) {
-    button->window()->activateWindow(); settle();
+    LayoutTest::activate(*button->window());
     const auto point=button->rect().center();
     QContextMenuEvent event(QContextMenuEvent::Mouse,point,button->mapToGlobal(point));
     QApplication::sendEvent(button,&event); settle();
@@ -68,7 +68,7 @@ static void hold(QWidget *widget,bool activate=true) {
     require(widget,"Missing hold target");
     auto target=widget->window();
     if(!activate && target->parentWidget()) target=target->parentWidget()->window();
-    target->activateWindow(); settle();
+    LayoutTest::activate(*target);
     const auto point=widget->rect().center(),global=widget->mapToGlobal(point);
     QMouseEvent press(QEvent::MouseButtonPress,point,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
     QApplication::sendEvent(widget,&press);
@@ -232,7 +232,7 @@ void testIndexHeaderDrag();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
-    HostApplication app(argc,argv);
+    HostApplication app(argc,argv); if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
     LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
     testPageFocus();

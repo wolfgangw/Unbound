@@ -22,6 +22,7 @@ void testPageFocus() {
     auto editLayout=new QVBoxLayout(edit); auto editText=new QLineEdit; editLayout->addWidget(editText);
     auto audioLayout=new QVBoxLayout(audio); auto timeline=new QLineEdit; audioLayout->addWidget(timeline);
     Unbound::PaneFloatingWindow effects, viewer;
+    main.setObjectName("focusMain"); effects.setObjectName("focusEffects"); viewer.setObjectName("focusViewer");
     effects.setProperty("unboundPage",audio->objectName()); viewer.setProperty("unboundPage",edit->objectName());
     auto effectsLayout=new QVBoxLayout(&effects); auto search=new QLineEdit; effectsLayout->addWidget(search);
     auto viewerLayout=new QVBoxLayout(&viewer); auto timecode=new QLineEdit; viewerLayout->addWidget(timecode);
@@ -30,16 +31,18 @@ void testPageFocus() {
     main.show(); main.activateWindow(); editText->setFocus(); settle();
     Unbound::PageFocus memory; memory.attach(&main);
     QObject::connect(stack,&QStackedWidget::currentChanged,&main,[&] {
+        // Resolve selects main before hiding its outgoing floating windows.
+        // Hiding the active unowned fixture first can activate another app.
+        main.activateWindow();
         effects.hide(); viewer.hide();
         // Model Resolve choosing its native control and Unbound queuing reveals.
-        main.activateWindow();
         (stack->currentWidget()==audio ? timeline : editText)->setFocus();
         QTimer::singleShot(0,&main,[&] {
             if(stack->currentWidget()==audio) effects.show(); else viewer.show();
         });
     });
     auto focus=[&](QWidget &window,QWidget *control) {
-        window.activateWindow(); control->setFocus(); settle();
+        LayoutTest::activate(window); control->setFocus(); settle();
         require(QApplication::activeWindow()==&window && QApplication::focusWidget()==control,"Focus fixture activation failed");
     };
     auto change=[&](QWidget *page) { stack->setCurrentWidget(page); settle(); settle(); };

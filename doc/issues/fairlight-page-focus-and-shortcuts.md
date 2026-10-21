@@ -1,7 +1,8 @@
 # Fairlight transport focus and page shortcuts
 
 Status: focus correction implemented with native Windows regression coverage;
-live Resolve and macOS validation pending. Native shortcut collision is unchanged.
+Fairlight timeline/Media Pool transport focus confirmed live on Windows.
+macOS validation pending. Native shortcut collision is unchanged.
 
 ## Report
 
@@ -53,6 +54,17 @@ switches, newer clicks, application deactivation and modal dialogs. It runs with
 the native backend; the offscreen backend cannot model window activation.
 Live checks should cover timeline transport, Media Pool audition, explicit clicks,
 dragging, taskbar activation and manual undocking on both platforms.
+
+The native fixture must activate main before hiding the outgoing active host,
+matching the native focus handoff. Hiding an unowned active fixture first can
+activate another application: a captured ApplicationDeactivate then correctly
+cancels recall, producing a misleading viewer-restoration failure. The fixture
+retains separate assertions that genuine deactivation cancels pending recall.
+Synthetic layout clicks also require confirmed native and Qt activation before
+delivery, rather than assuming a fixed delay completed the foreground handoff.
+The single observed popup failure was not reproduced under tracing; its precise
+cause remains unconfirmed. Activation preconditions now fail explicitly, and
+independent gesture fixtures run in separate processes to avoid teardown overlap.
 
 Qt source references:
 

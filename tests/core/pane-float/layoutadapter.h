@@ -4,6 +4,8 @@
 #include <QWidget>
 #include <QEventLoop>
 #include <QTimer>
+#include <QApplication>
+#include <QElapsedTimer>
 #include <functional>
 #include <memory>
 #include <cstdio>
@@ -24,5 +26,18 @@ QRect nativeBounds(QWidget &window);
 void verifyGestureDismissal(QWidget &floating,QWidget &main,QWidget &menu,const std::function<QWidget *()> &reopen);
 void transientPopup(QWidget &menu);
 bool ownsKeyboardFocus(QWidget &window);
+inline void activate(QWidget &window) {
+    // Synthetic input does not perform an OS click's foreground handoff. Wait
+    // for that precondition, not for the behavior under test; do not retry input.
+    window.raise(); window.activateWindow();
+    if(QGuiApplication::platformName()==QLatin1String("offscreen")) { settle(); return; }
+    QElapsedTimer deadline; deadline.start();
+    do {
+        settle();
+        if(QApplication::activeWindow()==&window && ownsKeyboardFocus(window)
+            && QGuiApplication::applicationState()==Qt::ApplicationActive) return;
+    } while(deadline.elapsed()<1000);
+    require(false,"Fixture could not establish native/Qt activation before input");
+}
 }
 #endif
