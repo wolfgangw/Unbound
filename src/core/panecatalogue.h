@@ -71,7 +71,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"m_pWidgetMediaPool","Media Pool",Page::Color,"btnColorToggleMediaPool","mediaPool",Header::MediaPool,true},
         {"frameAudioPanelMediaPoolContainer","Media Pool",Page::Fairlight,"MediaPool","",Header::MediaPool,true},
         {"frameAudioPanelEffectsLibraryContainer","Effects",Page::Fairlight,"EffectsLibrary","",Header::Effects,true},
-        {"frameAudioPanelIndexContainer","Index",Page::Fairlight,"Index","",Header::Index,true},
+        {"frameAudioPanelIndexContainer","Index",Page::Fairlight,"Index","",Header::Index,true,Kind::Sidebar,"frameAudioPageIndexTabContainer"},
         {"frameAudioPanelGroupsContainer","Groups",Page::Fairlight,"Groups","",Header::Groups,true},
         {"frameAudioPanelSoundLibraryContainer","Sound Library",Page::Fairlight,"SoundLibrary","",Header::SoundLibrary,true},
         {"frameAudioPanelAdrContainer","ADR",Page::Fairlight,"Adr","",Header::Adr,true},

@@ -6,19 +6,21 @@
 #include <QVBoxLayout>
 #include <cstdio>
 
-void testIndexHeaderDrag() {
+static void testIndexHeaderDrag(bool fairlight) {
     if(QGuiApplication::platformName()==QLatin1String("offscreen")) return;
     using LayoutTest::require;
     Unbound::PaneFloatingWindow host;
     host.setGeometry(300,200,600,300);
     auto outer=new QVBoxLayout(&host);
-    auto pane=new QFrame; pane->setObjectName("frameEditPageEditIndex"); outer->addWidget(pane);
+    auto pane=new QFrame; pane->setObjectName(fairlight ? "frameAudioPanelIndexContainer" : "frameEditPageEditIndex"); outer->addWidget(pane);
     auto column=new QVBoxLayout(pane);
-    auto tabs=new QFrame; tabs->setObjectName("frameEditPageIndexTabContainer"); column->addWidget(tabs);
+    auto tabs=new QFrame; tabs->setObjectName(fairlight ? "frameAudioPageIndexTabContainer" : "frameEditPageIndexTabContainer"); column->addWidget(tabs);
     auto row=new QHBoxLayout(tabs); row->addStretch();
     int clicks=0;
     QList<QPushButton *> buttons;
-    for(const auto &name:{"Edit Index","Tracks","Markers"}) {
+    QStringList tabNames={"Edit Index","Tracks","Markers"};
+    if(fairlight) tabNames.prepend("Clips");
+    for(const auto &name:tabNames) {
         auto button=new QPushButton(name); row->addWidget(button); buttons.append(button);
         QObject::connect(button,&QPushButton::clicked,[&] { ++clicks; });
     }
@@ -46,12 +48,18 @@ void testIndexHeaderDrag() {
     gesture(tabs,true);
     gesture(header,true);
     for(auto button:buttons) gesture(button,false);
-    require(clicks==3,"Index tabs lost native click behavior");
+    require(clicks==tabNames.size(),"Index tabs lost native click behavior");
     // The same retained row must be inert as a drag surface after docking.
     QWidget docked;
     pane->setParent(&docked); pane->show(); docked.show(); LayoutTest::settle();
     gesture(tabs,false);
     pane->setParent(&host); outer->addWidget(pane); pane->show(); LayoutTest::settle();
     gesture(tabs,true);
-    std::puts("PASS: Index upper-row and action-header dragging, native tab clicks and dock/refloat lifecycle");
+    std::puts(fairlight ? "PASS: Fairlight Index tab/header dragging, native clicks and dock/refloat lifecycle"
+        : "PASS: Edit Index tab/header dragging, native clicks and dock/refloat lifecycle");
+}
+
+void testIndexHeaderDrag() {
+    testIndexHeaderDrag(false);
+    testIndexHeaderDrag(true);
 }
