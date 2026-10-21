@@ -142,9 +142,9 @@ public:
         m_background=(parent ? parent->palette() : qApp->palette()).color(QPalette::Window);
         setStyleSheet("QFrame#unboundLayoutMenu { background: transparent; border: none; }"
             "QFrame#unboundLayoutMenu QAbstractButton { color: #dddddd; background: transparent; border: none; border-radius: 3px; padding: 6px 8px; text-align: left; }"
-            "QFrame#unboundLayoutMenu QAbstractButton[activeLayout='true'] { background: #40566a; color: #ffffff; }"
             "QFrame#unboundLayoutMenu QAbstractButton:hover { background: #414141; }"
             "QFrame#unboundLayoutMenu QAbstractButton:focus { background: #414141; }"
+            "QFrame#unboundLayoutMenu QAbstractButton[activeLayout='true'] { background: #40566a; color: #ffffff; }"
             "QFrame#unboundLayoutMenu QAbstractButton:disabled { color: #777777; }"
             "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate { background: #ed4b3f; }"
             "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate:hover { background: #f65b4f; }"

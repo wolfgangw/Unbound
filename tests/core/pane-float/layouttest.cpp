@@ -10,6 +10,7 @@
 #include <QEventLoop>
 #include <QStackedWidget>
 #include <QPushButton>
+#include <QStyleOptionButton>
 #include <cstdio>
 #include <cstdlib>
 using namespace Unbound;
@@ -63,6 +64,24 @@ static QAbstractButton *control(PageLayoutMenu *menu,const QString &object,const
     for(auto button:menu->findChildren<QAbstractButton *>(object))
         if(button->isVisible() && (text.isEmpty() || button->text()==text || button->accessibleName()==text)) return button;
     return nullptr;
+}
+static void layoutHighlights(QAbstractButton *active,QAbstractButton *inactive) {
+    require(active && inactive && active->property("activeLayout").toBool()
+        && !inactive->property("activeLayout").toBool(),"Layout recall did not transfer active styling");
+    auto background=[](QAbstractButton *button,QStyle::State interaction) {
+        QStyleOptionButton option; option.initFrom(button); option.rect=button->rect();
+        option.state=QStyle::State_Enabled | QStyle::State_Active | QStyle::State_Raised | interaction;
+        QImage image(button->size(),QImage::Format_ARGB32); image.fill(Qt::transparent);
+        QPainter painter(&image);
+        button->style()->drawControl(QStyle::CE_PushButton,&option,&painter,button);
+        painter.end();
+        return image.pixelColor(button->width()/2,2);
+    };
+    for(auto state:{QStyle::State_None,QStyle::State_MouseOver,QStyle::State_HasFocus}) {
+        require(background(active,state)==QColor("#40566a"),"Active layout lost blue highlight on hover/focus");
+        if(state!=QStyle::State_None)
+            require(background(inactive,state)==QColor("#414141"),"Inactive layout lost grey hover/focus highlight");
+    }
 }
 static void hold(QWidget *widget,bool activate=true) {
     require(widget,"Missing hold target");
@@ -369,6 +388,7 @@ int main(int argc,char **argv) {
     require(main.geometry()==savedMainGeometry && !pool.toggle->isChecked(),
         "Recall did not restore main-window geometry and the native pane toggle");
     click(control(menu,"unboundLayoutRecall","Edit-1")); popup();
+    layoutHighlights(retainedEdit1,retainedEdit2);
     require(!poolButton->isChecked() && pool.content->window()==&main,"Recall did not dock the changed panel");
     require(retainedEdit1 && retainedEdit2,"Switching layouts destroyed retained menu rows");
     require(popupEvents.hides==0 && popupEvents.shows==0,"Switching layouts hid/reopened the popup");
@@ -380,6 +400,7 @@ int main(int argc,char **argv) {
     require(LayoutTest::nativeBounds(main)==initialNative,"Layout recall changed the native main-window bounds");
     click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
     require(poolButton->isChecked() && pool.content->window()->geometry()==savedGeometry,"Recall did not restore floating geometry");
+    layoutHighlights(retainedEdit2,retainedEdit1);
     click(control(menu,"unboundLayoutDelete","Delete Edit-1")); popup();
     require(!control(menu,"unboundLayoutRecall","Edit-1"),"Delete did not update the open menu");
     pool.content->window()->move(350,280); settle();
