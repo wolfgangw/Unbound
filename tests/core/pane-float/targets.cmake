@@ -7,7 +7,8 @@ endfunction()
 function(unbound_add_layout_tests backend adapter)
     add_executable(UnboundLayoutTests "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/layouttest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cataloguetest.cpp"
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pagefocustest.cpp" "${adapter}")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pagefocustest.cpp"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/indexheaderdragtest.cpp" "${adapter}")
     target_include_directories(UnboundLayoutTests PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
     unbound_link_core(UnboundLayoutTests ${backend})
 endfunction()

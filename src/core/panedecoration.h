@@ -234,6 +234,10 @@ private:
                     header = header->parentWidget();
                 m_headerDrags.append(new PaneHeaderDrag(header, this));
             }
+            const auto descriptor=PaneCatalogue::find(m_pane->objectName());
+            if(descriptor && !descriptor->additionalDragHeader.isEmpty())
+                if(auto header=m_pane->findChild<QWidget *>(descriptor->additionalDragHeader))
+                    m_headerDrags.append(new PaneHeaderDrag(header,this));
         } else if(!any && !requiresNativeHeader()) {
             m_native=false; m_buttons.clear(); m_strip=24;
             m_pane->setContentsMargins(m_margins.left(),m_margins.top()+m_strip,m_margins.right(),m_margins.bottom());

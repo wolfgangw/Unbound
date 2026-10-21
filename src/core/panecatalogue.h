@@ -42,6 +42,7 @@ struct PaneDescriptor {
     Header header;
     bool initializeBeforeRestore;
     Kind kind=Kind::Sidebar;
+    QString additionalDragHeader;
     QString settingsKey() const { return PaneCatalogue::page(page).settingsPrefix+objectName; }
     QStringList toggleNames() const {
         QStringList names;
@@ -60,7 +61,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"frameEditPageSoundLibrary","Sound Library",Page::Edit,"SoundLibrary","soundLibrary",Header::SoundLibrary,false},
         {"frameEditPageKeyframeEditor","Keyframe Editor",Page::Edit,"KeyframeEditor","keyframeEditor",Header::Keyframes,false},
         {"frameEditPageEffectsLibrary","Effects",Page::Edit,"EffectsLibrary","effects",Header::Effects,false},
-        {"frameEditPageEditIndex","Edit Index",Page::Edit,"EditIndex","editIndex",Header::Index,false},
+        {"frameEditPageEditIndex","Edit Index",Page::Edit,"EditIndex","editIndex",Header::Index,false,Kind::Sidebar,"frameEditPageIndexTabContainer"},
         {"frameEditPageInspector","Inspector",Page::Edit,"Inspector","inspector",Header::Inspector,true},
         {"frameEditPageMetadata","Metadata",Page::Edit,"Metadata","metadata",Header::Metadata,true},
         {"frameEditAudioMeter","Mixer",Page::Edit,"Mixer","mixer",Header::Mixer,true},

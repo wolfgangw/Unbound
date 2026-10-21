@@ -40,6 +40,10 @@ migration consume it directly. Edit viewers are catalogue entries with a dedicat
 shared lifecycle adapter. Specialized pane layout handling remains in shared core;
 a catalogue entry alone does not implement an unfamiliar Resolve layout.
 
+The Edit Index catalogue entry also identifies its upper tab row as a drag
+header. Its unused background uses the shared header movement handler alongside
+the lower action header; Edit Index, Tracks and Markers buttons retain native input.
+
 To add pane support, register its metadata here, implement any necessary shared
 layout behavior, and extend the shared fixtures. Platform code is needed only for
 new native window/event requirements. Preserve existing settings keys and migration

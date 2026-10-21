@@ -94,6 +94,7 @@ try {
     $env:QT_QPA_PLATFORM = 'windows'
     try {
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--index-header-drag')
         Invoke-UnboundNativeTest $test @('--audition-taskbar-native')
         Invoke-UnboundNativeTest $test @('--snap-native')
         Invoke-UnboundNativeTest $test @('--captionless-native')

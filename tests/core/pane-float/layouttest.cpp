@@ -228,10 +228,13 @@ static Panel panel(QWidget *root,QBoxLayout *layout,const QString &name,const QS
 }
 void testPaneCatalogue();
 void testPageFocus();
+void testIndexHeaderDrag();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
-    HostApplication app(argc,argv); LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
+    HostApplication app(argc,argv);
+    if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
+    LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
     testPageFocus();
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("layouts.json").toUtf8());
