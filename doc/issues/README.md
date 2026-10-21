@@ -6,6 +6,9 @@ may describe intermediate experiments rather than the current implementation.
 
 - [Floating panels after leaving Dual Screen mode](dual-screen-floating-panels.md):
   unconfirmed Resolve report; a matching lifecycle weakness reproduced in a fixture.
+- [Fairlight page focus and shortcuts](fairlight-page-focus-and-shortcuts.md):
+  returning floating windows take transport focus; a separate native Shift+7/slash
+  shortcut collision depends on the originating page.
 - [Fairlight Media Pool audition](fairlight-audition-investigation-2026-10-13.txt):
   investigation of lost audio and playback handoff while floating.
 - [Layout rename input](layout-rename-input-2026-10-17.txt):

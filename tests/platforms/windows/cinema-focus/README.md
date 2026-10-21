@@ -38,7 +38,10 @@ open. It records public Qt/Win32 focus, shortcut activation and widget metadata
 beside the DLL for 120 seconds (up to 1,500 events), then removes its filters.
 Running it again during capture writes a snapshot; after expiry it starts a new
 capture. No custom property getters, private handlers or `dumpObjectInfo` calls
-are used. Key records retain only transport arrows/J/K/L/Escape; shortcut events
-record key sequences but never entered text. The DLL remains loaded until exit.
+are used. Key records retain only transport arrows/J/K/L/Space/Escape, slash and
+Shift+2 through Shift+8 for page-switch investigations; shortcut events record
+key sequences but never entered text. Records include the current page and
+keyboard layout to distinguish native shortcut collisions from focus changes.
+The DLL remains loaded until exit.
 An optional `-DPROBE_NAME=...` gives a revised passive probe a distinct DLL name;
 this is not a way to replace the production helper in a running session.

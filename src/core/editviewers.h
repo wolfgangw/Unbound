@@ -129,7 +129,7 @@ private:
             m_drags.append(new Unbound::PaneHeaderDrag(parent->parentWidget(),this));
         }
     }
-    void toggle(Pane &pane)
+    void toggle(Pane &pane,bool automatic=false)
     {
         if(pane.host) { dock(pane); return; }
         auto content=pane.content;
@@ -149,6 +149,7 @@ private:
         if(!item) { delete placeholder; pane.placeholder=nullptr; return; }
         delete item;
         auto host=new Unbound::PaneFloatingWindow;
+        host->setProperty("unboundPage",m_page->objectName());
         host->setParent(parent,host->windowFlags());
         Unbound::inheritPaneTaskbarIdentity(host,parent->window());
         host->setObjectName("unboundFloating_"+content->objectName()); host->setWindowTitle(descriptor->label);
@@ -161,6 +162,7 @@ private:
         if(saved.isEmpty() || !host->restoreGeometry(saved))
             host->move(available.center()-QPoint(host->width()/2,host->height()/2));
         content->show(); host->show();
+        if(!automatic) host->activateWindow();
         for(auto b:pane.buttons) if(b) { b->setChecked(true); b->setToolTip("Click to dock; drag to move"); b->setAccessibleName("Dock"); }
         check(m_settings.saveFloating(content->objectName(),true));
         remember(pane);
@@ -205,12 +207,12 @@ private:
             if(m_stopping) return;
             if(m_page && m_page->isVisible()) {
                 if(m_restoreProgram && m_program.content && m_program.content->isVisible()) {
-                    m_restoreProgram=false; if(!m_program.host) toggleProgram();
+                    m_restoreProgram=false; if(!m_program.host) toggle(m_program,true);
                 }
                 // Native Single Viewer Mode may keep Source unavailable. Retain
                 // startup intent until the user enables it, without changing mode.
                 if(m_restoreSource && m_source.content && m_source.content->isVisible()) {
-                    m_restoreSource=false; if(!m_source.host) toggleSource();
+                    m_restoreSource=false; if(!m_source.host) toggle(m_source,true);
                 }
             }
             if(m_source.host && m_source.content)

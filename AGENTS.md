@@ -86,6 +86,14 @@ Installed Unbound starts automatically with DaVinci Resolve through its Lua
 startup hook; the installer does not launch Resolve.
 Activating the main window or a floating pane raises the visible, non-minimized
 group while preserving selected-window focus. Group activation is event-driven.
+Page switches recall the last focused window/control per page within the running
+session, falling back to the main window's native focus when unavailable. Focus
+is not saved in settings or layouts. Automatic pane reveals must not activate
+their windows; set WA_ShowWithoutActivating before native creation on both
+backends. Explicit manual undocking still activates the new host. Shared
+pagefocus.h ignores focus changes caused by page navigation and cancels deferred
+recall for newer input, app deactivation or superseding page changes; dialogs
+retain priority. Do not intercept transport or native page shortcuts.
 
 ## Architecture
 

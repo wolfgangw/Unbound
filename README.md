@@ -17,6 +17,9 @@ Right-click on any of the Unbound buttons to manage layouts. Each Resolve page h
 of layouts. Hold a layout name for one second to rename it. Layouts are saved and restored
 between sessions.
 
+Switching pages returns keyboard focus to the window and control you last used
+on that page, with the main window as a fallback.
+
 <img width="1230" height="628" alt="Unbound - Fairlight Page" src="https://github.com/user-attachments/assets/12c82fde-ba4e-446b-af31-ae30a119e582" />
 
 

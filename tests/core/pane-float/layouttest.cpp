@@ -227,10 +227,12 @@ static Panel panel(QWidget *root,QBoxLayout *layout,const QString &name,const QS
     return result;
 }
 void testPaneCatalogue();
+void testPageFocus();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
     HostApplication app(argc,argv); LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
+    testPageFocus();
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("layouts.json").toUtf8());
     auto mainOwner=LayoutTest::makeMainWindow();

@@ -17,6 +17,7 @@
 #include "nodescanvasbounds.h"
 #include "auditionactivationbridge.h"
 #include "paneheaderdrag.h"
+#include "panecatalogue.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -100,10 +101,7 @@ public:
             if (restoreHost && m_root && !m_root->isVisible()) {
                 m_hiddenByPage=true; // The native hide may precede page Hide.
             } else if (restoreHost && m_root && !host->isVisible()) {
-                const bool withoutActivation=host->testAttribute(Qt::WA_ShowWithoutActivating);
-                host->setAttribute(Qt::WA_ShowWithoutActivating,true);
                 host->show();
-                host->setAttribute(Qt::WA_ShowWithoutActivating,withoutActivation);
             }
         });
     }
@@ -141,6 +139,7 @@ public:
         m_root = pageRoot ? pageRoot : slot->parentWidget();
         m_layout = layout;
         auto host = new PaneFloatingWindow;
+        host->setProperty("unboundPage",PaneCatalogue::pageForRoot(m_root->objectName()));
         // Keep the Fairlight Media Pool's original Qt ownership/ancestor path
         // while its host remains an independent top-level window.
         if (slot->objectName()==QLatin1String("frameAudioPanelMediaPoolContainer"))
@@ -244,16 +243,15 @@ public:
         if (!m_savedGeometry.isEmpty()) host->restoreGeometry(m_savedGeometry);
         applyPaneDarkCaption(host, slot->window());
         if (fadeIn) {
-            host->setAttribute(Qt::WA_ShowWithoutActivating, true);
             m_returnFade->setTargetObject(host);
             host->setWindowOpacity(0.0);
         }
         host->show();
+        if(!fadeIn) host->activateWindow(); // Explicit manual undocking.
         if (preserveNativeLayout && slot->objectName()==QStringLiteral("m_pFrameNodeGraph"))
             m_nodesBounds=new NodesCanvasBounds(m_content,this);
         if (fadeIn) {
             host->repaint();
-            host->setAttribute(Qt::WA_ShowWithoutActivating, false);
             m_returnFade->start();
         }
         return QString();
@@ -336,8 +334,6 @@ protected:
                     m_hiddenByPage = false;
                     if (m_host->layout()) m_host->layout()->activate();
                     applyPaneDarkCaption(m_host, m_root->window());
-                    const bool previous = m_host->testAttribute(Qt::WA_ShowWithoutActivating);
-                    m_host->setAttribute(Qt::WA_ShowWithoutActivating, true);
                     // Returning pages reuse their windows at full opacity.
                     // Cancel any initial-restoration fade still in progress.
                     m_returnFade->stop();
@@ -348,7 +344,6 @@ protected:
                     // every returning pane finish painting before the next can
                     // appear, producing a sequential rebuild look.
                     m_host->update();
-                    m_host->setAttribute(Qt::WA_ShowWithoutActivating, previous);
                 });
             }
         }

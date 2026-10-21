@@ -20,6 +20,11 @@ The top-level `pages` object uses Resolve widget names: `WStackPage_Conform`, `W
 `WStackPage_Fusion`, and `WStackPage_Deliver` as page names. Entries appear as they are used.
 Each page can contain `mainWindow` and `panes`.
 
+Keyboard focus is remembered per page only within the running session. Returning
+to a page restores its last focused window/control when still available, otherwise
+the main window retains Resolve's native focus choice. This memory is not written
+to this file or included in saved layouts.
+
 ## Panel configuration layouts
 
 Right-click any Unbound Dock/Undock button, docked or floating, to open the

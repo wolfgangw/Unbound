@@ -26,6 +26,9 @@ public:
     {
         // Auxiliary taskbar windows must not keep Resolve alive.
         setAttribute(Qt::WA_QuitOnClose, false);
+        // Qt 5.15 copies this to QWindow only during native creation. Set it
+        // before taskbar setup calls winId(), and retain it for page returns.
+        setAttribute(Qt::WA_ShowWithoutActivating, true);
         // Snap membership belongs to the host, independent of pane identifiers.
         setProperty("unboundFloatingWindow",true);
         m_snapFrame.setInterval(PaneSnapFrameIntervalMs);

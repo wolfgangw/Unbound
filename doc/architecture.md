@@ -27,6 +27,12 @@ per-page placement tracking and snap calculations. Widget work stays on Resolve'
 Qt GUI thread. `startController()` queues initialization on the existing application
 and retains the existing idempotency guard.
 
+`pagefocus.h` keeps session-only window/control focus for each page. It restores
+an available target after queued page reveals, otherwise retaining native focus
+in the main window. Input, modal state and application activation take priority.
+Floating backends set passive-show behavior before native creation; manual
+undocking activates explicitly. Focus memory never enters settings or layouts.
+
 `panecatalogue.h` is the authoritative page/pane catalogue: Resolve object names,
 labels, discovery roots, native toggle variants, header anchors, persistence keys,
 legacy aliases and initialization policy. The controller, decoration and settings

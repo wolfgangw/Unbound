@@ -308,6 +308,7 @@ PaneFloatingWindow::PaneFloatingWindow() : QWidget(nullptr,Qt::Window | Qt::Fram
     m_interaction(new MacWindowInteraction(this,true))
 {
     setAttribute(Qt::WA_QuitOnClose,false);
+    setAttribute(Qt::WA_ShowWithoutActivating,true);
     setProperty("unboundFloatingWindow",true);
 }
 PaneFloatingWindow::~PaneFloatingWindow() = default;

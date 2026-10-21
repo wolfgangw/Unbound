@@ -10,6 +10,7 @@
 #include <QKeyEvent>
 #include <QShortcutEvent>
 #include <QShortcut>
+#include <QStackedWidget>
 #include <QMetaMethod>
 #include <QAction>
 #include <QPointer>
@@ -33,7 +34,13 @@ static QJsonObject describe(QObject *o) {
 class Trace : public QObject,public QAbstractNativeEventFilter {
     QJsonArray records; bool done=false;
     QJsonObject state() {
-        return {{"time",QDateTime::currentMSecsSinceEpoch()},{"focus",describe(QApplication::focusWidget())},
+        QString page;
+        for(auto window:QApplication::topLevelWidgets())
+            if(window->objectName()==QLatin1String("UiMainWindow"))
+                if(auto stack=window->findChild<QStackedWidget *>("widgetStack_Panel"))
+                    if(stack->currentWidget()) page=stack->currentWidget()->objectName();
+        return {{"time",QDateTime::currentMSecsSinceEpoch()},{"page",page},
+            {"keyboardLayout",id(GetKeyboardLayout(0))},{"focus",describe(QApplication::focusWidget())},
             {"active",describe(QApplication::activeWindow())},{"focusObject",describe(QGuiApplication::focusObject())},
             {"keyGrabber",describe(QWidget::keyboardGrabber())},{"foreground",id(GetForegroundWindow())},
             {"nativeFocus",id(GetFocus())},{"nativeActive",id(GetActiveWindow())}};
@@ -85,14 +92,20 @@ public:
             }
         }
         if(key) {auto k=static_cast<QKeyEvent *>(e); const auto code=k->key();
-            r.insert("key",(code==Qt::Key_J || code==Qt::Key_K || code==Qt::Key_L || code==Qt::Key_Left || code==Qt::Key_Right || code==Qt::Key_Escape) ? code : 0);}
+            const bool pageKey=(k->modifiers() & Qt::ShiftModifier) && code>=Qt::Key_2 && code<=Qt::Key_8;
+            r.insert("modifiers",int(k->modifiers()));
+            r.insert("key",(pageKey || code==Qt::Key_Space || code==Qt::Key_Slash || code==Qt::Key_J || code==Qt::Key_K || code==Qt::Key_L || code==Qt::Key_Left || code==Qt::Key_Right || code==Qt::Key_Escape) ? code : 0);}
         add(r); return false;
     }
     bool nativeEventFilter(const QByteArray &,void *event,long *) override {
         auto m=static_cast<MSG *>(event);
         if(m->message!=WM_KEYDOWN && m->message!=WM_KEYUP && m->message!=WM_SETFOCUS && m->message!=WM_KILLFOCUS && m->message!=WM_ACTIVATE) return false;
         auto r=state(); r.insert("kind","native"); r.insert("message",int(m->message)); r.insert("target",id(m->hwnd));
-        if(m->message==WM_KEYDOWN || m->message==WM_KEYUP) r.insert("key",(m->wParam=='J' || m->wParam=='K' || m->wParam=='L' || m->wParam==VK_LEFT || m->wParam==VK_RIGHT || m->wParam==VK_ESCAPE) ? int(m->wParam) : 0);
+        if(m->message==WM_KEYDOWN || m->message==WM_KEYUP) {
+            const bool shift=GetKeyState(VK_SHIFT)<0;
+            r.insert("shift",shift);
+            r.insert("key",((shift && m->wParam>='2' && m->wParam<='8') || m->wParam==VK_SPACE || m->wParam=='J' || m->wParam=='K' || m->wParam=='L' || m->wParam==VK_LEFT || m->wParam==VK_RIGHT || m->wParam==VK_ESCAPE) ? int(m->wParam) : 0);
+        }
         add(r); return false;
     }
 };

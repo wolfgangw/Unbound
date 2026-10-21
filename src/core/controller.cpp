@@ -15,6 +15,7 @@
 #include "panedecoration.h"
 #include "editviewers.h"
 #include "pagelayoutmenu.h"
+#include "pagefocus.h"
 
 namespace {
 namespace Catalogue = Unbound::PaneCatalogue;
@@ -63,6 +64,7 @@ public:
         m_mainPlacement.error = {};
         m_mainSnap.setWindow(nullptr);
         m_windowGroup.setWindow(nullptr);
+        m_pageFocus.attach(nullptr);
         qDeleteAll(m_decorations);
         qDeleteAll(m_sessions);
     }
@@ -290,6 +292,7 @@ private:
             m_mainSnap.setWindow(root);
             m_windowGroup.setWindow(root);
             m_mainPlacement.attach(root);
+            m_pageFocus.attach(root);
         }
         if (!m_window || (root!=m_window && !m_window->isAncestorOf(root))) return;
         indexWidget(root);
@@ -299,7 +302,9 @@ private:
     {
         if (!m_window || (widget!=m_window && !m_window->isAncestorOf(widget))) return;
         m_mainPlacement.observeWidget(widget);
-        if (widget->objectName()==QLatin1String("widgetStack_Panel")) m_mainPlacement.attach(m_window);
+        if (widget->objectName()==QLatin1String("widgetStack_Panel")) {
+            m_mainPlacement.attach(m_window); m_pageFocus.attach(m_window);
+        }
         const auto name=widget->objectName();
         if (!Catalogue::pageForRoot(name).isEmpty() && !m_pages.contains(widget)) {
             m_pages.insert(widget);
@@ -576,6 +581,7 @@ private:
     Unbound::MainWindowPlacement m_mainPlacement{m_settings};
     Unbound::MainWindowSnap m_mainSnap;
     Unbound::WindowGroupActivation m_windowGroup;
+    Unbound::PageFocus m_pageFocus;
     bool m_settingsErrorShown = false;
     QString m_lastSettingsError;
     bool m_restoringToggles = false;
