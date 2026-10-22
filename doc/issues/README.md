@@ -15,6 +15,9 @@ may describe intermediate experiments rather than the current implementation.
   shortcut collision depends on the originating page.
 - [Fairlight Media Pool audition](fairlight-audition-investigation-2026-10-13.txt):
   investigation of lost audio and playback handoff while floating.
+- [Sound Library shortcuts](sound-library-shortcuts.txt):
+  Edit audition commands route to timeline despite correct floating focus;
+  Edit activation fix validated on Windows; Fairlight silent audition unresolved.
 - [Layout rename input](layout-rename-input-2026-10-17.txt):
   keyboard routing during inline name editing.
 - [Corner resize crash](resize-corner-crash-2026-10-17.txt):

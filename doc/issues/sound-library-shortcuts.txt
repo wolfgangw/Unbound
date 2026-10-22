@@ -1,0 +1,56 @@
+Sound Library (Edit, Fairlight): work in progress
+================================================
+
+Related: https://github.com/wolfgangw/Unbound/issues/2
+
+Status: Edit fix implemented and user reports normal operation with the internal
+Windows build. Fairlight Sound Library remains unresolved. macOS validation pending.
+
+When docked, clicking Sound Library selects its audition player for J/K/L, Space
+and I/O. When floating, those shortcuts instead affect the timeline. Passive
+tracing establishes that Qt focus is correctly in the Sound Library results list.
+Clicking a result activates `m_PlayerPreview`, but the next L shortcut deactivates
+that player and activates `widgetEditTimelinePlayer` without moving keyboard focus.
+This is command-context routing, not failure to deliver keys or focus the control.
+
+The existing Fairlight audition activation approach was tested with the Edit
+Sound Library host. On genuine host activation, it sends one WindowActivate
+notification through Resolve's application notify path to main, consuming that
+exact event before QWidget activation propagates. Genuine focus then selects the
+audition player. It neither forwards keys nor forces focus nor accesses private
+memory. The diagnostic preserved Qt focus and active-window identity on every
+recorded correction, and shortcuts no longer switched the player to the timeline.
+
+The user reported correct transport/I/O behavior, intuitive Up/Down result
+navigation, timeline handoff and docked operation. Logs confirm player activation
+and shortcut delivery; visible in/out changes and clip navigation are user checks.
+
+Production reuses `AuditionActivationBridge` with the exact expected host name.
+`SidebarFloatSession` binds it before showing the Edit Sound Library host, using
+`m_PlayerPreview` and the Edit pane root `frameEditPageWidgetsContainer`. Fairlight
+Media Pool keeps its existing `previewPlayer` binding and audition-header drag.
+The shared lifecycle fixture covers both bindings, manual/startup detachment,
+native-slot hiding, page return, nested docking and teardown. Other Sound Library
+pages are not enabled by inference; they require their own validation.
+
+The isolated diagnostic under `tests/platforms/windows/sound-library-focus/`
+supports passive and bridge comparisons in an existing session. The temporary
+bridge was disabled before production testing. Internal Windows build
+2026.10.22.001 passed the standard build/test/dependency checks; the user then
+reported that Edit behaves normally. No settings or shortcut mappings need changing.
+
+Fairlight: next investigation
+----------------------------
+The user reports different symptoms on Fairlight. Clicking Play in its floating
+Sound Library starts audition transport but produces no audio. The full symptom
+set has not yet been captured. This resembles the earlier Fairlight Media Pool
+problem, but an identical cause is not established. The new Sound Library binding
+is deliberately Edit-only; existing Fairlight Media Pool behavior is unchanged.
+
+Next: compare docked/floating Fairlight Sound Library player activation, transport,
+audio and Control Room meters. Test a narrowly bound activation bridge first.
+If insufficient, inspect native widget ancestry, which also mattered for Fairlight
+Media Pool. Do not blindly extend the fix or intercept transport shortcuts.
+Include J/K/L, Space, I/O, Up/Down selection, search editing, timeline handoff,
+page return and docking/refloating in validation. Current diagnostic targets Edit;
+adapt it with a distinct DLL identity for Fairlight if the old DLL is still loaded.

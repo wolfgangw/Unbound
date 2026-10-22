@@ -235,14 +235,18 @@ public:
                 host->layout()->activate();
             }
         }
-        if (slot->objectName() == QLatin1String("frameAudioPanelMediaPoolContainer")
-            && m_root->objectName() == QLatin1String("WStackPage_Audio")
+        const bool fairlightAudition = slot->objectName() == QLatin1String("frameAudioPanelMediaPoolContainer")
+            && m_root->objectName() == QLatin1String("WStackPage_Audio");
+        const bool soundLibraryAudition = slot->objectName() == QLatin1String("frameEditPageSoundLibrary")
+            && m_root->objectName() == QLatin1String("frameEditPageWidgetsContainer");
+        if ((fairlightAudition || soundLibraryAudition)
             && slot->window()->objectName() == QLatin1String("UiMainWindow")) {
             // One targeted lookup inside this pane per detach, before its first
             // activation (also for startup restoration). No recurring discovery.
-            if (auto preview = host->findChild<QWidget *>(QStringLiteral("previewPlayer"))) {
-                m_auditionBridge = new AuditionActivationBridge(slot->window(), m_root, preview, this);
-                if (auto header = preview->findChild<QWidget *>(QStringLiteral("framePlayerTime"), Qt::FindDirectChildrenOnly))
+            if (auto preview = host->findChild<QWidget *>(soundLibraryAudition
+                    ? QStringLiteral("m_PlayerPreview") : QStringLiteral("previewPlayer"))) {
+                m_auditionBridge = new AuditionActivationBridge(slot->window(), m_root, preview, this, host->objectName());
+                if (auto header = fairlightAudition ? preview->findChild<QWidget *>(QStringLiteral("framePlayerTime"), Qt::FindDirectChildrenOnly) : nullptr)
                     m_auditionHeaderDrag = new PaneHeaderDrag(header, this);
             }
         }

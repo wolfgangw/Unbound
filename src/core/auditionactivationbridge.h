@@ -13,8 +13,9 @@ namespace Unbound {
 class AuditionActivationBridge : public QObject
 {
 public:
-    AuditionActivationBridge(QWidget *main, QWidget *page, QWidget *preview, QObject *parent = nullptr)
-        : QObject(parent), m_main(main), m_page(page), m_preview(preview)
+    AuditionActivationBridge(QWidget *main, QWidget *page, QWidget *preview, QObject *parent = nullptr,
+        QString hostName = QStringLiteral("unboundFloating_frameAudioPanelMediaPoolContainer"))
+        : QObject(parent), m_main(main), m_page(page), m_preview(preview), m_hostName(std::move(hostName))
     {
         if (!main || !page || !preview || !main->isWindow() || page->window() != main) return;
         m_enabled = true;
@@ -38,7 +39,7 @@ protected:
         if (!m_main || !m_page || !m_preview || !m_page->isVisible() || !m_preview->isVisible()) return false;
         auto host = m_preview->window();
         if (object != host || host == m_main || !host->isWindow() || host->isMinimized()
-            || host->objectName() != QLatin1String("unboundFloating_frameAudioPanelMediaPoolContainer")
+            || host->objectName() != m_hostName
             || QApplication::activeWindow() != host || QApplication::activeModalWidget()
             || QApplication::activePopupWidget()) return false;
 
@@ -55,6 +56,7 @@ protected:
     }
 private:
     QPointer<QWidget> m_main, m_page, m_preview;
+    QString m_hostName;
     QEvent *m_synthetic = nullptr;
     bool m_enabled = false;
 };

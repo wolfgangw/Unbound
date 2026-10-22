@@ -121,10 +121,11 @@ int main(int argc,char **argv)
 
     // Exercise the production session, including attachment BEFORE its show,
     // startup restoration, retained page hosts and teardown before redocking.
-    main.setObjectName("UiMainWindow");page.setObjectName("WStackPage_Audio");
-    QWidget sessionSlot(&page);sessionSlot.setObjectName("frameAudioPanelMediaPoolContainer");
+    for(bool soundLibrary : {false,true}) {
+    main.setObjectName("UiMainWindow");page.setObjectName(soundLibrary ? "frameEditPageWidgetsContainer" : "WStackPage_Audio");
+    QWidget sessionSlot(&page);sessionSlot.setObjectName(soundLibrary ? "frameEditPageSoundLibrary" : "frameAudioPanelMediaPoolContainer");
     auto layout=new QVBoxLayout(&sessionSlot);
-    auto sessionPreview=new Target(&sessionSlot);sessionPreview->setObjectName("previewPlayer");
+    auto sessionPreview=new Target(&sessionSlot);sessionPreview->setObjectName(soundLibrary ? "m_PlayerPreview" : "previewPlayer");
     auto sessionPlay=new Target(sessionPreview);sessionPlay->setFocusPolicy(Qt::StrongFocus);
     layout->addWidget(sessionPreview);sessionSlot.show();sessionPreview->show();sessionPlay->show();
     app.preview=sessionPreview;
@@ -166,13 +167,14 @@ int main(int argc,char **argv)
     }
     check(sessionPreview->window()==&main,"Session destruction restores audition content");
     app.preview=nullptr;app.host=nullptr;
-    auto deletedSlot=new QWidget(&page);deletedSlot->setObjectName("frameAudioPanelMediaPoolContainer");
+    auto deletedSlot=new QWidget(&page);deletedSlot->setObjectName(soundLibrary ? "frameEditPageSoundLibrary" : "frameAudioPanelMediaPoolContainer");
     auto deletedLayout=new QVBoxLayout(deletedSlot);
-    auto deletedPreview=new QWidget(deletedSlot);deletedPreview->setObjectName("previewPlayer");deletedLayout->addWidget(deletedPreview);
+    auto deletedPreview=new QWidget(deletedSlot);deletedPreview->setObjectName(soundLibrary ? "m_PlayerPreview" : "previewPlayer");deletedLayout->addWidget(deletedPreview);
     deletedSlot->show();
     check(session.start(deletedSlot,"Media Pool",&page).isEmpty(),"Deleted slot test detach failed");
     delete deletedSlot;app.processEvents();
     check(!session.active(),"Deleting native slot clears session and bridge");
 
+    }
     std::puts("PASS: public-event-only correction, activation-before-focus order, no work on clicks, no propagated activation, exclusions, stop, new-host lifecycle and production session restoration/teardown");
 }
