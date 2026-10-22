@@ -6,16 +6,18 @@
 #include <QVBoxLayout>
 #include <cstdio>
 
-static void testIndexHeaderDrag(bool fairlight) {
+static void testIndexHeaderDrag(bool fairlight, bool effects=false) {
     if(QGuiApplication::platformName()==QLatin1String("offscreen")) return;
     using LayoutTest::require;
     Unbound::PaneFloatingWindow host;
     host.setGeometry(300,200,600,300);
     auto outer=new QVBoxLayout(&host);
-    auto pane=new QFrame; pane->setObjectName(fairlight ? "frameAudioPanelIndexContainer" : "frameEditPageEditIndex"); outer->addWidget(pane);
+    auto pane=new QFrame; pane->setObjectName(effects ? "m_pFrameOFXPlugin" : fairlight ? "frameAudioPanelIndexContainer" : "frameEditPageEditIndex"); outer->addWidget(pane);
     auto column=new QVBoxLayout(pane);
-    auto tabs=new QFrame; tabs->setObjectName(fairlight ? "frameAudioPageIndexTabContainer" : "frameEditPageIndexTabContainer"); column->addWidget(tabs);
+    auto tabs=new QFrame; tabs->setObjectName(effects ? "frameOFXTitle" : fairlight ? "frameAudioPageIndexTabContainer" : "frameEditPageIndexTabContainer"); column->addWidget(tabs);
     auto row=new QHBoxLayout(tabs); row->addStretch();
+    QLabel *title=nullptr;
+    if(effects) { title=new QLabel("Effects"); row->addWidget(title); }
     int clicks=0;
     QList<QPushButton *> buttons;
     QStringList tabNames={"Edit Index","Tracks","Markers"};
@@ -25,9 +27,10 @@ static void testIndexHeaderDrag(bool fairlight) {
         QObject::connect(button,&QPushButton::clicked,[&] { ++clicks; });
     }
     row->addStretch();
-    auto header=new QFrame; header->setObjectName("frameEDLTopBar"); column->addWidget(header);
+    auto header=new QFrame; header->setObjectName(effects ? "frameTopRight" : "frameEDLTopBar");
+    if(effects) row->addWidget(header); else column->addWidget(header);
     auto actions=new QHBoxLayout(header); actions->addStretch();
-    auto options=new QToolButton; options->setObjectName("btnEdlOptions"); actions->addWidget(options);
+    auto options=new QToolButton; options->setObjectName(effects ? "btnOFXPoolOptions" : "btnEdlOptions"); actions->addWidget(options);
     column->addStretch();
     Unbound::PaneDecoration decoration(pane,&host,[] {});
     decoration.setFloating(true);
@@ -47,6 +50,8 @@ static void testIndexHeaderDrag(bool fairlight) {
     };
     gesture(tabs,true);
     gesture(header,true);
+    if(title) gesture(title,true);
+    gesture(options,false);
     for(auto button:buttons) gesture(button,false);
     require(clicks==tabNames.size(),"Index tabs lost native click behavior");
     // The same retained row must be inert as a drag surface after docking.
@@ -55,11 +60,13 @@ static void testIndexHeaderDrag(bool fairlight) {
     gesture(tabs,false);
     pane->setParent(&host); outer->addWidget(pane); pane->show(); LayoutTest::settle();
     gesture(tabs,true);
-    std::puts(fairlight ? "PASS: Fairlight Index tab/header dragging, native clicks and dock/refloat lifecycle"
+    std::puts(effects ? "PASS: Color Effects full title/header dragging, excluded native controls and dock/refloat lifecycle"
+        : fairlight ? "PASS: Fairlight Index tab/header dragging, native clicks and dock/refloat lifecycle"
         : "PASS: Edit Index tab/header dragging, native clicks and dock/refloat lifecycle");
 }
 
 void testIndexHeaderDrag() {
     testIndexHeaderDrag(false);
     testIndexHeaderDrag(true);
+    testIndexHeaderDrag(false,true);
 }

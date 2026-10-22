@@ -12,7 +12,7 @@ signing/notarization. These distribution limitations do not imply missing featur
 See `doc/platforms/` for tested configurations and platform validation details.
 Edit supports Media Pool, Effects, Sound Library, Keyframe Editor,
 Edit Index, Inspector, Metadata and Mixer; Color supports Nodes, Gallery, LUTs
-and Media Pool. Floating windows and the main window snap to one another and
+Media Pool and Effects. Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
 Window edges also align across gaps. The smallest edge adjustment wins; equal
 adjustments prefer the nearer window. Work-area edge snapping stays local.

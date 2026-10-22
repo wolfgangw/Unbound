@@ -76,11 +76,11 @@ int main(int argc, char **argv)
         const QStringList names = {"frameEditPageMediaPool", "frameEditPageEffectsLibrary",
             "frameEditPageSoundLibrary", "frameEditPageKeyframeEditor", "frameEditPageEditIndex",
             "frameEditPageInspector", "frameEditPageMetadata", "frameEditAudioMeter",
-            "m_pFrameNodeGraph", "m_pWidgetGallery", "m_pWidgetLutBrowser", "m_pWidgetMediaPool"};
+            "m_pFrameNodeGraph", "m_pWidgetGallery", "m_pWidgetLutBrowser", "m_pWidgetMediaPool", "m_pFrameOFXPlugin"};
         const QStringList toggles = {"btnEditToggleMediaPoolInSSM", "btnEditToggleEffectsLibraryInSSM",
             "btnEditToggleSoundLibraryInSSM", "btnEditToggleKeyframeEditorInSSM", "btnEditToggleEditIndexInSSM",
             "btnEditToggleInspectorInSSM", "btnEditToggleMetadataInSSM", "btnEditToggleMixerInSSM",
-            "btnColorToggleNodeGraph", "btnColorToggleGallery", "btnColorToggleLutsBrowser", "btnColorToggleMediaPool"};
+            "btnColorToggleNodeGraph", "btnColorToggleGallery", "btnColorToggleLutsBrowser", "btnColorToggleMediaPool", "btnColorToggleOpenFX"};
         QVector<QWidget *> paneSlots;
         QVector<QPushButton *> controls, selectors;
         QVector<QLayout *> layouts;
@@ -246,7 +246,30 @@ int main(int argc, char **argv)
             decoration.setFloating(false); app.processEvents();
             check(decoration.usesNativeHeader() && lazy.contentsMargins()==QMargins(),"Late native header did not replace fallback strip");
         }
-        std::puts("PASS: native header icon placement, no extra strip, menu signals, detach/dock, cleanup and lazy-header fallback upgrade");
+        {
+            QWidget color; color.setObjectName("WStackPage_Color");
+            QWidget slot(&color); slot.setObjectName("m_pFrameOFXPlugin");
+            auto grid=new QGridLayout(&slot);
+            auto content=new QWidget(&slot); auto body=new QVBoxLayout(content); grid->addWidget(content,0,0);
+            auto title=new QWidget(content); title->setObjectName("frameOFXTitle"); body->addWidget(title);
+            auto right=new QWidget(title); right->setObjectName("frameTopRight");
+            auto titleRow=new QHBoxLayout(title); titleRow->addWidget(right);
+            auto row=new QHBoxLayout(right);
+            auto menu=new QToolButton(right); menu->setObjectName("btnOFXPoolOptions"); row->addWidget(menu);
+            color.resize(600,400); slot.resize(400,300); color.show(); slot.show(); app.processEvents();
+            Unbound::SidebarFloatSession effects;
+            Unbound::PaneDecoration decoration(&slot,nullptr,[&] {
+                if(effects.active()) check(effects.dock().isEmpty(),"Color Effects docking failed");
+                else check(effects.start(&slot,"Effects",&color,false,false,true).isEmpty(),"Color Effects detach failed");
+            });
+            auto button=decoration.button();
+            check(decoration.usesNativeHeader() && row->indexOf(button)+1==row->indexOf(menu),"Color Effects native anchor not recognized");
+            button->click(); app.processEvents();
+            check(content->window()==effects.floatingWindow() && slot.layout()==grid,"Color Effects must retain native grid and float whole inspector");
+            button->click(); app.processEvents();
+            check(content->parentWidget()==&slot && grid->indexOf(content)==0,"Color Effects content not restored to native slot");
+        }
+        std::puts("PASS: native header icon placement, Color Effects grid/content lifecycle, menu signals, detach/dock, cleanup and lazy-header fallback upgrade");
         return 0;
     }
     if (app.arguments().contains("--settings-json-test")) {

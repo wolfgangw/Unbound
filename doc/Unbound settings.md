@@ -167,7 +167,8 @@ Single/Dual Viewer switching continues through Resolve's Program header button;
 the timeline reclaims viewer space when Program floats and no visible viewer
 remains docked. Viewer state has no experiment switch or additional control panel.
 Color pane keys are `m_pFrameNodeGraph`, `m_pWidgetGallery`, `m_pWidgetLutBrowser`,
-and `m_pWidgetMediaPool`. Color's shared sidebar selectors are exclusive;
+`m_pWidgetMediaPool`, and `m_pFrameOFXPlugin` (Effects, including Library and Settings).
+Effects uses its independent native OpenFX toggle. Color's shared sidebar selectors are exclusive;
 save at most one of Gallery/LUTs/Media Pool as checked. All can be unchecked.
 
 Fairlight pane keys under `pages.WStackPage_Audio.panes` are

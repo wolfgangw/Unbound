@@ -281,7 +281,9 @@ private:
                 if ((header->objectName()==QLatin1String("frameOptions")
                         && header->parentWidget()->objectName()==QLatin1String("frameMixerMeterTitle"))
                     || (header->objectName()==QLatin1String("rightFrame")
-                        && header->parentWidget()->objectName()==QLatin1String("m_NGHeaderFrame")))
+                        && header->parentWidget()->objectName()==QLatin1String("m_NGHeaderFrame"))
+                    || (header->objectName()==QLatin1String("frameTopRight")
+                        && header->parentWidget()->objectName()==QLatin1String("frameOFXTitle")))
                     header = header->parentWidget();
                 m_headerDrags.append(new PaneHeaderDrag(header, this));
             }

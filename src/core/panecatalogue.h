@@ -69,6 +69,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"m_pWidgetGallery","Gallery",Page::Color,"btnColorToggleGallery","gallery",Header::Gallery,true},
         {"m_pWidgetLutBrowser","LUTs",Page::Color,"btnColorToggleLutsBrowser","luts",Header::Luts,true},
         {"m_pWidgetMediaPool","Media Pool",Page::Color,"btnColorToggleMediaPool","mediaPool",Header::MediaPool,true},
+        {"m_pFrameOFXPlugin","Effects",Page::Color,"btnColorToggleOpenFX","",Header::Effects,true},
         {"frameAudioPanelMediaPoolContainer","Media Pool",Page::Fairlight,"MediaPool","",Header::MediaPool,true},
         {"frameAudioPanelEffectsLibraryContainer","Effects",Page::Fairlight,"EffectsLibrary","",Header::Effects,true},
         {"frameAudioPanelIndexContainer","Index",Page::Fairlight,"Index","",Header::Index,true,Kind::Sidebar,"frameAudioPageIndexTabContainer"},
@@ -106,7 +107,8 @@ inline bool matchesHeader(Header header,const QString &name,const QString &paren
     case Header::MediaPool: return name=="btnMediaPoolOptions" && parent=="frameMediaPoolTitleBarTop";
     case Header::Inspector: return name=="btnTitleOptions" && parent=="frameEffectsWidgetsTitle";
     case Header::Mixer: return name=="btnAudioMixerOptions" && (parent=="frameOptions" || parent=="frameHeaderContainer");
-    case Header::Effects: return name=="btnOptions" && parent=="frameEffectTopBar";
+    case Header::Effects: return (name=="btnOptions" && parent=="frameEffectTopBar")
+        || (name=="btnOFXPoolOptions" && parent=="frameTopRight" && grandparent=="frameOFXTitle");
     case Header::SoundLibrary: return name=="m_BtnDisplayOptions" && parent=="frameMenu";
     case Header::Keyframes: return name=="btnCurveSettingsOptions" && parent=="keyframeToolbarButtons";
     case Header::Index: return (name=="btnEdlOptions" && parent=="frameEDLTopBar")
