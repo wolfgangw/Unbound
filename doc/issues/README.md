@@ -6,6 +6,10 @@ may describe intermediate experiments rather than the current implementation.
 
 - [Floating panels after leaving Dual Screen mode](dual-screen-floating-panels.md):
   unconfirmed Resolve report; a matching lifecycle weakness reproduced in a fixture.
+- [Edit Media Pool collapsed to one pixel](edit-media-pool-collapsed-width.md):
+  native failure when entering optimized vertical-video layouts with Media Pool
+  hidden; project-resolution changes also reproduce disappearance on docking.
+  Native recovery and Unbound's defensive docking safeguard are validated in Resolve.
 - [Fairlight page focus and shortcuts](fairlight-page-focus-and-shortcuts.md):
   returning floating windows take transport focus; a separate native Shift+7/slash
   shortcut collision depends on the originating page.
