@@ -5,7 +5,9 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QKeyEvent>
+#include <QLayout>
 #include <QMetaMethod>
 #include <QShortcutEvent>
 #include <QThread>
@@ -26,12 +28,32 @@ public:
         const auto widgets=QApplication::allWidgets();
         for(auto w:widgets) {
             if(w->objectName()=="UiMainWindow") main=w;
+#ifdef UNBOUND_FAIRLIGHT_SOUND_LIBRARY
+            if(w->objectName()=="WStackPage_Audio") page=w;
+            if(w->objectName()=="soundLibraryWidget") library=w;
+#else
             if(w->objectName()=="WStackPage_Conform") page=w;
             if(w->objectName()=="widgetEditSoundLibrary") library=w;
+#endif
         }
         auto preview=library ? library->findChild<QWidget *>("m_PlayerPreview") : nullptr;
         log("start",{{"bridgeRequested",bridge},{"main",identity(main)},
             {"page",identity(page)},{"library",identity(library)},{"preview",identity(preview)}});
+        // Bounded, explicit-start snapshot for docked/floating presentation comparison.
+        if(library) {
+            auto related=library->findChildren<QWidget *>();
+            related.prepend(library);
+            for(auto parent=library->parentWidget();parent;parent=parent->parentWidget()) related.prepend(parent);
+            for(auto w:related) {
+                const auto r=w->geometry();
+                log("widget",{{"object",identity(w)},{"parent",identity(w->parentWidget())},
+                    {"geometry",QJsonArray{r.x(),r.y(),r.width(),r.height()}},
+                    {"minimum",QJsonArray{w->minimumWidth(),w->minimumHeight()}},
+                    {"maximum",QJsonArray{w->maximumWidth(),w->maximumHeight()}},
+                    {"visible",w->isVisible()},{"hidden",w->isHidden()},
+                    {"layout",identity(w->layout())}});
+            }
+        }
         for(auto w:widgets) if(w->inherits("UiPlayerWidgetImp")) {
             for(const auto signature:{"IsActiveChanged(bool)","TransportControlTriggered(TransportControlMode,bool)"}) {
                 const int signal=w->metaObject()->indexOfSignal(signature);

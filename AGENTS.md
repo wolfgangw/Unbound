@@ -65,6 +65,13 @@ Metadata and Inspector; Meters is excluded. Fairlight docking controls must sit
 immediately left of the native options action (Create Group for Groups), never
 in a fallback strip. Fairlight settings belong to `WStackPage_Audio`.
 
+Edit and Fairlight Sound Library audition players use the shared activation bridge
+also used by Fairlight Media Pool. Bind only the recognized host/page/player before
+first show. On genuine host activation, one main-window activation notification
+restores Resolve's command context; consume that exact event before QWidget
+propagation and let genuine focus select the player. Do not forward transport keys,
+force focus or alter waveform drawing. Sound Library hosts need no Qt parent change.
+
 The overlapping-squares header button toggles docking on click and moves an
 already-floating pane on drag. Floating windows have no Windows title bar. They
 can also be moved by dragging plain title text or unused native header background;

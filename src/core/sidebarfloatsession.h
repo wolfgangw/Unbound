@@ -237,8 +237,11 @@ public:
         }
         const bool fairlightAudition = slot->objectName() == QLatin1String("frameAudioPanelMediaPoolContainer")
             && m_root->objectName() == QLatin1String("WStackPage_Audio");
-        const bool soundLibraryAudition = slot->objectName() == QLatin1String("frameEditPageSoundLibrary")
-            && m_root->objectName() == QLatin1String("frameEditPageWidgetsContainer");
+        const bool soundLibraryAudition =
+            (slot->objectName() == QLatin1String("frameEditPageSoundLibrary")
+                && m_root->objectName() == QLatin1String("frameEditPageWidgetsContainer"))
+            || (slot->objectName() == QLatin1String("frameAudioPanelSoundLibraryContainer")
+                && m_root->objectName() == QLatin1String("WStackPage_Audio"));
         if ((fairlightAudition || soundLibraryAudition)
             && slot->window()->objectName() == QLatin1String("UiMainWindow")) {
             // One targeted lookup inside this pane per detach, before its first

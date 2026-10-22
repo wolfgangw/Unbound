@@ -121,9 +121,12 @@ int main(int argc,char **argv)
 
     // Exercise the production session, including attachment BEFORE its show,
     // startup restoration, retained page hosts and teardown before redocking.
-    for(bool soundLibrary : {false,true}) {
-    main.setObjectName("UiMainWindow");page.setObjectName(soundLibrary ? "frameEditPageWidgetsContainer" : "WStackPage_Audio");
-    QWidget sessionSlot(&page);sessionSlot.setObjectName(soundLibrary ? "frameEditPageSoundLibrary" : "frameAudioPanelMediaPoolContainer");
+    for(const auto slotName : {"frameAudioPanelMediaPoolContainer", "frameEditPageSoundLibrary",
+                              "frameAudioPanelSoundLibraryContainer"}) {
+    const bool soundLibrary=QString::fromLatin1(slotName).contains("SoundLibrary");
+    const bool edit=QString::fromLatin1(slotName)=="frameEditPageSoundLibrary";
+    main.setObjectName("UiMainWindow");page.setObjectName(edit ? "frameEditPageWidgetsContainer" : "WStackPage_Audio");
+    QWidget sessionSlot(&page);sessionSlot.setObjectName(slotName);
     auto layout=new QVBoxLayout(&sessionSlot);
     auto sessionPreview=new Target(&sessionSlot);sessionPreview->setObjectName(soundLibrary ? "m_PlayerPreview" : "previewPlayer");
     auto sessionPlay=new Target(sessionPreview);sessionPlay->setFocusPolicy(Qt::StrongFocus);
@@ -134,6 +137,8 @@ int main(int argc,char **argv)
         QApplication::setActiveWindow(&main);
         check(session.start(&sessionSlot,"Media Pool",&page,false,automatic).isEmpty(),"Production detach failed");
         auto floating=session.floatingWindow();app.host=floating;
+        check(floating->parentWidget()==(soundLibrary ? nullptr : &sessionSlot),
+            "Sound Library correction does not require changing host ownership");
         QApplication::setActiveWindow(&main);const int startCount=app.mainNotifications;
         QApplication::setActiveWindow(floating);app.processEvents();
         check(app.mainNotifications==startCount+1 && app.scope==5,"Session attaches bridge for manual/startup detach");
@@ -167,7 +172,7 @@ int main(int argc,char **argv)
     }
     check(sessionPreview->window()==&main,"Session destruction restores audition content");
     app.preview=nullptr;app.host=nullptr;
-    auto deletedSlot=new QWidget(&page);deletedSlot->setObjectName(soundLibrary ? "frameEditPageSoundLibrary" : "frameAudioPanelMediaPoolContainer");
+    auto deletedSlot=new QWidget(&page);deletedSlot->setObjectName(slotName);
     auto deletedLayout=new QVBoxLayout(deletedSlot);
     auto deletedPreview=new QWidget(deletedSlot);deletedPreview->setObjectName(soundLibrary ? "m_PlayerPreview" : "previewPlayer");deletedLayout->addWidget(deletedPreview);
     deletedSlot->show();

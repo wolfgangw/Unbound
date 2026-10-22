@@ -17,7 +17,8 @@ may describe intermediate experiments rather than the current implementation.
   investigation of lost audio and playback handoff while floating.
 - [Sound Library shortcuts](sound-library-shortcuts.txt):
   Edit audition commands route to timeline despite correct floating focus;
-  Edit activation fix validated on Windows; Fairlight silent audition unresolved.
+  Edit activation fix validated on Windows; Fairlight correction restores audition
+  audio, waveform and routing in live testing, with production validation pending.
 - [Layout rename input](layout-rename-input-2026-10-17.txt):
   keyboard routing during inline name editing.
 - [Corner resize crash](resize-corner-crash-2026-10-17.txt):
