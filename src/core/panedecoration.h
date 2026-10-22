@@ -264,6 +264,15 @@ private:
         m_refreshing=true;
         bool any=false; for(auto b:m_buttons) if(b) any=true;
         if(m_native && any) {m_refreshing=false; return;}
+        const auto paneDescriptor=PaneCatalogue::find(m_pane->objectName());
+        if(paneDescriptor && paneDescriptor->header==PaneCatalogue::Header::TimelineCorner) {
+            // Timeline has no header. Keep the corner control on the transferred
+            // native content, not on its fixed-height slot or on the Clips sibling.
+            if(auto content=m_pane->findChild<QWidget *>(QStringLiteral("m_pTimeLinePnl"),Qt::FindDirectChildrenOnly)) {
+                makeButton(content)->show(); m_native=true; m_cornerOverlay=true;
+            }
+            position(); m_refreshing=false; return;
+        }
         QList<QAbstractButton *> anchors;
         for(auto b:m_pane->findChildren<QAbstractButton *>()) {
             if(!isAnchor(b)) continue;
@@ -301,6 +310,8 @@ private:
     }
     void position()
     {
+        // Center the 20 px control in Timeline's 32 px track-label gutter.
+        if(m_cornerOverlay && button()) { button()->move(6,2); button()->raise(); return; }
         if(m_native || !m_pane || !button()) return;
         button()->move(qMax(m_margins.left(),m_pane->width()-m_margins.right()-22),m_margins.top()+2);
         button()->raise();
@@ -313,6 +324,7 @@ private:
     std::function<void(QWidget *,const QPoint &)> m_contextMenu;
     int m_strip=0;
     bool m_native=false,m_floating=false,m_refreshing=false;
+    bool m_cornerOverlay=false;
     QString m_failure;
 };
 }

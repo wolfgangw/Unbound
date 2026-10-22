@@ -76,11 +76,11 @@ int main(int argc, char **argv)
         const QStringList names = {"frameEditPageMediaPool", "frameEditPageEffectsLibrary",
             "frameEditPageSoundLibrary", "frameEditPageKeyframeEditor", "frameEditPageEditIndex",
             "frameEditPageInspector", "frameEditPageMetadata", "frameEditAudioMeter",
-            "m_pFrameNodeGraph", "m_pWidgetGallery", "m_pWidgetLutBrowser", "m_pWidgetMediaPool", "m_pFrameOFXPlugin"};
+            "m_pFrameNodeGraph", "m_pWidgetGallery", "m_pWidgetLutBrowser", "m_pWidgetMediaPool", "m_pFrameOFXPlugin", "timelineFrame"};
         const QStringList toggles = {"btnEditToggleMediaPoolInSSM", "btnEditToggleEffectsLibraryInSSM",
             "btnEditToggleSoundLibraryInSSM", "btnEditToggleKeyframeEditorInSSM", "btnEditToggleEditIndexInSSM",
             "btnEditToggleInspectorInSSM", "btnEditToggleMetadataInSSM", "btnEditToggleMixerInSSM",
-            "btnColorToggleNodeGraph", "btnColorToggleGallery", "btnColorToggleLutsBrowser", "btnColorToggleMediaPool", "btnColorToggleOpenFX"};
+            "btnColorToggleNodeGraph", "btnColorToggleGallery", "btnColorToggleLutsBrowser", "btnColorToggleMediaPool", "btnColorToggleOpenFX", "btnColorToggleTimeline"};
         QVector<QWidget *> paneSlots;
         QVector<QPushButton *> controls, selectors;
         QVector<QLayout *> layouts;
@@ -96,6 +96,7 @@ int main(int argc, char **argv)
             auto slot = new QWidget(parent); slot->setObjectName(names[i]);
             auto layout = new QVBoxLayout(slot);
             auto control = new QPushButton("Live content", slot); layout->addWidget(control);
+            if(names[i]=="timelineFrame") { control->setObjectName("m_pTimeLinePnl"); slot->setFixedHeight(76); }
             auto selector = new QPushButton("Localized native label", page);
             selector->setObjectName(toggles[i]); selector->setCheckable(true); selector->setChecked(true);
             paneSlots.append(slot); layouts.append(layout); controls.append(control); selectors.append(selector);
@@ -146,6 +147,18 @@ int main(int argc, char **argv)
             check(alternate->isHidden(), "Reclamation exposed explicitly hidden alternate content");
             check(!selectors[i]->isChecked() && paneSlots[i]->isHidden() && clicks[i] == 1,
                 "Manual undock did not collapse native slot exactly once");
+            if(names[i]=="timelineFrame") {
+                check(button->parentWidget()==controls[i] && button->pos()==QPoint(6,2),"Timeline corner button did not follow content");
+                check(paneSlots[i]->height()==76,"Timeline decoration changed native slot height");
+                const int nativeMinimum=paneSlots[i]->minimumWidth();
+                host->resize(1,400); app.processEvents();
+                check(host->width()>=240 && host->height()==400,"Floating Timeline lacks usable minimum width or limits height");
+                check(paneSlots[i]->minimumWidth()==nativeMinimum,"Floating Timeline minimum leaked into native slot");
+                // Native width policy can turn the toggle off without a click.
+                selectors[i]->setChecked(true); selectors[i]->setChecked(false);
+                controls[i]->hide(); app.processEvents(); app.processEvents();
+                check(controls[i]->isVisible() && controls[i]->window()==host,"Native automatic hiding swallowed floating Timeline");
+            }
             const auto key = i < 8 ? names[i] : "Color/" + names[i];
             Unbound::PaneSettings saved(settingsPath);
             check(saved.floating(key) && saved.hasToggle(key) && !saved.toggle(key), "Reclaimed state not persisted");

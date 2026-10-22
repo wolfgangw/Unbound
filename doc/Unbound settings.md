@@ -168,6 +168,10 @@ the timeline reclaims viewer space when Program floats and no visible viewer
 remains docked. Viewer state has no experiment switch or additional control panel.
 Color pane keys are `m_pFrameNodeGraph`, `m_pWidgetGallery`, `m_pWidgetLutBrowser`,
 `m_pWidgetMediaPool`, and `m_pFrameOFXPlugin` (Effects, including Library and Settings).
+`timelineFrame` stores Color Timeline independently of Clips, with its native
+Timeline toggle. Its top-left Unbound button follows the timeline into the floating
+host, which has a minimum width of 240 Qt logical pixels; narrower saved widths
+are clamped on restoration. Native docked sizing is unchanged.
 Effects uses its independent native OpenFX toggle. Color's shared sidebar selectors are exclusive;
 save at most one of Gallery/LUTs/Media Pool as checked. All can be unchecked.
 

@@ -12,7 +12,14 @@ signing/notarization. These distribution limitations do not imply missing featur
 See `doc/platforms/` for tested configurations and platform validation details.
 Edit supports Media Pool, Effects, Sound Library, Keyframe Editor,
 Edit Index, Inspector, Metadata and Mixer; Color supports Nodes, Gallery, LUTs
-Media Pool and Effects. Floating windows and the main window snap to one another and
+Media Pool, Effects and Timeline. Color Timeline floats independently of Clips;
+its Unbound button overlays the native timeline's top-left corner without adding
+a header or changing its native docked slot constraints. The snapshot's 76 px slot
+height is configuration-dependent; the transferred UiMiniTimelineWidget has no
+explicit Qt maximum height. Native resizing and clip selection are validated on
+Windows. The floating host has a 240 logical-pixel minimum width for track labels
+and usable clip bars; native docked constraints remain unchanged.
+Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
 Window edges also align across gaps. The smallest edge adjustment wins; equal
 adjustments prefer the nearer window. Work-area edge snapping stays local.

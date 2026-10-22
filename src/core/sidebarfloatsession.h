@@ -266,6 +266,12 @@ public:
             slot->installEventFilter(this);
             slot->hide();
         }
+        // The custom Color timeline reports no useful minimum width. Keep its
+        // track-label gutter plus a usable clip-bar area in Qt logical pixels.
+        // Constrain only our host, before geometry recall; native docking is unchanged.
+        if (slot->objectName()==QLatin1String("timelineFrame")
+            && m_root->objectName()==QLatin1String("WStackPage_Color"))
+            host->setMinimumWidth(qMax(host->minimumWidth(),240));
         if (!m_savedGeometry.isEmpty()) host->restoreGeometry(m_savedGeometry);
         applyPaneDarkCaption(host, slot->window());
         if (fadeIn) {

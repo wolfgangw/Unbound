@@ -11,7 +11,7 @@ namespace PaneCatalogue {
 enum class Page { Edit, Color, Fairlight, Media, Cut, Fusion, Deliver };
 enum class Kind { Sidebar, Viewer };
 enum class Header { None, MediaPool, SoundLibrary, Keyframes, Effects, Index,
-    Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr };
+    Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner };
 struct PageDescriptor {
     Page id;
     QString objectName, label, legacyName, paneRoot, settingsPrefix;
@@ -70,6 +70,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"m_pWidgetLutBrowser","LUTs",Page::Color,"btnColorToggleLutsBrowser","luts",Header::Luts,true},
         {"m_pWidgetMediaPool","Media Pool",Page::Color,"btnColorToggleMediaPool","mediaPool",Header::MediaPool,true},
         {"m_pFrameOFXPlugin","Effects",Page::Color,"btnColorToggleOpenFX","",Header::Effects,true},
+        {"timelineFrame","Timeline",Page::Color,"btnColorToggleTimeline","",Header::TimelineCorner,true},
         {"frameAudioPanelMediaPoolContainer","Media Pool",Page::Fairlight,"MediaPool","",Header::MediaPool,true},
         {"frameAudioPanelEffectsLibraryContainer","Effects",Page::Fairlight,"EffectsLibrary","",Header::Effects,true},
         {"frameAudioPanelIndexContainer","Index",Page::Fairlight,"Index","",Header::Index,true,Kind::Sidebar,"frameAudioPageIndexTabContainer"},
@@ -120,6 +121,7 @@ inline bool matchesHeader(Header header,const QString &name,const QString &paren
     case Header::Groups: return name=="m_BtnMenu" && parent=="frameHeaderTitle";
     case Header::Adr: return name=="optionsBtn" && parent=="headerFrame";
     case Header::None: return false;
+    case Header::TimelineCorner: return false;
     }
     return false;
 }
