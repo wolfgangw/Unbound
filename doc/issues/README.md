@@ -4,6 +4,10 @@ User reports, reproduction evidence and follow-up investigations live here.
 Distinguish confirmed findings from hypotheses; historical investigation records
 may describe intermediate experiments rather than the current implementation.
 
+- [Color Clips and Lightbox](color-clips-investigation.md):
+  shared native content and mode-dependent sizing complicate floating Clips;
+  button placement and mode-transition behavior need an explicit design.
+
 - [Floating panels after leaving Dual Screen mode](dual-screen-floating-panels.md):
   unconfirmed Resolve report; a matching lifecycle weakness reproduced in a fixture.
 - [Edit Media Pool collapsed to one pixel](edit-media-pool-collapsed-width.md):
