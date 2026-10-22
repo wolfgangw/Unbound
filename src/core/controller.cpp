@@ -147,6 +147,8 @@ private:
             return false;
         });
         m_layoutMenu=menu;
+        const QPointer<Unbound::UndockButton> warningButton=dynamic_cast<Unbound::UndockButton *>(button);
+        menu->dockingWarning=[warningButton] { return warningButton ? warningButton->dockingFailure() : QString(); };
         menu->save=[this,page](QString &name,bool &duplicate) {
             const auto error=capturePage(page);
             return error.isEmpty() ? m_settings.saveLayout(page,name,duplicate) : error;
@@ -455,6 +457,25 @@ private:
                 if (auto decoration=m_decorations.value(name)) decoration->setFloating(false);
                 showDockedPanes();
             };
+            session->dockingFailed = [this,name] {
+                m_pendingDockToggles.remove(name);
+                m_pendingLayoutToggles.remove(name); m_pendingColorToggles.remove(name);
+                m_restoreAttempted.insert(name);
+                settingsError(m_settings.saveFloating(settingsKey(name),true));
+                if(auto decoration=m_decorations.value(name)) {
+                    decoration->setFloating(true);
+                    decoration->setDockingFailure(Unbound::dockingFailureMessage(name));
+                    if(auto toggle=nativeToggle(decoration->pane(),name)) {
+                        settingsError(m_settings.saveToggle(settingsKey(name),toggle->isChecked()));
+                        if(preservesNativeLayout(name)) m_sessions.value(name)->observeNativeToggle(toggle);
+                    }
+                }
+                if(m_layoutMenu) m_layoutMenu->refreshDockingWarning();
+            };
+            session->dockingSucceeded = [this,name] {
+                if(auto decoration=m_decorations.value(name)) decoration->setDockingFailure({});
+                if(m_layoutMenu) m_layoutMenu->refreshDockingWarning();
+            };
             session->report = [this](const QString &text) { error(text); scheduleDiscovery(); };
             m_sessions.insert(name, session);
         }
@@ -542,6 +563,7 @@ private:
             if (program && source) {
                 m_viewers=new EditViewers(m_window,players,program,source,m_settings,this,
                     [this](QWidget *button,const QPoint &position) { openLayouts("WStackPage_Conform",button,position); });
+                m_viewers->dockingWarningChanged=[this] { if(m_layoutMenu) m_layoutMenu->refreshDockingWarning(); };
             }
         }
         showDockedPanes();

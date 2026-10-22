@@ -13,6 +13,7 @@
 #include <QPainterPath>
 #include <QMouseEvent>
 #include <QContextMenuEvent>
+#include <QVariantAnimation>
 #include "windowintegration.h"
 #include "paneheaderdrag.h"
 #include <functional>
@@ -21,14 +22,15 @@ namespace Unbound {
 class UndockIconEngine : public QIconEngine
 {
 public:
-    QIconEngine *clone() const override { return new UndockIconEngine; }
+    explicit UndockIconEngine(QColor color={}) : m_color(color) {}
+    QIconEngine *clone() const override { return new UndockIconEngine(m_color); }
     void paint(QPainter *p,const QRect &r,QIcon::Mode mode,QIcon::State) override
     {
         p->save(); p->setRenderHint(QPainter::Antialiasing);
         const qreal scale=qMin(r.width(),r.height())/20.0;
         p->translate(r.x()+(r.width()-20*scale)/2,r.y()+(r.height()-20*scale)/2); p->scale(scale,scale);
         const int brightness=mode==QIcon::Disabled ? 90 : mode==QIcon::Active ? 220 : 132;
-        p->setPen(QPen(QColor(brightness,brightness,brightness),1.5,Qt::SolidLine,Qt::FlatCap,Qt::MiterJoin));
+        p->setPen(QPen(m_color.isValid() ? m_color : QColor(brightness,brightness,brightness),1.5,Qt::SolidLine,Qt::FlatCap,Qt::MiterJoin));
         p->setBrush(Qt::NoBrush);
         QPainterPath large; large.moveTo(15.5,7); large.lineTo(15.5,4.75); large.quadTo(15.5,3.5,14.25,3.5);
         large.lineTo(3.75,3.5); large.quadTo(2.5,3.5,2.5,4.75); large.lineTo(2.5,15.25);
@@ -37,15 +39,33 @@ public:
     }
     QPixmap pixmap(const QSize &size,QIcon::Mode mode,QIcon::State state) override
     { QPixmap pm(size); pm.fill(Qt::transparent); QPainter p(&pm); paint(&p,QRect(QPoint(),size),mode,state); return pm; }
+private:
+    QColor m_color;
 };
 // Paint only the glyph: Resolve's inherited button styles must not add a
 // hover/checked background. QToolButton still supplies clicks and tooltips.
 class UndockButton : public QToolButton
 {
 public:
-    using QToolButton::QToolButton;
+    explicit UndockButton(QWidget *parent=nullptr) : QToolButton(parent) {
+        m_pulse.setDuration(1400); m_pulse.setLoopCount(-1);
+        m_pulse.setStartValue(0.0); m_pulse.setKeyValueAt(.5,1.0); m_pulse.setEndValue(0.0);
+        m_pulse.setEasingCurve(QEasingCurve::InOutSine);
+        connect(&m_pulse,&QVariantAnimation::valueChanged,this,[this](const QVariant &value) { m_glow=value.toReal(); update(); });
+        connect(qApp,&QGuiApplication::applicationStateChanged,this,[this] { updatePulse(); });
+    }
     ~UndockButton() override { finishMove(true); }
     std::function<void(QWidget *,const QPoint &)> contextMenu;
+    QString dockingFailure() const { return m_failure; }
+    bool dockingWarningPending() const { return !m_failure.isEmpty() && !m_acknowledged; }
+    bool dockingWarningAnimating() const { return m_pulse.state()==QAbstractAnimation::Running; }
+    void setFloatingState(bool floating) {
+        setChecked(floating); setAccessibleName(floating ? "Dock" : "Undock"); updateTooltip();
+    }
+    void setDockingFailure(const QString &message) {
+        m_failure=message; m_acknowledged=false; updateTooltip(); updatePulse(); update();
+    }
+    void acknowledgeDockingFailure() { m_acknowledged=true; updatePulse(); update(); }
 protected:
     void contextMenuEvent(QContextMenuEvent *event) override {
         if(!contextMenu) { QToolButton::contextMenuEvent(event); return; }
@@ -98,6 +118,7 @@ protected:
             setDown(false);
             finishMove(true);
         }
+        if(event->type()==QEvent::Show || event->type()==QEvent::Hide) updatePulse();
         return QToolButton::event(event);
     }
     bool eventFilter(QObject *, QEvent *event) override
@@ -113,6 +134,17 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
+        if(!m_failure.isEmpty()) {
+            const qreal amount=m_acknowledged ? 0.0 : m_glow;
+            const QColor red("#ed4b3f"), muted("#848484");
+            const auto mix=[amount](int a,int b) { return qRound(a+(b-a)*amount); };
+            const QColor stroke(mix(muted.red(),red.red()),mix(muted.green(),red.green()),mix(muted.blue(),red.blue()));
+            QRadialGradient glow(QRectF(rect()).center(),width()*.65);
+            QColor halo=red; halo.setAlphaF(.48*amount); glow.setColorAt(0,halo);
+            halo.setAlpha(0); glow.setColorAt(1,halo); painter.fillRect(rect(),glow);
+            UndockIconEngine glyph(stroke); glyph.paint(&painter,rect(),QIcon::Normal,QIcon::Off);
+            return;
+        }
         icon().paint(&painter,rect(),Qt::AlignCenter,
             !isEnabled() ? QIcon::Disabled : underMouse() ? QIcon::Active : QIcon::Normal,
             isChecked() ? QIcon::On : QIcon::Off);
@@ -120,6 +152,19 @@ protected:
     void enterEvent(QEvent *event) override { QToolButton::enterEvent(event); update(); }
     void leaveEvent(QEvent *event) override { QToolButton::leaveEvent(event); update(); }
 private:
+    void updateTooltip() {
+        setToolTip(m_failure.isEmpty() ? (isChecked() ? "Click to dock; drag to move" : "Undock") :
+            "DaVinci Resolve couldn't make room for this panel. It remains floating. Right-click for details.");
+    }
+    void updatePulse() {
+        const bool animate=dockingWarningPending() && isVisible() && QGuiApplication::applicationState()==Qt::ApplicationActive;
+        if(animate && m_pulse.state()!=QAbstractAnimation::Running) m_pulse.start();
+        else if(!animate) { m_pulse.stop(); m_glow=0; }
+    }
+    QString m_failure;
+    bool m_acknowledged=false;
+    qreal m_glow=0;
+    QVariantAnimation m_pulse;
     void finishMove(bool cancel)
     {
         const auto host = m_dragHost;
@@ -152,14 +197,16 @@ public:
     QWidget *pane() const { return m_pane; }
     QToolButton *button() const { for(auto b:m_buttons) if(b) return b; return nullptr; }
     bool usesNativeHeader() const { return m_native; }
+    void setDockingFailure(const QString &message) {
+        m_failure=message;
+        for(auto b:m_buttons) if(b) static_cast<UndockButton *>(b.data())->setDockingFailure(message);
+    }
     void setFloating(bool floating)
     {
         m_floating=floating;
         if(!floating) refresh();
         for(auto b:m_buttons) if(b) {
-            b->setChecked(floating);
-            b->setToolTip(floating ? "Click to dock; drag to move" : "Undock");
-            b->setAccessibleName(floating ? "Dock" : "Undock");
+            static_cast<UndockButton *>(b.data())->setFloatingState(floating);
             b->show();
         }
         position();
@@ -191,12 +238,16 @@ private:
     QToolButton *makeButton(QWidget *parent)
     {
         auto b=new UndockButton(parent); b->setObjectName("resolvePaneUndockButton");
-        b->contextMenu=m_contextMenu;
+        b->contextMenu=[this](QWidget *button,const QPoint &position) {
+            if(m_contextMenu) m_contextMenu(button,position);
+            for(auto b:m_buttons) if(b) static_cast<UndockButton *>(b.data())->acknowledgeDockingFailure();
+        };
         b->setIcon(QIcon(new UndockIconEngine)); b->setIconSize(QSize(20,20));
         b->setCheckable(true); b->setChecked(m_floating);
         b->setToolButtonStyle(Qt::ToolButtonIconOnly); b->setAccessibleName(m_floating ? "Dock" : "Undock");
         b->setToolTip(m_floating ? "Click to dock; drag to move" : "Undock"); b->setFocusPolicy(Qt::NoFocus);
         b->setFixedSize(20,20);
+        if(!m_failure.isEmpty()) b->setDockingFailure(m_failure);
         b->setStyleSheet("QToolButton { background: transparent; border: none; padding: 0px; }");
         connect(b,&QToolButton::clicked,this,[this] {m_action();});
         m_buttons.append(b); return b;
@@ -260,6 +311,7 @@ private:
     std::function<void(QWidget *,const QPoint &)> m_contextMenu;
     int m_strip=0;
     bool m_native=false,m_floating=false,m_refreshing=false;
+    QString m_failure;
 };
 }
 #endif

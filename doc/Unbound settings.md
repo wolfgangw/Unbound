@@ -53,6 +53,15 @@ It clears the active layout selection, preserves saved layouts and does not
 reset Resolve's layout or consume a slot. A fully docked arrangement can also
 be saved explicitly as an ordinary layout.
 
+If Resolve leaves a docked panel's visible area collapsed, Unbound returns it to
+its previous floating geometry and records that actual floating state. This also
+applies to Dock all and layout recall; the saved layout snapshot is never changed
+automatically, so an incomplete recall can leave the selected layout dirty.
+The affected button pulses between muted grey and playhead red until its own
+context menu is opened. It then stays muted, with an explanatory tooltip and menu
+message retained until docking succeeds. Another failed attempt restarts the
+pulse. This warning and its acknowledgment are session-only, not settings fields.
+
 Hold a layout name for one second to edit it inline. A short click still recalls.
 The editor receives keyboard focus immediately and selects the full name.
 Unmodified Left/Right collapse the selection to its start/end; typing replaces it.

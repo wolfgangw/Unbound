@@ -18,6 +18,7 @@
 #include "auditionactivationbridge.h"
 #include "paneheaderdrag.h"
 #include "panecatalogue.h"
+#include "panedockingguard.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -41,6 +42,7 @@ public:
     }
     ~SidebarFloatSession() override
     {
+        m_dockingGuard.cancel();
         report = {};
         restore();
         if (m_host) delete m_host.data();
@@ -48,6 +50,8 @@ public:
     std::function<void(const QString &)> report;
     std::function<void(const QByteArray &)> geometrySaved;
     std::function<void()> userDocked;
+    std::function<void()> dockingFailed;
+    std::function<void()> dockingSucceeded;
     void setSavedGeometry(const QByteArray &geometry) { if (!active()) m_savedGeometry = geometry; }
     void applySavedGeometry(const QByteArray &geometry) {
         m_geometryTimer->stop(); m_savedGeometry=geometry;
@@ -71,8 +75,22 @@ public:
     QString dock()
     {
         if (!active() || m_restoring) return QString();
+        const auto slot=m_slot, root=m_root;
+        const auto label=m_host->windowTitle();
+        const bool splitter=bool(m_splitter), native=bool(m_nativeLayout);
         const auto error = restore();
-        if (error.isEmpty() && userDocked) userDocked();
+        if (error.isEmpty()) {
+            if(userDocked) userDocked();
+            m_dockingGuard.watch(slot,root,[this,slot,root,label,splitter,native](bool failed) {
+                if(!failed) { if(dockingSucceeded) dockingSucceeded(); return; }
+                if(!slot || !root || active()) return;
+                // Use the same reversible transfer and the last floating geometry.
+                // Automatic recovery must not activate a window or change page.
+                const auto error=start(slot,label,root,splitter,false,native,false);
+                if(error.isEmpty()) { if(dockingFailed) dockingFailed(); }
+                else if(report) report(error);
+            });
+        }
         if (report) report(error);
         return error;
     }
@@ -114,8 +132,9 @@ public:
             [this] { queueGraphRecovery(); }));
     }
 
-    QString start(QWidget *slot, const QString &label, QWidget *pageRoot = nullptr, bool reclaimSplitterSpace = false, bool fadeIn = false, bool preserveNativeLayout = false)
+    QString start(QWidget *slot, const QString &label, QWidget *pageRoot = nullptr, bool reclaimSplitterSpace = false, bool fadeIn = false, bool preserveNativeLayout = false, bool activate = true)
     {
+        m_dockingGuard.cancel();
         if (active()) return QStringLiteral("This pane is already floating.");
         if (!slot || slot->isWindow() || !slot->parentWidget() || !(pageRoot ? pageRoot : slot->parentWidget())->isVisible())
             return QStringLiteral("Open this pane's Resolve page before undocking it.");
@@ -247,7 +266,7 @@ public:
             host->setWindowOpacity(0.0);
         }
         host->show();
-        if(!fadeIn) host->activateWindow(); // Explicit manual undocking.
+        if(!fadeIn && activate) host->activateWindow(); // Explicit manual undocking.
         if (preserveNativeLayout && slot->objectName()==QStringLiteral("m_pFrameNodeGraph"))
             m_nodesBounds=new NodesCanvasBounds(m_content,this);
         if (fadeIn) {
@@ -259,6 +278,7 @@ public:
 
     QString restore()
     {
+        m_dockingGuard.cancel();
         if (!active()) return QString();
         if (m_restoring) return QString();
         // A close can arrive before the queued native-toggle recovery.
@@ -461,6 +481,7 @@ private:
     unsigned m_generation = 0;
     bool m_hiddenByPage = false;
     bool m_restoring = false;
+    PaneDockingGuard m_dockingGuard{this};
 };
 }
 #endif

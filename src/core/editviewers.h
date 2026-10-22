@@ -13,6 +13,7 @@
 #include "panedecoration.h"
 #include "viewergeometryadapter.h"
 #include "panesettings.h"
+#include "panedockingguard.h"
 
 // Whole native viewer widgets retain their layout slots while floating.
 // Share the controller's settings instance so saves cannot overwrite each other.
@@ -26,6 +27,7 @@ class EditViewers : public QObject
         int stretch=0;
         Qt::Alignment alignment;
         bool hidden=false;
+        Unbound::PaneDockingGuard *dockingGuard=nullptr;
     };
 public:
     EditViewers(QWidget *main, QWidget *players, QWidget *program, QWidget *source,
@@ -35,6 +37,8 @@ public:
     {
         setObjectName("UnboundEditViewers");
         m_program.content=program; m_source.content=source;
+        m_program.dockingGuard=new Unbound::PaneDockingGuard(this);
+        m_source.dockingGuard=new Unbound::PaneDockingGuard(this);
         m_page=players;
         while (m_page && m_page->objectName()!="WStackPage_Conform") m_page=m_page->parentWidget();
         if (m_page) m_page->installEventFilter(this);
@@ -52,6 +56,7 @@ public:
     ~EditViewers() override
     {
         m_stopping=true; rememberAll(); restoreArea(); dock(m_source,false); dock(m_program,false);
+        m_source.dockingGuard->cancel(); m_program.dockingGuard->cancel();
         if(m_page) m_page->removeEventFilter(this);
         qDeleteAll(m_drags);
         for (auto pane:{&m_program,&m_source}) for(auto b:pane->buttons) delete b.data();
@@ -60,6 +65,7 @@ public:
     void toggleSource() { toggle(m_source); }
     void dockBoth() { restoreArea(); dock(m_source); dock(m_program); }
     bool hasFloating() const { return m_program.host || m_source.host; }
+    std::function<void()> dockingWarningChanged;
     void flushGeometry() { rememberAll(); }
     void prepareLayout(const QJsonObject &panes) {
         for(auto pane:{&m_source,&m_program}) if(pane->host &&
@@ -116,13 +122,16 @@ private:
             auto layout=qobject_cast<QBoxLayout *>(parent->layout());
             if(!layout || layout->indexOf(anchor)<0 || layout->direction()!=QBoxLayout::LeftToRight) continue;
             auto b=new Unbound::UndockButton(parent);
-            b->contextMenu=m_contextMenu;
+            auto p=&pane;
+            b->contextMenu=[this,p](QWidget *button,const QPoint &position) {
+                if(m_contextMenu) m_contextMenu(button,position);
+                for(auto b:p->buttons) if(b) b->acknowledgeDockingFailure();
+            };
             b->setObjectName("resolvePaneUndockButton");
             b->setIcon(QIcon(new Unbound::UndockIconEngine)); b->setIconSize(QSize(20,20));
             b->setFixedSize(20,20); b->setCheckable(true); b->setFocusPolicy(Qt::NoFocus);
             b->setStyleSheet("QToolButton { background: transparent; border: none; padding: 0px; }");
             b->setToolTip("Undock"); b->setAccessibleName("Undock");
-            auto p=&pane;
             connect(b,&QToolButton::clicked,this,[this,p] { toggle(*p); });
             layout->insertWidget(layout->indexOf(anchor),b,0,Qt::AlignVCenter);
             pane.buttons.append(b); b->show();
@@ -131,6 +140,7 @@ private:
     }
     void toggle(Pane &pane,bool automatic=false)
     {
+        pane.dockingGuard->cancel();
         if(pane.host) { dock(pane); return; }
         auto content=pane.content;
         if(!content || !m_page || !m_page->isVisible()) return;
@@ -163,7 +173,7 @@ private:
             host->move(available.center()-QPoint(host->width()/2,host->height()/2));
         content->show(); host->show();
         if(!automatic) host->activateWindow();
-        for(auto b:pane.buttons) if(b) { b->setChecked(true); b->setToolTip("Click to dock; drag to move"); b->setAccessibleName("Dock"); }
+        for(auto b:pane.buttons) if(b) b->setFloatingState(true);
         check(m_settings.saveFloating(content->objectName(),true));
         remember(pane);
         queueReclaim();
@@ -174,6 +184,7 @@ private:
     }
     void dock(Pane &pane,bool user=true)
     {
+        pane.dockingGuard->cancel();
         if(!pane.host) return;
         QScopedValueRollback<bool> ownVisibility(m_showingProgram,m_showingProgram || &pane==&m_program);
         remember(pane);
@@ -189,12 +200,21 @@ private:
             pane.content->setVisible(!pane.hidden);
         }
         host->removeEventFilter(this); host->hide(); host->deleteLater(); pane.host=nullptr;
-        for(auto b:pane.buttons) if(b) { b->setChecked(false); b->setToolTip("Undock"); b->setAccessibleName("Undock"); }
+        for(auto b:pane.buttons) if(b) b->setFloatingState(false);
         if(user && pane.content) {
             check(m_settings.saveFloating(pane.content->objectName(),false));
             if(&pane==&m_program) m_restoreProgram=false; else m_restoreSource=false;
         }
         queueReclaim();
+        if(user) {
+            auto p=&pane;
+            pane.dockingGuard->watch(pane.content,m_page,[this,p](bool failed) {
+                if(failed && !p->host && p->content) toggle(*p,true);
+                for(auto b:p->buttons) if(b) b->setDockingFailure(failed && p->host
+                    ? Unbound::dockingFailureMessage(p->content->objectName()) : QString());
+                if(dockingWarningChanged) dockingWarningChanged();
+            });
+        }
     }
     bool canReclaim() const {
         return m_program.host && m_source.content && (m_source.host || m_source.content->isHidden());

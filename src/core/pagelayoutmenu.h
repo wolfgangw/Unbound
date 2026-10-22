@@ -129,6 +129,7 @@ public:
     std::function<QString(const QString &)> update;
     std::function<QString()> dockAll;
     std::function<QString(const QString &,const QString &)> rename;
+    std::function<QString()> dockingWarning;
     PageLayoutMenu(PaneSettings &settings,QString page,QWidget *parent,std::function<bool()> hasFloating={})
         : QFrame(parent),m_settings(settings),m_page(std::move(page)),m_hasFloating(std::move(hasFloating)) {
         setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
@@ -138,6 +139,9 @@ public:
         setAttribute(Qt::WA_QuitOnClose,false);
         setFocusPolicy(Qt::StrongFocus);
         m_layout=new QVBoxLayout(this); m_layout->setContentsMargins(6,6,6,6); m_layout->setSpacing(0);
+        m_dockingWarning=new QLabel(this); m_dockingWarning->setObjectName("unboundDockingWarning");
+        m_dockingWarning->setTextFormat(Qt::PlainText); m_dockingWarning->setWordWrap(true);
+        m_dockingWarning->setMaximumWidth(300); m_dockingWarning->hide(); addWidget(m_dockingWarning);
         // Resolve supplies the theme; do not maintain a separate popup grey.
         m_background=(parent ? parent->palette() : qApp->palette()).color(QPalette::Window);
         setStyleSheet("QFrame#unboundLayoutMenu { background: transparent; border: none; }"
@@ -185,7 +189,14 @@ public:
         if(qApp) qApp->removeEventFilter(this);
     }
     QString page() const { return m_page; }
+    void refreshDockingWarning() {
+        const auto message=dockingWarning ? dockingWarning() : QString();
+        m_dockingWarning->setText(message); m_dockingWarning->setVisible(!message.isEmpty());
+        refresh(); // Recovery can also change Dock all availability and layout dirtiness.
+        adjustSize();
+    }
     void popup(const QPoint &position,QWidget *invokingButton=nullptr) {
+        refreshDockingWarning();
         // Cocoa delivers the context request on press, Windows on release.
         // The opening gesture is not a new outside interaction. Keep its release
         // exempt through both QWindow and QWidget delivery; the next press ends
@@ -435,6 +446,7 @@ private:
     QString m_page;
     QPushButton *m_save=nullptr;
     QLabel *m_status=nullptr;
+    QLabel *m_dockingWarning=nullptr;
     QPushButton *m_dock=nullptr;
     QVBoxLayout *m_layout=nullptr;
     std::function<bool()> m_hasFloating;

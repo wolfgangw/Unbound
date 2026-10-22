@@ -263,6 +263,22 @@ int main(int argc,char **argv)
         source->window()->geometry()==sourceRect,"Viewer layout did not restore through startup floating intent");
     program->window()->close(); app.processEvents();
     require(!reloaded.floating(program->objectName()) && reloaded.floating(source->objectName()),"User docking did not preserve separate floating states");
+    auto waitDock=[] { QEventLoop loop; QTimer::singleShot(180,&loop,&QEventLoop::quit); loop.exec(); };
+    experiment->toggleProgram(); app.processEvents();
+    const auto beforeFailedDock=program->window()->geometry();
+    nativeLayout->setSizeConstraint(QLayout::SetNoConstraint);
+    players->setFixedWidth(1);
+    experiment->toggleProgram(); waitDock();
+    auto warning=dynamic_cast<Unbound::UndockButton *>(program->findChild<QToolButton *>("resolvePaneUndockButton"));
+    require(program->window()!=&main && reloaded.floating(program->objectName()) && program->window()->geometry()==beforeFailedDock,
+        "Collapsed viewer allocation lost floating content, geometry or saved state");
+    require(warning && warning->dockingWarningPending() && !warning->dockingFailure().contains("vertical video"),
+        "Viewer failure lacked a generic warning or suggested an unconfirmed preference remedy");
+    players->setMaximumWidth(QWIDGETSIZE_MAX); players->setMinimumWidth(0);
+    nativeRegions(); app.processEvents(); app.processEvents();
+    experiment->dockBoth(); waitDock();
+    require(program->window()==&main && source->window()==&main && warning->dockingFailure().isEmpty(),
+        "Viewer docking recovery retained a stale warning");
     delete experiment; app.processEvents();
     qInfo("PASS: independent viewer geometry on dock/re-undock and disk reload; startup floating restoration; shutdown intent; explicit docking");
     qInfo("PASS: viewer whole-widget detachment, source alternatives, page visibility, native order/stretch, close docking and repeated cleanup");

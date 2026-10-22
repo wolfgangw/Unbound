@@ -4,6 +4,7 @@
 #include "controller.h"
 #include <QApplication>
 #include <QMenu>
+#include <QMessageBox>
 #include "layoutadapter.h"
 #include "windowplacement.h"
 #include <QTemporaryDir>
@@ -248,6 +249,7 @@ static Panel panel(QWidget *root,QBoxLayout *layout,const QString &name,const QS
 void testPaneCatalogue();
 void testPageFocus();
 void testIndexHeaderDrag();
+void testDockingGuard();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
@@ -255,6 +257,7 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
     LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
     testPageFocus();
+    testDockingGuard();
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("layouts.json").toUtf8());
     auto mainOwner=LayoutTest::makeMainWindow();
@@ -505,6 +508,62 @@ int main(int argc,char **argv) {
     QEvent deactivate(QEvent::ApplicationDeactivate); QApplication::sendEvent(qApp,&deactivate); settle();
     require(!menu->isVisible(),"Application deactivation did not dismiss the persistent popout");
     std::puts("PASS: docked/floating context menus; persistent Save/Recall/Delete; retained hosts; docking, geometry and Edit/Color/Fairlight isolation");
+    if(!app.arguments().contains("--preview")) {
+        auto waitDock=[] { QEventLoop loop; QTimer::singleShot(180,&loop,&QEventLoop::quit); loop.exec(); };
+        auto warning=dynamic_cast<UndockButton *>(poolButton);
+        require(warning && poolButton->isChecked(),"Missing floating Media Pool before docking safeguard test");
+        const auto floatingGeometry=pool.content->window()->geometry();
+        // Model Resolve's checked, visible but one-pixel native destination.
+        pool.content->window()->layout()->setSizeConstraint(QLayout::SetNoConstraint);
+        pool.pane->setFixedWidth(1); pool.toggle->setChecked(true); pool.pane->show();
+        click(poolButton); waitDock();
+        require(poolButton->isChecked() && pool.content->window()!=&main && pool.content->isVisible(),
+            "Failed docking lost the panel instead of floating it again");
+        require(pool.content->window()->geometry()==floatingGeometry,"Failed docking lost floating geometry");
+        PaneSettings checkedSettings(directory.filePath("layouts.json"));
+        require(checkedSettings.floating("frameEditPageMediaPool"),"Failed docking persisted docked state");
+        require(warning->dockingWarningPending(),"Failed docking did not start an unacknowledged warning");
+        context(effects.pane->findChild<QToolButton *>("resolvePaneUndockButton")); popup()->hide();
+        require(warning->dockingWarningPending(),"Another panel's menu acknowledged this warning");
+        context(poolButton); menu=popup();
+        auto explanation=menu->findChild<QLabel *>("unboundDockingWarning");
+        require(explanation && explanation->isVisible() && explanation->text().contains("Use optimized UI layouts for vertical video"),
+            "Media Pool menu lacks the remedy for collapsed docking");
+        require(!warning->dockingWarningPending() && !warning->dockingWarningAnimating() && !warning->dockingFailure().isEmpty(),
+            "Opening the affected menu did not stop the pulse while retaining the warning");
+        menu->hide(); pool.content->window()->close(); waitDock();
+        require(poolButton->isChecked() && warning->dockingWarningPending(),"Failed close did not restart the warning");
+        context(poolButton); menu=popup(); click(control(menu,"unboundLayoutDockAll")); waitDock();
+        require(poolButton->isChecked() && PaneSettings(directory.filePath("layouts.json")).floating("frameEditPageMediaPool"),
+            "Dock all overrode the failed-docking recovery state");
+        menu->hide();
+        pool.pane->setMaximumWidth(QWIDGETSIZE_MAX); pool.pane->setMinimumWidth(0);
+        click(poolButton); waitDock();
+        require(!poolButton->isChecked() && pool.content->window()==&main && warning->dockingFailure().isEmpty(),
+            "Successful docking did not clear the warning");
+        context(poolButton); menu=popup();
+        require(!menu->findChild<QLabel *>("unboundDockingWarning")->isVisible(),"Successful docking left a stale menu explanation");
+        click(control(menu,"unboundLayoutSave"));
+        PaneSettings savedDocked(directory.filePath("layouts.json"));
+        const auto dockedId=savedDocked.activeLayout("WStackPage_Conform");
+        const auto dockedSnapshot=savedDocked.layout("WStackPage_Conform",dockedId);
+        menu->hide(); click(poolButton);
+        pool.pane->setFixedWidth(1); pool.toggle->setChecked(true); pool.pane->show();
+        context(poolButton); menu=popup();
+        click(control(menu,"unboundLayoutRecall",savedDocked.layoutName("WStackPage_Conform",dockedId))); waitDock();
+        PaneSettings failedRecall(directory.filePath("layouts.json"));
+        require(poolButton->isChecked() && failedRecall.floating("frameEditPageMediaPool") &&
+            failedRecall.activeLayout("WStackPage_Conform")==dockedId && failedRecall.layoutDirty("WStackPage_Conform",dockedId) &&
+            failedRecall.layout("WStackPage_Conform",dockedId)==dockedSnapshot,
+            "Failed layout docking overwrote its archive or misreported the actual floating state");
+        require(control(menu,"unboundLayoutUpdate") && control(menu,"unboundLayoutDockAll"),
+            "Open menu did not reflect recovered floating state and dirty layout");
+        menu->hide(); pool.pane->setMaximumWidth(QWIDGETSIZE_MAX); pool.pane->setMinimumWidth(0);
+        click(poolButton); waitDock();
+        menu->hide();
+        for(auto widget:QApplication::topLevelWidgets()) require(!qobject_cast<QMessageBox *>(widget),"Docking warning opened an intrusive message box");
+        std::puts("PASS: failed docking/close/Dock all/layout recall retain geometry and saved floating state; panel-local pulse acknowledgment, remedy and recovery");
+    }
     if(app.arguments().contains("--preview")) {
         main.move(main.pos()+QPoint(12,0)); settle();
         context(effects.pane->findChild<QToolButton *>("resolvePaneUndockButton"));

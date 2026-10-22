@@ -77,6 +77,18 @@ native Resolve pane toggle to reclaim main-window space; docking turns it on
 to show the restored pane, deferred until page return if inactive. Native toggles
 remain usable, and startup restoration honors saved choices. Remember geometry, docking and native toggle
 states across sessions; hide/show retained floating windows with their page.
+After docking, a bounded shared check verifies the native allocation after layout
+settles. A visible area collapsed to one pixel (including clipping by ancestors)
+returns the panel to its saved floating geometry without activation. Inactive pages
+defer the check until return; intentional native hiding, including unavailable
+viewers, is respected. Failed docking saves the actual floating state without
+overwriting saved layouts. The affected button pulses from muted grey to playhead
+red until its own context menu is opened, then remains muted. Its tooltip and menu
+explanation persist until successful docking; another failure restarts the pulse.
+Animation runs only while the warning is unacknowledged, visible and the app is
+active. The Edit Media Pool explanation suggests disabling optimized vertical UI;
+other panels use general guidance. Do not change Resolve preferences or project
+resolution automatically, force slot widths, or show a modal docking warning.
 Main-window placement is remembered per page.
 Edit's Program and Source viewers use normal header buttons, independent saved
 geometry/floating state and native Single/Dual Viewer controls, without an extra
