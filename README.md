@@ -19,6 +19,7 @@ between sessions.
 
 <img width="1230" height="628" alt="Unbound - Fairlight Page" src="https://github.com/user-attachments/assets/12c82fde-ba4e-446b-af31-ae30a119e582" />
 
+<img width="2480" height="1379" alt="Unbound - 9by16" src="https://github.com/user-attachments/assets/9ae5b1f9-e502-4c1b-8296-a63eb7048936" />
 
 ## Unbound design goals
 
