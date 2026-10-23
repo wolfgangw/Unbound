@@ -342,7 +342,7 @@ private:
                 m_gutterDragSurface->setGeometry(m_gutterMargins.left(),0,32,m_gutterContent->height());
                 m_gutterDragSurface->raise();
             }
-            button()->move(m_gutterMargins.left()+(32-button()->width())/2,top+(m_floating?16:10));
+            button()->move(m_gutterMargins.left()+(32-button()->width())/2,top+(m_floating?16:4));
             button()->raise(); return;
         }
         // Center the 20 px control in Timeline's 32 px track-label gutter.

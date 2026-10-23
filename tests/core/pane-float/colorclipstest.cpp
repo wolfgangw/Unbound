@@ -172,7 +172,7 @@ void testColorClips() {
     auto button=decoration.button();
     require(button && button->parentWidget()==content && content->contentsMargins().left()==32,
         "Clips lacks its reserved leading gutter");
-    require(button->x()==6 && button->y()==10,"Docked Clips button is not aligned in its gutter");
+    require(button->x()==6 && button->y()==4,"Docked Clips button is not aligned in its gutter");
     const auto original=player.geometry();
     require(session.start(&slot,"Clips",&page,false,false,true,false).isEmpty(),"Clips failed to float");
     decoration.setFloating(true); settle();
