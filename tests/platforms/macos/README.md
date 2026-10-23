@@ -25,10 +25,20 @@ covering press-triggered menu opening, release over the invoking button, small
 held movement, repeated opening and later outside click/drag dismissal. It also
 checks that opening with no held button preserves ordinary release dismissal.
 
+Before synthetic layout input, the Cocoa adapter establishes native and Qt
+activation together. If native-child reparenting leaves a tool window key while
+Qt reports the former host active, it performs a native key-window handoff before
+the next gesture. Focus assertions remain strict; production focus is unchanged.
+
 `layoutadapter.mm` runs `tests/core/pane-float/layouttest.cpp` and its catalogue
 checks as `UnboundLayoutTests`, using Cocoa placement, keyboard focus and native
 resize events. The shared suite covers settings migration, layout identity,
 controller-driven recall, retained hosts/rows, docking and page isolation.
+
+`audition-activation-test` runs the shared activation-bridge and production-session
+fixture for Fairlight Media Pool and Edit/Fairlight Sound Library. It models host
+command context and checks notification ordering, exclusions and teardown; native
+Resolve playback and waveform interaction still require a live check.
 
 `--mac-main-resize-test` exercises shrinking from all main-window edges and corners
 through the native event monitor. Cocoa frame proposals precede Qt geometry/pointer

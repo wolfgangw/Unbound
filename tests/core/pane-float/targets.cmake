@@ -4,6 +4,10 @@ function(unbound_add_pane_tests backend adapter)
     target_include_directories(pane-float-smoke PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
     target_link_libraries(pane-float-smoke PRIVATE ${backend})
 endfunction()
+function(unbound_add_audition_tests backend)
+    add_executable(audition-activation-test "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/auditionactivationtest.cpp")
+    target_link_libraries(audition-activation-test PRIVATE ${backend})
+endfunction()
 function(unbound_add_layout_tests backend adapter)
     add_executable(UnboundLayoutTests "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/layouttest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cataloguetest.cpp"

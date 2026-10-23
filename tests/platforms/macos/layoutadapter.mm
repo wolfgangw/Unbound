@@ -7,6 +7,21 @@
 #include <QMenu>
 namespace LayoutTest {
 void initialize() { qputenv("QT_STYLE_OVERRIDE","Fusion"); }
+void requestActivation(QWidget &window) {
+    auto native=reinterpret_cast<NSView *>(window.winId()).window;
+    // Synthetic recall can reparent native children while the tool window
+    // remains Cocoa's key window. Qt then retains the former host as active;
+    // makeKeyWindow alone is a no-op. Establish a fresh native handoff before
+    // fixture input, without changing production focus or synthesizing Qt state.
+    if(native.isKeyWindow) {
+        auto active=QApplication::activeWindow();
+        if(active && active!=&window) {
+            auto previous=reinterpret_cast<NSView *>(active->winId()).window;
+            [previous makeKeyWindow];
+        }
+    }
+    window.raise(); window.activateWindow();
+}
 std::unique_ptr<QWidget> makeMainWindow() { return std::make_unique<QWidget>(); }
 QRect nativeBounds(QWidget &window) { return window.frameGeometry(); }
 QRect prepareMainPlacement(QWidget &window) { return nativeBounds(window); }

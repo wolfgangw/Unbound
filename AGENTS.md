@@ -198,6 +198,7 @@ production source list. Both platform helpers and controller fixtures use
 `unbound_link_core()`. Shared fixture targets live in
 `tests/core/pane-float/targets.cmake`; native layout operations implement
 `layoutadapter.h` under the platform's tests directory.
+The shared audition-activation fixture is built and run on both backends.
 
 Shared pane behavior and persistence live in `src/core/`. OS contracts live in
 `src/platform/`; CMake selects the implementation under `src/platforms/<platform>/`.

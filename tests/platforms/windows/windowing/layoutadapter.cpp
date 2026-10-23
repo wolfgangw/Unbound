@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <qt_windows.h>
 namespace LayoutTest {
+void requestActivation(QWidget &window) { window.raise(); window.activateWindow(); }
 void initialize() {}
 class PlacementFrame final : public QWidget {
 protected:
