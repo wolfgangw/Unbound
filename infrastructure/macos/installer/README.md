@@ -25,6 +25,16 @@ architecture. `UNBOUND_MAC_ALLOW_UNTESTED=1` permits an unavailable execution
 architecture with an explicit NOT RUN record, never a false test pass.
 This explicit packaging step preserves the input candidate and installed files.
 It does not create a ZIP, publish a release or change the public version.
+
+For public distribution, copy the validated `Unbound <version>.app` from the
+packaging output into `release/packages/` and explicitly create
+`release/packages/Unbound-<version>-macos-universal.zip`. Match the existing package
+layout: the app is at the ZIP root. Use `ditto -c -k --sequesterRsrc --keepParent`
+with the app as input and the ZIP as output; refuse existing destination artifacts.
+Extract the ZIP into a temporary build directory and verify its signature,
+byte-identical payload, public version and arm64/x86_64 slices. Keep staging and
+validation records under `release/mac/installer/`; internal builds are unchanged.
+
 Layout, labels and feedback come from the [shared installer definition](../../installer/README.md),
 also used by Windows. The installed version is the second line inside Uninstall
 on the left; the candidate version is inside Install/Update on the right. Internal

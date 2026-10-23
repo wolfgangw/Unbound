@@ -302,7 +302,14 @@ No Resolve app re-signing, public version change or automatic ZIP.
 The native installer UI lives in `src/platforms/macos/installer/` and delegates to
 Lua install/uninstall scripts. Package it explicitly with
 `infrastructure/macos/installer/build.sh <Lua-candidate>`; its app is self-contained
-and has no persistent service. Uninstall always retains settings and layouts;
+and has no persistent service. Public macOS distribution artifacts belong in
+`release/packages/`: `Unbound <version>.app` and, when explicitly requested,
+`Unbound-<version>-macos-universal.zip`. The ZIP contains that app at its root;
+use `ditto --keepParent` to preserve the bundle. Never overwrite public artifacts.
+Runtime candidates and installer staging/validation records remain under
+`release/mac/`; internal installer destinations are unchanged. Verify the extracted
+ZIP's signature, payload and both architecture slices before distribution.
+Uninstall always retains settings and layouts;
 installers offer no settings-deletion action. Both actions
 require Resolve closed and must not terminate it automatically.
 
