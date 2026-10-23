@@ -247,6 +247,8 @@ static Panel panel(QWidget *root,QBoxLayout *layout,const QString &name,const QS
     return result;
 }
 void testPaneCatalogue();
+void testColorClips();
+void testColorClipsStartup();
 void testPageFocus();
 void testIndexHeaderDrag();
 void testDockingGuard();
@@ -254,8 +256,9 @@ int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
     HostApplication app(argc,argv); if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
+    if(app.arguments().contains("--color-clips-startup")) { testColorClipsStartup(); return 0; }
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
-    LayoutTest::nativePlacementEdges(); testPaneCatalogue(); storage(); layoutIdentity();
+    LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorClips(); storage(); layoutIdentity();
     testPageFocus();
     testDockingGuard();
     QTemporaryDir directory;

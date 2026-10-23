@@ -11,7 +11,7 @@ namespace PaneCatalogue {
 enum class Page { Edit, Color, Fairlight, Media, Cut, Fusion, Deliver };
 enum class Kind { Sidebar, Viewer };
 enum class Header { None, MediaPool, SoundLibrary, Keyframes, Effects, Index,
-    Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner };
+    Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner, ClipsGutter };
 struct PageDescriptor {
     Page id;
     QString objectName, label, legacyName, paneRoot, settingsPrefix;
@@ -52,7 +52,7 @@ struct PaneDescriptor {
         return names;
     }
     bool preserveNativeLayout() const { return page==Page::Color; }
-    bool requireNativeHeader() const { return page==Page::Fairlight; }
+    bool requireNativeHeader() const { return page==Page::Fairlight || header==Header::ClipsGutter; }
     bool serializeInitialization() const { return page==Page::Color || page==Page::Fairlight; }
 };
 inline const QVector<PaneDescriptor> &panes() {
@@ -71,6 +71,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"m_pWidgetMediaPool","Media Pool",Page::Color,"btnColorToggleMediaPool","mediaPool",Header::MediaPool,true},
         {"m_pFrameOFXPlugin","Effects",Page::Color,"btnColorToggleOpenFX","",Header::Effects,true},
         {"timelineFrame","Timeline",Page::Color,"btnColorToggleTimeline","",Header::TimelineCorner,true},
+        {"m_pLightBox","Clips",Page::Color,"btnToggleTimelineClips","",Header::ClipsGutter,false},
         {"frameAudioPanelMediaPoolContainer","Media Pool",Page::Fairlight,"MediaPool","",Header::MediaPool,true},
         {"frameAudioPanelEffectsLibraryContainer","Effects",Page::Fairlight,"EffectsLibrary","",Header::Effects,true},
         {"frameAudioPanelIndexContainer","Index",Page::Fairlight,"Index","",Header::Index,true,Kind::Sidebar,"frameAudioPageIndexTabContainer"},
@@ -122,6 +123,7 @@ inline bool matchesHeader(Header header,const QString &name,const QString &paren
     case Header::Adr: return name=="optionsBtn" && parent=="headerFrame";
     case Header::None: return false;
     case Header::TimelineCorner: return false;
+    case Header::ClipsGutter: return false;
     }
     return false;
 }

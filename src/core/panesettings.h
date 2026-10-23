@@ -83,13 +83,14 @@ public:
         const auto floating=root.value("floating").toObject();
         const auto toggles=root.value("toggles").toObject();
         for(auto it=panes.begin();it!=panes.end();++it) {
+            if(it.key()==QLatin1String("Color/m_pLightBox")) continue; // Retired pre-format-4 experiment.
             const auto geometry=placementJson(QByteArray::fromBase64(it.value().toString().toLatin1()));
             if(!geometry.isEmpty()) setEntry(m_pages,it.key(),"window",geometry);
         }
         for(auto it=floating.begin();it!=floating.end();++it)
-            if(it.value().isBool()) setEntry(m_pages,it.key(),"floating",it.value());
+            if(it.key()!=QLatin1String("Color/m_pLightBox") && it.value().isBool()) setEntry(m_pages,it.key(),"floating",it.value());
         for(auto it=toggles.begin();it!=toggles.end();++it)
-            if(it.value().isBool()) setEntry(m_pages,it.key(),"toolbarButtonChecked",it.value());
+            if(it.key()!=QLatin1String("Color/m_pLightBox") && it.value().isBool()) setEntry(m_pages,it.key(),"toolbarButtonChecked",it.value());
         m_readError=write(m_pages);
         if(m_readError.isEmpty() && !previousPath.isEmpty()) QFile::remove(previousPath);
     }

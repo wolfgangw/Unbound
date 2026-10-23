@@ -19,6 +19,7 @@
 #include "paneheaderdrag.h"
 #include "panecatalogue.h"
 #include "panedockingguard.h"
+#include "colorclipsadapter.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -72,6 +73,7 @@ public:
     }
     bool active() const { return !m_host.isNull(); }
     QWidget *floatingWindow() const { return m_host.data(); }
+    void suspendClipsMode(bool suspend) { if(m_clipsAdapter) m_clipsAdapter->suspendNativeMode(suspend); }
     QString dock()
     {
         if (!active() || m_restoring) return QString();
@@ -97,6 +99,7 @@ public:
     void reclaimNativeSpace(QAbstractButton *button)
     {
         if (!m_host || !button || !button->isChecked()) return;
+        if(m_slot && m_slot->objectName()==QLatin1String("m_pLightBox")) return; // Adapter reclaims the Lightbox allocation.
         const auto host = m_host;
         const auto generation = m_generation;
         // Fairlight's Mixer toggle can hide the transferred content's current
@@ -144,6 +147,15 @@ public:
         auto nativeGrid = qobject_cast<QGridLayout *>(layout);
         if (preserveNativeLayout && (layout->count() != 1 || !layout->itemAt(0)->widget()))
             return QStringLiteral("Expected a layout containing one content widget; no changes made.");
+        const bool clips=slot->objectName()==QLatin1String("m_pLightBox")
+            && pageRoot && pageRoot->objectName()==QLatin1String("WStackPage_Color");
+        if(clips) {
+            if(!m_clipsAdapter) {
+                m_clipsAdapter=new ColorClipsAdapter(pageRoot,this);
+                m_clipsAdapter->nativeDockRequested=[this] { if(active()) dock(); };
+            }
+            if(!m_clipsAdapter->valid()) return QStringLiteral("The native Color Lightbox layout is unavailable; no changes made.");
+        }
         auto splitter = qobject_cast<QSplitter *>(slot->parentWidget());
         if (reclaimSplitterSpace && (!splitter || splitter->indexOf(slot) < 0))
             return QStringLiteral("Expected Mixer inside a QSplitter; no changes made.");
@@ -272,6 +284,13 @@ public:
         if (slot->objectName()==QLatin1String("timelineFrame")
             && m_root->objectName()==QLatin1String("WStackPage_Color"))
             host->setMinimumWidth(qMax(host->minimumWidth(),240));
+        if(clips) {
+            host->setMinimumSize(360,240);
+            if(!m_clipsAdapter->start(host)) {
+                restore();
+                return QStringLiteral("The native Lightbox controls are unavailable; Clips remains docked.");
+            }
+        }
         if (!m_savedGeometry.isEmpty()) host->restoreGeometry(m_savedGeometry);
         applyPaneDarkCaption(host, slot->window());
         if (fadeIn) {
@@ -322,6 +341,7 @@ public:
             delete m_placeholder.data();
             m_slot->setLayout(m_layout);
         }
+        if(m_clipsAdapter) m_clipsAdapter->stop();
         m_layout->activate();
         if (m_splitter) {
             m_slot->removeEventFilter(this);
@@ -469,6 +489,7 @@ private:
     QPointer<QLabel> m_inspectorTitle;
     QSizePolicy m_inspectorTitlePolicy;
     NodesCanvasBounds *m_nodesBounds=nullptr;
+    ColorClipsAdapter *m_clipsAdapter=nullptr;
     QPointer<AuditionActivationBridge> m_auditionBridge;
     PaneHeaderDrag *m_auditionHeaderDrag = nullptr;
     QPointer<QLayout> m_layout;

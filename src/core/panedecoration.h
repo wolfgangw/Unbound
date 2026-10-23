@@ -192,6 +192,12 @@ public:
     {
         qDeleteAll(m_headerDrags);
         if(m_pane) {m_pane->removeEventFilter(this); removeStrip();}
+        if(m_gutterContent) {
+            m_gutterContent->removeEventFilter(this);
+            if(m_gutterContent->contentsMargins()==m_gutterMargins+QMargins(32,0,0,0))
+                m_gutterContent->setContentsMargins(m_gutterMargins);
+        }
+        delete m_gutterDragSurface.data();
         for(auto button:m_buttons) delete button.data();
     }
     QWidget *pane() const { return m_pane; }
@@ -265,6 +271,22 @@ private:
         bool any=false; for(auto b:m_buttons) if(b) any=true;
         if(m_native && any) {m_refreshing=false; return;}
         const auto paneDescriptor=PaneCatalogue::find(m_pane->objectName());
+        if(paneDescriptor && paneDescriptor->header==PaneCatalogue::Header::ClipsGutter) {
+            if(auto content=m_pane->findChild<QWidget *>("frameLightBoxBorder",Qt::FindDirectChildrenOnly)) {
+                m_gutterContent=content; m_gutterMargins=content->contentsMargins();
+                content->setContentsMargins(m_gutterMargins+QMargins(32,0,0,0));
+                content->installEventFilter(this);
+                m_gutterDragSurface=new QWidget(content);
+                m_gutterDragSurface->setObjectName("unboundClipsGutter");
+                m_gutterDragSurface->setFocusPolicy(Qt::NoFocus);
+                m_gutterDragSurface->show();
+                m_headerDrags.append(new PaneHeaderDrag(m_gutterDragSurface,this));
+                makeButton(content)->show(); m_native=true;
+                if(auto header=content->findChild<QWidget *>("topBorderFrame",Qt::FindDirectChildrenOnly))
+                    m_headerDrags.append(new PaneHeaderDrag(header,this));
+            }
+            position(); m_refreshing=false; return;
+        }
         if(paneDescriptor && paneDescriptor->header==PaneCatalogue::Header::TimelineCorner) {
             // Timeline has no header. Keep the corner control on the transferred
             // native content, not on its fixed-height slot or on the Clips sibling.
@@ -310,13 +332,27 @@ private:
     }
     void position()
     {
+        if(m_gutterContent && button()) {
+            // Match Timeline's centered 32px gutter. In Lightbox the first
+            // thumbnail decoration sits below the native filtering/size header.
+            int top=m_gutterMargins.top();
+            if(auto view=m_gutterContent->findChild<QWidget *>("frameThumbnailView"))
+                top=view->mapTo(m_gutterContent,QPoint(0,0)).y();
+            if(m_gutterDragSurface) {
+                m_gutterDragSurface->setGeometry(m_gutterMargins.left(),0,32,m_gutterContent->height());
+                m_gutterDragSurface->raise();
+            }
+            button()->move(m_gutterMargins.left()+(32-button()->width())/2,top+(m_floating?16:10));
+            button()->raise(); return;
+        }
         // Center the 20 px control in Timeline's 32 px track-label gutter.
         if(m_cornerOverlay && button()) { button()->move(6,2); button()->raise(); return; }
         if(m_native || !m_pane || !button()) return;
         button()->move(qMax(m_margins.left(),m_pane->width()-m_margins.right()-22),m_margins.top()+2);
         button()->raise();
     }
-    QPointer<QWidget> m_pane;
+    QPointer<QWidget> m_pane,m_gutterContent,m_gutterDragSurface;
+    QMargins m_gutterMargins;
     QList<QPointer<QToolButton>> m_buttons;
     QList<PaneHeaderDrag *> m_headerDrags;
     QMargins m_margins;

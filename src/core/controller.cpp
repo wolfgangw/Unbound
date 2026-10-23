@@ -194,6 +194,19 @@ private:
         const auto error=m_settings.clearActiveLayout(page); if(!error.isEmpty()) return error;
         scheduleDiscovery(); return {};
     }
+    void normalColorLayout(const QString &page,const QJsonObject &panes)
+    {
+        if(page!=QLatin1String("WStackPage_Color")
+            || panes.value("m_pLightBox").toObject().value("floating").toBool()) return;
+        // Lightbox is an implementation detail of floating Clips. Explicitly
+        // recalling an ordinary Color layout must not inherit that outgoing
+        // session's pre-float mode (manual docking still restores it).
+        m_deferredLightbox=nullptr;
+        if(!m_window) return;
+        const auto buttons=m_window->findChildren<QAbstractButton *>("btnColorToggleLightbox");
+        if(buttons.size()==1 && buttons.first()->isEnabled() && buttons.first()->isChecked())
+            buttons.first()->click();
+    }
     QString recallLayout(const QString &page,const QString &layoutId,bool &applied) {
         applied=false;
         if(currentPage()!=page) return QStringLiteral("Return to this page before recalling its configuration.");
@@ -205,8 +218,12 @@ private:
                 return QStringLiteral("Panels are still initializing. Please try again.");
         const auto captured=capturePage(page);
         if(!captured.isEmpty()) return captured;
-        if(m_settings.activeLayout(page)==layoutId && !m_settings.layoutDirty(page,layoutId)) return {};
+        if(m_settings.activeLayout(page)==layoutId && !m_settings.layoutDirty(page,layoutId)) {
+            normalColorLayout(page,configuration.value("panes").toObject());
+            return {};
+        }
         applied=true;
+        if(page=="WStackPage_Color") if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(true);
         const auto panes=configuration.value("panes").toObject();
         // Dock only differences, before activating the saved settings: outgoing
         // geometry/dock callbacks must not overwrite the incoming configuration.
@@ -219,6 +236,7 @@ private:
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->prepareLayout(panes);
         const auto error=m_settings.activateLayout(page,layoutId);
         if(!error.isEmpty()) return error;
+        normalColorLayout(page,panes);
         for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
             const auto key=settingsKey(it.key());
             if(Unbound::PaneSettings::pageForPane(key)!=page) continue;
@@ -240,7 +258,7 @@ private:
         const auto page=currentPage();
         for(auto it=m_decorations.cbegin();it!=m_decorations.cend();++it) {
             const auto key=settingsKey(it.key());
-            if(Unbound::PaneSettings::pageForPane(key)!=page || !m_settings.floating(key) || m_restoreAttempted.contains(it.key())) continue;
+            if(it.key()==QLatin1String("m_pLightBox") || Unbound::PaneSettings::pageForPane(key)!=page || !m_settings.floating(key) || m_restoreAttempted.contains(it.key())) continue;
             auto pane=it.value()->pane();
             if(pane && panePage(pane) && panePage(pane)->isVisible() && pane->layout() && pane->layout()->count()) return;
         }
@@ -373,7 +391,7 @@ private:
             if (!pane || !panePage(pane) || !panePage(pane)->isVisible()) return;
         }
         for (auto it=m_decorations.cbegin();it!=m_decorations.cend();++it) {
-            if (!preservesNativeLayout(it.key()) || !m_settings.floating(settingsKey(it.key()))) continue;
+            if (it.key()==QLatin1String("m_pLightBox") || !preservesNativeLayout(it.key()) || !m_settings.floating(settingsKey(it.key()))) continue;
             auto pane=it.value()->pane();
             if (pane && panePage(pane)->isVisible() && !m_restoreAttempted.contains(it.key())) return;
         }
@@ -530,6 +548,44 @@ private:
         box->setAttribute(Qt::WA_QuitOnClose, false);
         box->show();
     }
+    bool pendingColorPanes() const
+    {
+        // Include not-yet-discovered panes: sorting the current decorations is
+        // insufficient when project startup creates native content lazily.
+        for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
+            if(it.key()==QLatin1String("m_pLightBox")) continue;
+            const auto key=settingsKey(it.key());
+            if(Unbound::PaneSettings::pageForPane(key)==QLatin1String("WStackPage_Color")
+                && m_settings.floating(key) && !m_restoreAttempted.contains(it.key())) return true;
+        }
+        return false;
+    }
+    void restoreDeferredLightbox()
+    {
+        if(!m_deferredLightbox) return;
+        auto mode=m_deferredLightbox; m_deferredLightbox=nullptr;
+        if(!mode->isChecked()) mode->click();
+    }
+    void prepareColorRestoration()
+    {
+        if(currentPage()!=QLatin1String("WStackPage_Color")) return;
+        if(!pendingColorPanes()) return;
+        if(auto clips=m_sessions.value("m_pLightBox")) {
+            if(clips->active()) { clips->suspendClipsMode(true); return; }
+        }
+        if(!m_window) return;
+        const auto buttons=m_window->findChildren<QAbstractButton *>("btnColorToggleLightbox");
+        if(buttons.size()!=1) return;
+        auto mode=buttons.first();
+        if(mode->isVisible() && mode->isEnabled() && mode->isChecked()) {
+            // Native Lightbox may be restored by the outgoing Clips dock, even
+            // after recall suspended it. Ordinary incoming panels need the
+            // toolbar too, whether or not the incoming layout floats Clips.
+            // Preserve the native choice until all restoration work finishes.
+            m_deferredLightbox=mode;
+            mode->click();
+        }
+    }
     void discover()
     {
         for (auto it = m_decorations.begin(); it != m_decorations.end();) {
@@ -566,11 +622,16 @@ private:
                 m_viewers->dockingWarningChanged=[this] { if(m_layoutMenu) m_layoutMenu->refreshDockingWarning(); };
             }
         }
+        prepareColorRestoration();
         showDockedPanes();
-        for (auto it = m_decorations.cbegin(); it != m_decorations.cend(); ++it) {
-            const auto name = it.key();
+        auto restoreOrder=m_decorations.keys();
+        // Native Lightbox replaces the toolbar. Initialize other Color panes
+        // before entering it, so their lazy content and selectors remain usable.
+        if(restoreOrder.removeOne("m_pLightBox")) restoreOrder.append("m_pLightBox");
+        for (const auto &name : restoreOrder) {
             if (!m_settings.floating(settingsKey(name)) || m_restoreAttempted.contains(name)) continue;
-            auto pane = it.value()->pane();
+            auto decoration=m_decorations.value(name);
+            auto pane = decoration->pane();
             auto root = pane ? panePage(pane) : nullptr;
             if (!root || !root->isVisible() || !pane->layout() || !pane->layout()->count()) continue;
             bool requested = false;
@@ -584,13 +645,23 @@ private:
             }
             // Fairlight controls belong beside native header actions, never in
             // a fallback strip. Lazy native initialization may create them.
-            if (descriptor.requireNativeHeader() && !it.value()->usesNativeHeader()) continue;
+            if (descriptor.requireNativeHeader() && !decoration->usesNativeHeader()) continue;
+            if(name==QLatin1String("m_pLightBox")) {
+                if(pendingColorPanes()) continue;
+                restoreColorToggles(); restoreLayoutToggles();
+                restoreDeferredLightbox();
+            }
             m_restoreAttempted.insert(name); // No repeated errors for incompatible panes.
             undock(name, true);
         }
         restoreColorToggles();
         restoreLayoutToggles();
+        if(!pendingColorPanes()) {
+            restoreDeferredLightbox();
+            if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(false);
+        }
     }
+    QPointer<QAbstractButton> m_deferredLightbox;
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
     QPointer<Unbound::PageLayoutMenu> m_layoutMenu;
