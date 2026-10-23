@@ -48,8 +48,8 @@ close handling and lifetime; Unbound adds window-management behavior.
 Existing undocked panes also retain Resolve-owned content, but need our host
 because they originate inside main. Fred already has a host. Rehosting is possible
 in principle, but adds parenting, teardown and close-path risks without an evident
-benefit. The Fairlight audition investigation demonstrated that Resolve can depend
-on widget relationships. The user agrees with preserving those relationships.
+benefit. Resolve's audition command context depends on widget relationships;
+preserving native ancestry avoids introducing another context correction.
 
 Detection can use the application-level Qt Show event, checking the recognized
 top-level identity and setting up once after construction. One startup inventory
@@ -71,7 +71,7 @@ and geometry. Restoring selected bins would be convenient, but is optional: user
 can cheaply navigate to the intended bins themselves. Multiple Freds may be useful
 for large projects with deeply nested bins.
 
-Options discussed:
+Design alternatives:
 
 1. **One persistent global arrangement, outside named layouts.** Simple and avoids
    page-layout recalls moving shared windows. Remembers count/geometry across
@@ -81,7 +81,7 @@ Options discussed:
    state, but introduces another layout category and coordination burden. No desire
    to add that UI complexity at present.
 3. **Each page layout also snapshots the global Fred arrangement.** Preferred
-   direction from discussion. Recall restores its page-local panes plus the saved
+   direction. Recall restores its page-local panes plus the saved
    global Fred set; that Fred arrangement then persists across page switches.
    Recalling another page's layout may consequently move, create or close Freds.
    The user considers this manageable: people deliberately using multiple Freds
@@ -91,7 +91,7 @@ Options discussed:
    for these small records, but makes every layout share an overwritten arrangement
    instead of preserving independent snapshots. It conflicts with our explicit
    save/update rule and can destroy arrangements users intended to recall. This
-   was raised as a question, not accepted as the design.
+   is incompatible with the intended independent snapshots.
 
 Proposed state model for option 3 (still to be finalized):
 

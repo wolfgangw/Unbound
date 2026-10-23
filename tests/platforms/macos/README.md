@@ -68,7 +68,7 @@ request acceptance from completed attachment and actual docking-button discovery
 Resolve's LuaJIT in a separate fixture process. Mocked native calls verify private installation paths and silent success;
 restricted Lua globals, missing files/FFI and rejected attachment do not leave
 an exception escaping the startup hook. Current live-validation status belongs in
-[platform status](../../../doc/platforms/macos.md); individual runs belong in logs.
+[platform status](../../../AGENTS.md#platform-implementation-and-validation); individual runs belong in logs.
 
 `loading/lua/install_test.py` exercises fresh installs, legacy menu migration,
 updates, disable/enable, rejected installs and rollback in isolated user roots.

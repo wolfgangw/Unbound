@@ -1,29 +1,17 @@
-# Issues and investigations
+# Open investigations
 
-User reports, reproduction evidence and follow-up investigations live here.
-Distinguish confirmed findings from hypotheses; historical investigation records
-may describe intermediate experiments rather than the current implementation.
+Keep only unresolved reports, required validation and unsettled designs here.
+Record evidence that helps resolve the open question, not a history of attempts.
+When resolved, move the durable mechanism/constraint into [AGENTS.md](../../AGENTS.md)
+and remove the investigation. Git retains the history.
 
-- [Color Clips and Lightbox](color-clips-investigation.md):
-  shared native content and mode-dependent sizing complicate floating Clips;
-  button placement and mode-transition behavior need an explicit design.
-
-- [Floating panels after leaving Dual Screen mode](dual-screen-floating-panels.md):
-  unconfirmed Resolve report; a matching lifecycle weakness reproduced in a fixture.
-- [Edit Media Pool collapsed to one pixel](edit-media-pool-collapsed-width.md):
-  native failure when entering optimized vertical-video layouts with Media Pool
-  hidden; project-resolution changes also reproduce disappearance on docking.
-  Native recovery and Unbound's defensive docking safeguard are validated in Resolve.
-- [Fairlight page focus and shortcuts](fairlight-page-focus-and-shortcuts.md):
-  returning floating windows take transport focus; a separate native Shift+7/slash
-  shortcut collision depends on the originating page.
-- [Fairlight Media Pool audition](fairlight-audition-investigation-2026-10-13.txt):
-  investigation of lost audio and playback handoff while floating.
-- [Sound Library shortcuts](sound-library-shortcuts.txt):
-  Edit audition commands route to timeline despite correct floating focus;
-  Edit activation fix validated on Windows; Fairlight correction restores audition
-  audio, waveform and routing in live testing, with production validation pending.
-- [Layout rename input](layout-rename-input-2026-10-17.txt):
-  keyboard routing during inline name editing.
-- [Corner resize crash](resize-corner-crash-2026-10-17.txt):
-  crash evidence, root cause and correction.
+- [Bin windows (Fred)](../Fred-In-Progress.md): native bin-window adoption,
+  identity, lifecycle and layout semantics remain under design.
+- [Dual Screen disappearance](dual-screen-floating-panels.md): user report not
+  reproduced in Resolve; a matching container-lifecycle weakness exists in fixtures.
+- [Fairlight page shortcut ambiguity](fairlight-page-focus-and-shortcuts.md):
+  German Shift+7/slash collision needs a native baseline/remapping comparison.
+- [Divider persistence](layout-divider-persistence.md): safe native restore and
+  saved proportions/schema remain to be designed.
+- [Platform validation](platform-validation.md): outstanding native and
+  distribution checks.

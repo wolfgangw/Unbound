@@ -10,10 +10,9 @@ docking there and undocking again in Single Screen avoids the problem afterward.
 
 The behavior has not been reproduced in Resolve on the development system.
 The page, Full Screen Timeline state and display arrangement have not yet been
-established. Inspection of tag `v0.2.0` confirms the same retained page-container
-pointer and Hide/Show handling as the current implementation, with no rebinding
-when the slot changes page containers. The candidate therefore applies to the
-reported version too; this is not confirmation of the reporter's cause.
+established. Both the reported version and the current implementation retain a
+page-container pointer without rebinding when a slot changes containers. This is
+a candidate explanation, not confirmation of the reporter's cause.
 
 ## Confirmed lifecycle weakness
 

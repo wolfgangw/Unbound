@@ -65,4 +65,4 @@ signing or notarization; see the [README](../../../README.md#compatibility) for
 the per-app Open Anyway procedure. These distribution limits do not affect
 feature parity with Windows. A browser-download test in another user account
 is useful but does not reset this
-Mac's Gatekeeper history. See [platform status](../../../doc/platforms/macos.md).
+Mac's Gatekeeper history. See [platform status](../../../AGENTS.md#platform-implementation-and-validation).

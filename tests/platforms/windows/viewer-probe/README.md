@@ -34,8 +34,8 @@ Restart Resolve before testing rebuilt DLLs; replacing a file does not update
 code already loaded in Resolve. Native Dual Screen transitions while viewers
 float and more complex side-panel arrangements still need live validation.
 
-Findings and the earlier experiment history are recorded in
-`doc/edit-viewer-investigation-2026-10-16.txt`.
+The current production mechanism is documented in
+`AGENTS.md` (Specialized pane mechanisms).
 
 `layout-state-probe.exe` / `LayoutStateProbe.dll` capture QObject identities and
 Qt metadata for native layout controllers reachable through the application and
@@ -55,9 +55,9 @@ be normalized using the capture's Resolve image base and the exact binary before
 on-disk analysis. They are diagnostic evidence, never callable Unbound APIs.
 
 Do not use QObject::dumpObjectInfo against Resolve for connection discovery.
-A discarded diagnostic using that API faulted inside Qt and left Resolve stuck
-in shutdown. This failure and the replacement inspection boundaries are recorded
-in the investigation document. GammaRay has not been attached during this work.
+Do not call that API in a live probe: its Qt invocation path is unsafe here.
+Use passive signal/geometry observation; opaque native anchors are not a supported
+position-setting interface.
 
 `anchor-probe.exe` / `AnchorProbe.dll` observe the three Edit native layout
 managers' `AnchorMoved(UiLayoutAnchor*,int)` signals, plus region geometry and

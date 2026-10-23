@@ -2,7 +2,7 @@
 
 This approach starts the shared controller and Cocoa backend automatically through
 Resolve's internal Lua runtime. There is no Scripts-menu entry or manual activation
-step. See [platform status](../../../doc/platforms/macos.md) for compatibility and
+step. See [platform status](../../../AGENTS.md#platform-implementation-and-validation) for compatibility and
 validation limits.
 
 For graphical installation and removal, build the

@@ -33,5 +33,5 @@ size is explicit and can run into padding, jump tables or the next function.
 All addresses are preferred image VAs for the exact inspected binary, NOT live
 addresses and NOT a supported Resolve API. Do not call them or hardcode them into
 Unbound. Static evidence is not proof that a branch executes in the failing case.
-See doc/issues/fairlight-audition-investigation-2026-10-13.txt for verified findings,
-binary version/hash, boundaries of the conclusions and next runtime checkpoints.
+See AGENTS.md for the production audition activation mechanism. Binary-specific
+inspection output belongs in build logs and is not a production interface.

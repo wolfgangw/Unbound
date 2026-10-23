@@ -13,7 +13,7 @@ diagnostic log location.
 
 Blackmagic's [Fusion scripting guide, page 24](https://documents.blackmagicdesign.com/UserManuals/Fusion8_Scripting_Guide.pdf#page=24)
 documents root `.scriptlib` execution at startup. See
-[platform status](../../../../doc/platforms/macos.md) for compatibility limits.
+[platform status](../../../../AGENTS.md#platform-implementation-and-validation) for compatibility limits.
 The loader requires an existing Qt application; startup timing remains a native
 integration constraint, not a reason to occupy Fusion's Lua executor with a loop.
 

@@ -33,4 +33,4 @@ is recorded as NOT RUN in validation logs and never suppresses a failing test.
 See [Lua instructions](lua/README.md).
 
 These workflows are separate from the Windows release entry points. See
-[platform status](../../doc/platforms/macos.md) for requirements and validation.
+[platform status](../../AGENTS.md#platform-implementation-and-validation) for requirements and validation.

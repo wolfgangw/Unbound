@@ -1,4 +1,4 @@
-﻿# Unbound development
+# Unbound development
 
 ## Product
 
@@ -9,16 +9,58 @@ validation. Keep this limitation explicit in public documentation. Both use auto
 startup, native installers and the same shared pane behavior and layouts.
 Windows builds are unsigned; macOS builds are ad-hoc signed without Developer ID
 signing/notarization. These distribution limitations do not imply missing features.
-See `doc/platforms/` for tested configurations and platform validation details.
+Tested configurations and platform-specific mechanisms are recorded below.
 Edit supports Media Pool, Effects, Sound Library, Keyframe Editor,
 Edit Index, Inspector, Metadata and Mixer; Color supports Nodes, Gallery, LUTs
-Media Pool, Effects and Timeline. Color Timeline floats independently of Clips;
+Media Pool, Effects, Timeline and Clips. Color Timeline floats independently of Clips;
 its Unbound button overlays the native timeline's top-left corner without adding
 a header or changing its native docked slot constraints. The snapshot's 76 px slot
 height is configuration-dependent; the transferred UiMiniTimelineWidget has no
 explicit Qt maximum height. Native resizing and clip selection are validated on
 Windows. The floating host has a 240 logical-pixel minimum width for track labels
 and usable clip bars; native docked constraints remain unchanged.
+Clips uses the native Lightbox renderer while floating, including its thumbnail
+size control, filtering and timecode ruler. Its button sits centered in a reserved
+32 px leading gutter, aligned with the first thumbnail decoration row in docked
+and floating states. The unused gutter also drags the floating window, without
+covering clip decoration or native controls. A shared event-driven adapter replaces
+the empty Lightbox allocation with the main viewer, suppressing interim repaint
+during native layout passes. Hosts use normal geometry/layout persistence and
+page hide/show retention. Windows content reflows on resize release; the floating host minimum is 360 by
+240 logical pixels. Native
+Lightbox exit docks Clips; docking restores the pre-float Lightbox/Color Controls
+choices, deferred if the page is inactive. Other Color panes initialize before
+Clips enters Lightbox; layout recall temporarily suspends its native mode.
+On startup, temporarily leave native Lightbox while other saved Color panes are
+pending, including not-yet-discovered panes. Keep retained Clips suspended across
+deferred discovery passes; enter its native mode only after those attempts finish.
+Preserve the original Lightbox choice for docking. Use widget/layout events, not
+polling or fixed delays. Native grid overflow scrolling and header-background
+dragging are confirmed; leave scrolling to Resolve.
+The same deferred-mode guard covers layout recall even when the incoming layout
+does not float Clips: docking outgoing Clips can restore native Lightbox-on after
+recall suspended it. Keep the toolbar available until incoming Color panes finish
+initializing, then restore the preserved native mode.
+Explicit recall of a Color layout without floating Clips returns to normal Color
+mode, including reselecting an otherwise clean active layout. Do not restore the
+outgoing Clips session's Lightbox-on choice after that recall. Manual docking
+retains its separate pre-float mode restoration behavior; no new settings field.
+While Clips floats, transfer the existing
+normal Color controls into an additional row above the native Lightbox toolbar.
+Insert that row into the native vertical layout and restore original control
+ownership/order when docking. The shared adapter reserves the native left stack
+(Gallery/LUTs/Media Pool) and right Nodes/Effects containers according to their
+native toggles, alongside the viewer and optional Timeline. Preserve native
+constraints and connections. While dragging a recognized sidebar divider, freeze
+main-window/Clips-host repaint, temporarily enter normal Color mode and defer ordered
+mouse-event delivery until its layout pass. Capture native widths before returning
+to Lightbox and repaint on release. A separate nonactivating, input-transparent two-pixel grey
+guide follows the native divider position while the main backing store is frozen.
+Dispose of it on completion or interruption. Interrupted gestures must release native input,
+discard stale queued events and restore prior repaint state. No polling, binary
+offsets or saved divider positions. Native Windows docking, layout recall, panel
+visibility and repaint preservation are user-validated. New guide feedback and
+platform coverage still require native validation; see `doc/issues/platform-validation.md`.
 Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
 Window edges also align across gaps. The smallest edge adjustment wins; equal
@@ -132,6 +174,9 @@ retain priority. Do not intercept transport or native page shortcuts.
 - `sidebarfloatsession.h`, `panefloatsession.h`: reparent existing widgets into
   floating hosts while preserving original layout slots, constraints and ownership.
   Docking restores them. Resolve owns content; Unbound owns hosts/placeholders.
+- `colorclipsadapter.h`, `colorclipssidebars.h`, `colorclipstoolbar.h`: coordinate
+  native Lightbox mode, main-region allocation/divider gestures and reversible
+  transfer of native Color toolbar controls.
 - `panedecoration.h`: inserts the vector toggle beside recognized native header
   menus, with a compact fallback strip when necessary.
 - `panefloatingwindow.h`, `panetaskbar.h`: captionless hosts, native dark borders,
@@ -191,7 +236,8 @@ Installer presentation is shared in `src/installer/dialog.json` and
 Keep wording, control layout, display versions and presentation state there;
 native installers retain platform-specific transactions and process monitoring.
 Do not introduce a separate workspace/control window. Do not substitute a no-op backend for a release.
-See `doc/architecture.md` and `doc/platforms/` for platform status.
+The platform contracts select one backend at compile time, with no runtime backend
+selection. Core must not include platform implementation paths or OS headers.
 
 ## Build and validate
 
@@ -248,8 +294,8 @@ require Resolve closed and must not terminate it automatically.
 
 Lua loading and automatic startup work in the tested Free Resolve
 configuration; pane undocking, layouts and basic Fusion interaction are validated.
-See `doc/platforms/macos.md` for current limits and next steps, and the approach's
-infrastructure README for installation/recovery commands.
+See the approach's infrastructure README for installation/recovery commands and
+`doc/issues/platform-validation.md` for outstanding validation.
 
 The Lua startup hook calls the private loader once and returns silently. Install
 the runtime under `~/Library/Application Support/Unbound/Runtime/`; only the root
@@ -262,8 +308,194 @@ internal Lua exposes global `ffi` and `os.getenv`, but omits `require`, `package
 `debug` and `io`. Queue native attachment onto the Qt GUI thread. Keep fixture
 logs separate from live startup logs using `UNBOUND_LOG_FILE`.
 
+## Specialized pane mechanisms
+
+Edit viewers use `editviewers.h` for native widget reparenting and independent
+settings recall. `viewergeometryadapter.h` retains native region baselines while
+expanding the timeline when no visible viewer remains docked. During resizing it
+coalesces temporary native half-height timeline resize notifications before Qt
+dispatches them to child layouts, preserving the last delivered oldSize. A narrow
+application filter is installed only during reclamation and acts only on retained
+resize targets. It finishes each native resize pass through the retained ancestor
+chain up to the main window once, then applies the expanded regions synchronously.
+Main-region painting is deferred until that transaction completes; floating
+viewers retain their own updates. Docking restores native region geometry;
+private Resolve layout anchors and the custom video/audio divider are not modified.
+
+In Single Viewer Mode, native Media Pool hover preview hides the Program widget
+and shows Source. A floating Program remains independently visible: a coalesced
+GUI-thread update shows its existing content after the native swap completes.
+The native Source preview and viewer mode remain unchanged. Native Program
+visibility intent is retained for docking; Source hiding marks the return to
+Program even when Resolve's own show call is already satisfied. Ownership changes
+and Unbound's own show calls are excluded from intent tracking. Page/host hiding
+still wins; no frames are copied and no playback or private native handler is used.
+
+The geometry adapter filters retained timeline Resize events at application level,
+before QLayout can resize child viewports. Resolve's custom video/audio divider
+has no discovered public position setter; preserve native behavior rather than
+forcing its ratio during resizing. No private layout-anchor calls are used.
+
+Fairlight Media Pool retains its tested Qt parent/native owner relationship for
+audition. Windows adds WS_EX_APPWINDOW before first show so this owned host keeps
+shell identity and appears in taskbar previews/Alt+Tab. The shared audition bridge
+stops before content is reparented on docking and tolerates nested notification
+and target destruction. Sound Library uses the same activation correction without
+this parent adjustment; its recognized player is `m_PlayerPreview`, while
+Fairlight Media Pool uses `previewPlayer`.
+
+Edit Media Pool can receive a one-pixel native slot when it is hidden before a
+portrait timeline activates "Use optimized UI layouts for vertical video".
+This is reproducible without Unbound. The general docking-allocation safeguard
+handles the unusable slot; the warning suggests disabling that preference.
+Do not automatically alter preferences, project resolution or native slot widths.
+
+Edit Inspector excludes its native middle-eliding title label's horizontal size
+hint from the floating minimum and restores its original sizing policy on docking.
+Edit Index's upper tab-row background is a drag surface alongside its lower action
+header; Edit Index, Tracks and Markers buttons retain normal native input.
+
+## Settings reference
+
+Settings are per user, across projects. Windows uses
+`%LOCALAPPDATA%\Unbound\Unbound.json`; macOS uses
+`~/Library/Application Support/Unbound/Unbound.json`.
+`UNBOUND_SETTINGS_FILE` overrides either location. Edit JSON only with Resolve
+closed, because in-memory state and autosave otherwise overwrite external edits.
+Format 7 uses readable JSON and atomic writes. Unsupported/corrupt files remain
+unchanged; malformed layouts are rejected rather than recalled as empty state.
+
+`pages` is keyed by the page's Resolve object name: `WStackPage_Conform`,
+`WStackPage_Color`, `WStackPage_Audio`, `WStackPage_Browse`, `WStackPage_Cut`,
+`WStackPage_Fusion`, `WStackPage_Deliver`. Each page can contain:
+
+- `mainWindow`: per-page native placement.
+- `panes`: objects keyed by the catalogue's persistence name, each containing
+  `floating`, optional `toolbarButtonChecked`, and `window` geometry.
+- `presets`: up to five layout objects with stable UUID `id`, display `name`, and
+  `configuration` containing only a `mainWindow`/`panes` snapshot.
+- `activePreset`: active layout UUID; manual changes preserve it, deletion of the
+  active layout or Dock all clears it. It is not part of snapshots.
+- `nextPresetNumber`: next generated name suffix; deletion does not reuse numbers.
+
+Use the pane catalogue as the authoritative key list. Edit viewers persist as
+`widgetEditTimelinePlayer` and `stackedEditSourceOfflinePlayers`; Color Timeline
+uses `timelineFrame`, Clips uses `m_pLightBox`. Color's shared Gallery/LUTs/Media
+Pool selectors are exclusive: save at most one checked; all may be unchecked.
+Clips' temporary Lightbox/Color Controls choices and sidebar widths are not
+settings fields. Page focus and docking-warning acknowledgment are session-only.
+
+Each pane `window` has these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `clientRect` | Qt logical desktop content x/y/width/height, excluding resize borders; authoritative for normal floating restoration |
+| `normalClientRect` | Unmaximized rectangle retained beneath maximized/fullscreen state |
+| `frameRect` | Recorded outer Qt frame, used to reconstruct Qt geometry in memory |
+| `maximized`, `fullScreen` | Window state; minimized state is not saved |
+| `screenIndex`, `screenWidth` | Qt monitor selection/scaling metadata |
+
+Sizes must be positive; negative desktop coordinates are valid. For manual normal
+geometry edits update both client rectangles. No persisted field contains Base64;
+Qt's binary restoration record is reconstructed in memory. Native content minimums
+and reachable captionless-window recovery apply. Moving/resizing autosaves after
+a short delay; docking/shutdown flush geometry. Shutdown preserves floating intent;
+manual docking or closing a floating host clears it.
+
+Windows `mainWindow` contains `normalRect` in native placement coordinates,
+`coordinateSpace: "windows-workspace"`, `maximized`, `monitors` (each with `name`,
+`workArea`, `scaleFactor`) and `qtFallback` (pane-style readable geometry).
+An unchanged monitor setup uses `normalRect`; changed displays use the fallback.
+These coordinates differ from Qt client coordinates; keep the distinction explicit.
+macOS `mainWindow` uses the pane-style readable fields with top-left logical screen
+coordinates. The Cocoa adapter converts NSWindow content/frame rectangles and
+zoom state; fullscreen/Spaces transitions do not replace saved normal placement.
+
+Formats 1-6 migrate to 7 without creating layouts or changing arrangements.
+Name-based layouts receive UUIDs and the active name maps to an ID; names,
+snapshots and counters remain intact. Obsolete pre-format-4 `Color/m_pLightBox`
+records are excluded. Layout validation requires unique IDs, not unique labels.
+Direct JSON equality suppresses duplicate new layouts; no hashes are stored.
+Explicit updates may overwrite an existing layout regardless of duplication.
+
+Recall captures pending geometry/toggles before comparing snapshots, docks only
+state differences before selecting incoming state, and reuses retained hosts.
+Native toggle restoration runs off-first then on after float initialization.
+Main placement discards its outgoing cache and uses the normal restoration path.
+Source viewer intent waits for native availability. No internal divider positions
+or Single/Dual Viewer selection are captured. Explicit Color recall without
+floating Clips additionally returns to normal Color mode as described above.
+
+## Platform implementation and validation
+
+Windows startup, saved Program Viewer restoration and layouts have been validated
+in Resolve Studio 21.1.1.10; Windows Free remains unvalidated. The earlier supported
+Windows configuration is Resolve 21.1.0.14, Qt 5.15.2. macOS validation uses Apple M2,
+macOS 27.0.1, Resolve Free 21.1.1.10 and Qt 5.15.2. Native Intel Mac operation is
+unvalidated despite the universal binary. Open validation is tracked in
+`doc/issues/platform-validation.md`; fixture passes are not native Resolve proof.
+
+### Windows windowing
+
+Captionless hosts retain native side/bottom resize margins and a one-physical-pixel
+top outline. An invisible inward band adds six logical pixels for edge grabs and
+twelve for corners, DPI-scaled. Native child edges route presses into the same
+nonmodal resize path; hooks are removed on disposal/reparenting. No added layout
+margin or overlay is used; maximized/fullscreen hosts exclude these grab zones.
+`PaneResizeHitFilter` must accept only `windows_generic_MSG` with non-null message
+and result pointers before any side effects. Dispatcher messages can have no
+result pointer and must not start a gesture.
+
+Windows 11 contact bounds use DWM visible-border thickness without subtracting a
+pixel. Side/bottom compensation stops at content; Resolve's top client rectangle
+includes the DWM outline, so top compensation uses the reported thickness even
+when ClientToScreen gives no margin. Windows 10 retains one-physical-pixel
+translucent-outline compensation. Main-window top snapping commits the negotiated
+position after the native move loop if release clamps it by the outline thickness;
+cancellation, maximization and Alt bypass do not replay the snap.
+Every PaneFloatingWindow registers as a snap participant, including viewers.
+Target selection uses host registration and measured contact bounds, not pane names.
+
+Cinema Viewer from a floating Edit viewer hides the main window to match native
+docked Cinema behavior and prevent duplicate application/menu transport shortcuts.
+Exit restores only visibility Unbound changed; no transport-key interception or
+viewer parenting changes. Docking must run the viewer-region restoration path even
+after Cinema exit so content appears without requiring a main-window resize.
+
+Native input fixtures run through `infrastructure/windows/test-input.ps1` with
+30-second child deadlines and cursor-confinement release in finally cleanup.
+Each Windows version-resource component is 0..65535; strings carry the complete
+semantic version. UTC build IDs, version, revision, dependencies and hashes are
+recorded in resource comments/manifests. Explicit `package-release.ps1` checks
+clean tagged source, embedded versions and hashes and creates one enclosing folder
+in `release/packages/Unbound-<version>-windows-x64.zip`, containing installer,
+MIT license and source tag/commit README. It never overwrites packages.
+
+### Cocoa windowing and toolchain
+
+Cocoa converts bottom-left native points to shared top-left logical geometry.
+Main-window gestures and floating resizing observe native frame changes, applying
+shared snapping separately. Resolve owns its integrated main-title movement;
+disable competing Cocoa title dragging while attached and restore it on detach.
+Ordinary native title bars keep their behavior. Cocoa owns corner/resize hit tests;
+floating header dragging uses pointer movement directly. Content layout is deferred
+through live resize and settles on completion/cancellation. Main snap completion
+runs after Cocoa and Resolve's queued Qt release, matching that gesture's timestamp
+so unrelated input and placement remain unaffected.
+
+Mac development requires Xcode command-line tools, CMake, Git and Resolve Qt,
+LuaJIT and Cocoa plug-in libraries containing every requested architecture.
+`UNBOUND_QT_SOURCE` and `UNBOUND_RESOLVE_APP` override toolchain paths. Pinned headers
+do not replace or ship Qt runtime libraries. Rosetta may execute Intel fixtures on
+Apple Silicon; that does not establish native Intel Resolve compatibility.
+Live startup logs use `~/Library/Logs/Unbound/lua-bootstrap.log`; fixture output
+stays under `build/macos/` and uses an isolated `UNBOUND_LOG_FILE`.
+
 ## Development constraints
 
+- Never use hardcoded Resolve binary addresses or object offsets in production.
+  Such details may be used for testing, investigation and research only; shipped
+  behavior must use discoverable widgets and supported interfaces.
 - Keep widget/layout manipulation on Resolve's Qt GUI thread. Preserve native
   signals, ownership, user state, page context and reversible docking.
 - Initialize native pane content before automatic detachment; some widgets are
@@ -285,17 +517,18 @@ logs separate from live startup logs using `UNBOUND_LOG_FILE`.
 
 The root README.md belongs to the user. Do not add to or modify it; the user
 typically edits it on GitHub and pulls those changes into the local repository.
-Keep technical documentation in AGENTS.md and doc/, and always communicate what
-you are adding or modifying. Keep doc/Unbound settings.md accurate for current
-behavior. This repository is self-contained for development apart from the
-installed toolchain and Resolve.
-README.md is the public GitHub landing page. AGENTS.md records durable development
-rules; platform docs summarize current status, meaningful limitations and roadmap;
-test READMEs explain reproducible validation. Keep per-run output in build logs.
-User reports and their follow-up investigations belong in `doc/issues/`.
-Do not append test-session diaries, PIDs, candidate-by-candidate histories or
-incidental corrections to these documents. Retain investigation details only when
-they explain a lasting constraint, architectural decision or unresolved defect.
+Keep current technical documentation in AGENTS.md: describe the mechanisms,
+ownership, constraints, settings and validation needed to implement Unbound.
+Always communicate documentation additions or changes. This repository is
+self-contained apart from the installed toolchain and Resolve.
+README.md is the public GitHub landing page. Test and infrastructure READMEs may
+retain commands and reproducible tool usage, with links here for technical design.
+Keep only ongoing/open investigations and unsettled feature designs in `doc/`
+and `doc/issues/`. On resolution, integrate the durable mechanism or constraint
+here and remove the investigation document. Do not retain histories of attempts,
+failed approaches, closed reports, session diaries, PIDs or build-by-build notes;
+Git history retains prior work and build logs retain per-run output. Keep evidence
+in an open investigation only when it helps resolve the remaining question.
 
 ## Local inspection tools
 
