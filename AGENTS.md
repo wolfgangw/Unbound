@@ -57,10 +57,23 @@ mouse-event delivery until its layout pass. Capture native widths before returni
 to Lightbox and repaint on release. A separate nonactivating, input-transparent two-pixel grey
 guide follows the native divider position while the main backing store is frozen.
 Dispose of it on completion or interruption. Interrupted gestures must release native input,
-discard stale queued events and restore prior repaint state. No polling, binary
+discard stale queued events and restore prior repaint state. Cocoa additionally
+holds a single composited image of each affected window: disabling Qt updates
+alone does not freeze Resolve's native Metal surfaces, whose interim resizing
+stretches the viewer, exposes blank background and squashes the floating Clips
+grid. The platform presentation contract prepares these images before the shared
+normal-mode/input transaction;
+input received during preparation retains its order. ScreenCaptureKit discovers
+only current-process windows without TCC consent (macOS 14.4+; tested Resolve
+requires macOS 15). Covers pass input through, remain in memory only and are
+removed after restored layout/repaint delivery, or immediately on cancellation
+before preparation completes. Failed preparation leaves native mode and widths
+unchanged and restores updates. Windows retains its existing Qt backing-store
+freeze. No persistent capture stream, screen-access request, polling, binary
 offsets or saved divider positions. Native Windows docking, layout recall, panel
-visibility and repaint preservation are user-validated. New guide feedback and
-platform coverage still require native validation; see `doc/issues/platform-validation.md`.
+visibility and repaint preservation are user-validated. macOS divider presentation
+and Clips button alignment are user-validated in the tested configuration; broader
+gesture/platform coverage remains in `doc/issues/platform-validation.md`.
 Floating windows and the main window snap to one another and
 display work-area edges during movement/resizing; Alt bypasses snapping.
 Window edges also align across gaps. The smallest edge adjustment wins; equal

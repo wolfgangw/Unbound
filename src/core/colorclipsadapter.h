@@ -10,6 +10,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include "colorclipstoolbar.h"
+#include "windowpresentation.h"
 #include "colorclipssidebars.h"
 
 namespace Unbound {
@@ -39,11 +40,14 @@ class ColorClipsAdapter final : public QObject {
     QMetaObject::Connection m_dragDestroyed;
     QPoint m_dragGlobal;
     quint64 m_dragGeneration=0;
-    bool m_drag=false,m_nativePressed=false,m_mainUpdates=false,m_hostUpdates=false;
+    bool m_drag=false,m_nativePressed=false,m_mainUpdates=false,m_hostUpdates=false,m_dragPrepared=false;
+    std::unique_ptr<WindowPresentationHold> m_presentation;
+    QList<std::function<void()>> m_waitingInput;
 
     void finishDivider(bool resume=true) {
         if(!m_drag) return;
         ++m_dragGeneration;
+        m_waitingInput.clear();
         disconnect(m_dragDestroyed);
         m_busy=true;
         // End only the native gesture we started; queued input from an aborted
@@ -55,20 +59,25 @@ class ColorClipsAdapter final : public QObject {
         }
         m_nativePressed=false;
         delete m_dragGuide.data();m_dragGuide=nullptr;
-        m_sidebars.captureDraggedWidths();
+        if(m_dragPrepared)m_sidebars.captureDraggedWidths();
         m_drag=false;m_dragTarget=nullptr;
         m_suspended=false;
-        if(resume && m_enabled && m_page && m_page->isVisible() && m_mode) {
+        if(resume && m_dragPrepared && m_enabled && m_page && m_page->isVisible() && m_mode) {
             if(!m_mode->isChecked()) m_mode->click();
             if(m_controls && !m_controls->isChecked()) m_controls->click();
             if(m_region) {m_nativeAllocation=m_region->geometry();m_appliedRegion=m_nativeAllocation;}
-        } else if(resume) m_returning=true;
+        } else if(resume && m_dragPrepared) m_returning=true;
         m_busy=false;
         if(resume) {apply();schedule();}
         if(m_repaintWindow && m_mainUpdates) m_repaintWindow->setUpdatesEnabled(true);
         m_repaintWindow=nullptr;
         if(m_host && m_hostUpdates) m_host->setUpdatesEnabled(true);
         m_mainUpdates=false;m_hostUpdates=false;
+        if(m_presentation) {
+            if(m_dragPrepared)m_presentation->release();
+            m_presentation.reset();
+        }
+        m_dragPrepared=false;
     }
     bool dividerEvent(QObject *object,QEvent *event) {
         const auto type=event->type();
@@ -97,7 +106,25 @@ class ColorClipsAdapter final : public QObject {
             m_mainUpdates=m_repaintWindow->updatesEnabled();m_hostUpdates=m_host && m_host->updatesEnabled();
             if(m_mainUpdates)m_repaintWindow->setUpdatesEnabled(false);
             if(m_hostUpdates)m_host->setUpdatesEnabled(false);
-            m_busy=true;m_mode->click();m_busy=false;
+            m_presentation=makeWindowPresentationHold();
+            const auto generation=m_dragGeneration;
+            QPointer<ColorClipsAdapter> alive(this);
+            m_presentation->begin({m_repaintWindow,m_host},[alive,generation](bool ready) {
+                if(!alive || !alive->m_drag || generation!=alive->m_dragGeneration)return;
+                if(!ready) {
+                    // Keep native Lightbox and existing allocations intact if
+                    // the platform cannot protect their interim presentation.
+                    QTimer::singleShot(0,alive,[alive,generation] {
+                        if(alive && alive->m_drag && generation==alive->m_dragGeneration)alive->finishDivider(false);
+                    });
+                    return;
+                }
+                alive->m_dragPrepared=true;
+                alive->m_busy=true;alive->m_mode->click();alive->m_busy=false;
+                const auto waiting=std::move(alive->m_waitingInput);
+                alive->m_waitingInput.clear();
+                for(const auto &input:waiting)QTimer::singleShot(0,alive,input);
+            });
         }
         if(!m_drag || object!=m_dragTarget || (type!=QEvent::MouseButtonPress &&
             type!=QEvent::MouseMove && type!=QEvent::MouseButtonRelease)) return false;
@@ -107,7 +134,7 @@ class ColorClipsAdapter final : public QObject {
         const auto generation=m_dragGeneration;
         // Resolve must complete its queued normal-mode layout before the press.
         // Preserve ordering and map coordinates against the current native handle.
-        QTimer::singleShot(0,this,[this,generation,type,global,button,buttons,modifiers] {
+        auto deliver=[this,generation,type,global,button,buttons,modifiers] {
             if(!m_drag || generation!=m_dragGeneration || !m_dragTarget) return;
             m_dragGlobal=global;
             QMouseEvent copy(type,m_dragTarget->mapFromGlobal(global),global,button,buttons,modifiers);
@@ -120,7 +147,9 @@ class ColorClipsAdapter final : public QObject {
             if(type==QEvent::MouseButtonRelease && button==Qt::LeftButton) {
                 m_nativePressed=false;finishDivider();
             }
-        });
+        };
+        if(m_dragPrepared)QTimer::singleShot(0,this,deliver);
+        else m_waitingInput.append(std::move(deliver));
         return true;
     }
     QRect m_nativeAllocation,m_originalRegion,m_appliedRegion;

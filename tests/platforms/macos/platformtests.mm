@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
+#include "windowpresentation.h"
 #include "fixtures.h"
 #include "windowinteraction.h"
 #include "pagelayoutmenu.h"
@@ -557,7 +559,50 @@ static bool runMacMainResizeTest(QApplication &app) {
     puts("PASS: Cocoa main-window shrinking on all edges/corners, native geometry precedence, fixed opposite edges and release stability");
     return true;
 }
+static bool runMacPresentationTest(QApplication &app) {
+    if(!app.arguments().contains("--mac-presentation-test"))return false;
+    QWidget window;window.resize(360,260);window.show();app.processEvents();
+    NSView *content=reinterpret_cast<NSView *>(window.winId()).window.contentView;
+    auto renderer=[[NSView alloc]initWithFrame:content.bounds];renderer.wantsLayer=YES;
+    renderer.layer.backgroundColor=NSColor.redColor.CGColor;[content addSubview:renderer];
+    auto settle=[] {QEventLoop loop;QTimer::singleShot(20,&loop,&QEventLoop::quit);loop.exec();};
+    settle();
+    auto cover=[&]() -> NSView * {
+        for(NSView *view in content.subviews)
+            if([NSStringFromClass(view.class) isEqualToString:@"UnboundPresentationView"])return view;
+        return nil;
+    };
+    auto hold=Unbound::makeWindowPresentationHold();bool done=false,success=false;
+    hold->begin({&window},[&](bool ok){success=ok;done=true;});
+    QElapsedTimer deadline;deadline.start();while(!done && deadline.elapsed()<3000)settle();
+    check(done && success,"Own-window presentation preparation failed");
+    auto overlay=cover();
+    check(overlay && NSEqualRects(overlay.frame,content.bounds) && ![overlay hitTest:NSMakePoint(20,20)],
+        "Presentation does not cover content or intercepts input");
+    auto image=(CGImageRef)overlay.layer.contents;
+    check(image && CGImageGetWidth(image)==size_t(window.width()*window.devicePixelRatioF()) &&
+        CGImageGetHeight(image)==size_t(window.height()*window.devicePixelRatioF()),
+        "Presentation image dimensions include native frame or use wrong scale");
+    // A composited native child must remain in the captured image after its
+    // live layer changes. Inspect the retained image, never the desktop.
+    renderer.layer.backgroundColor=NSColor.blueColor.CGColor;
+    unsigned char pixel[4]={};auto space=CGColorSpaceCreateDeviceRGB();
+    auto context=CGBitmapContextCreate(pixel,1,1,8,4,space,kCGImageAlphaPremultipliedLast);
+    CGContextDrawImage(context,CGRectMake(0,0,1,1),image);
+    CGContextRelease(context);CGColorSpaceRelease(space);
+    check(pixel[0]>200 && pixel[2]<30,"Native renderer content was not retained independently");
+    hold->release();hold.reset();settle();settle();
+    check(!cover(),"Released presentation retained its cover");
+    bool cancelledCallback=false;
+    hold=Unbound::makeWindowPresentationHold();hold->begin({&window},[&](bool){cancelledCallback=true;});hold.reset();
+    deadline.restart();while(deadline.elapsed()<200)settle();
+    check(!cancelledCallback && !cover(),"Cancelled capture installed a cover or completed stale callback");
+    [renderer removeFromSuperview];[renderer release];
+    puts("PASS: Cocoa own-window native-layer presentation, content crop, input transparency, release and pending cancellation");
+    return true;
+}
 bool runPlatformWindowTests(QApplication &app) {
+    if(runMacPresentationTest(app))return true;
     if(runMacPlacementTest(app)) return true;
     if(runMacMainSnapTest(app)) {
         if(app.arguments().contains("--mac-main-drag-test")) runMacMainResizeTest(app);

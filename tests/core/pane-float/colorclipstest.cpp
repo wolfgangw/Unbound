@@ -100,10 +100,16 @@ static void testColorDividerGestures() {
             type==QEvent::MouseButtonRelease?Qt::NoButton:Qt::LeftButton,Qt::NoModifier);
         QApplication::sendEvent(handle,&mouse);
     };
+    auto waitForPress=[&](NativeColorDivider *handle) {
+        QElapsedTimer deadline;deadline.start();
+        while(!handle->pressed && deadline.elapsed()<3000)settle();
+        require(handle->pressed,"Native divider did not start after presentation preparation");
+    };
     for(auto handle:handles) {
         const int before=handle->panel->width();const auto start=handle->mapToGlobal(QPoint(3,30));
         send(handle,QEvent::MouseButtonPress,start);
         adapter.suspendNativeMode(false);
+        waitForPress(handle);
         require(!mode.isChecked(),"Routine restore resumed Lightbox during native divider gesture");
         require(!main.updatesEnabled() && !page.updatesEnabled() && !host.updatesEnabled(),"Divider did not freeze top-level backing store and host");
         auto guide=main.findChild<QWidget *>("unboundColorDividerGuide");
@@ -120,16 +126,28 @@ static void testColorDividerGestures() {
             "Divider release left frozen repaint or native gesture");
     }
     auto handle=handles.first();auto start=handle->mapToGlobal(QPoint(3,30));
+    const int fastPresses=handle->presses,fastReleases=handle->releases;
+    const int fastWidth=handle->panel->width();
+    send(handle,QEvent::MouseButtonPress,start);
+    send(handle,QEvent::MouseMove,start+QPoint(25,0));
+    send(handle,QEvent::MouseButtonRelease,start+QPoint(25,0));
+    QElapsedTimer deadline;deadline.start();
+    while(handle->releases==fastReleases && deadline.elapsed()<3000)settle();
+    require(handle->presses==fastPresses+1 && handle->releases==fastReleases+1 &&
+        handle->panel->width()==fastWidth+25 && mode.isChecked() && main.updatesEnabled() && host.updatesEnabled(),
+        "Fast gesture queued during presentation preparation lost ordering or cleanup");
+    settle();settle();
+    start=handle->mapToGlobal(QPoint(3,30));
     const int presses=handle->presses;
     send(handle,QEvent::MouseButtonPress,start);
     QEvent deactivate(QEvent::ApplicationDeactivate);QApplication::sendEvent(qApp,&deactivate);settle();
     require(handle->presses==presses && main.updatesEnabled() && page.updatesEnabled() && host.updatesEnabled(),"Cancelled queued press was delivered or froze repaint");
-    start=handle->mapToGlobal(QPoint(3,30));send(handle,QEvent::MouseButtonPress,start);settle();
+    start=handle->mapToGlobal(QPoint(3,30));send(handle,QEvent::MouseButtonPress,start);waitForPress(handle);
     require(handle->pressed,"Native press missing before interruption test");
     page.hide();settle();
     require(!handle->pressed && main.updatesEnabled() && page.updatesEnabled() && host.updatesEnabled(),"Page leave retained native drag or frozen host");
     page.show();settle();require(mode.isChecked(),"Page return failed to resume floating Clips mode");
-    start=handle->mapToGlobal(QPoint(3,30));send(handle,QEvent::MouseButtonPress,start);settle();
+    start=handle->mapToGlobal(QPoint(3,30));send(handle,QEvent::MouseButtonPress,start);waitForPress(handle);
     QEvent ungrab(QEvent::UngrabMouse);QApplication::sendEvent(handle,&ungrab);settle();
     require(!handle->pressed && main.updatesEnabled() && page.updatesEnabled() && host.updatesEnabled() && mode.isChecked(),
         "Mouse-grab loss left native gesture or repaint suspended");
