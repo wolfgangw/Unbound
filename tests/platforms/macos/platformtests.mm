@@ -432,6 +432,41 @@ static bool runMacMainSnapTest(QApplication &app) {
     puts("PASS: Cocoa and queued host Qt release snapping, early/settled release, repeated gaps, new gestures and unrelated input/placement isolation");
     return true;
 }
+static bool runMacMenuTrackingTest(QApplication &app) {
+    if(!app.arguments().contains("--mac-menu-tracking-test"))return false;
+    QTemporaryDir directory;
+    Unbound::PaneSettings settings(directory.filePath("settings.json"));
+    QWidget main;main.show();
+    auto previousMenu=[NSApp.mainMenu retain];
+    auto nativeMenu=[[NSMenu alloc] initWithTitle:@"Fixture menu"];
+    NSApp.mainMenu=nativeMenu;
+    auto contextMenu=[[NSMenu alloc] initWithTitle:@"Editing context"];
+    auto begin=[&] { [NSNotificationCenter.defaultCenter
+        postNotificationName:NSMenuDidBeginTrackingNotification object:nativeMenu]; };
+    int calls=0;
+    std::unique_ptr<Unbound::NativeMenuTracking> observer;
+    observer=Unbound::observeNativeMenuTracking([&] {++calls;observer.reset();});
+    begin();begin();
+    check(calls==1 && !observer,"Native menu observer retained its callback after self-removal");
+    auto menu=std::make_unique<Unbound::PageLayoutMenu>(settings,QStringLiteral("WStackPage_Conform"),&main);
+    for(int i=0;i<3;++i) {
+        menu->popup(QPoint(300,200));app.processEvents();
+        check(menu->isVisible(),"Layout popout did not open before native menu test");
+        [NSNotificationCenter.defaultCenter postNotificationName:NSMenuDidChangeItemNotification object:nativeMenu];
+        check(menu->isVisible(),"Native menu update dismissed popout without interaction");
+        [NSNotificationCenter.defaultCenter postNotificationName:NSMenuDidBeginTrackingNotification object:contextMenu];
+        check(menu->isVisible(),"Unrelated native context menu dismissed layout popout");
+        begin();
+        check(!menu->isVisible(),"Native menu tracking did not immediately dismiss layout popout");
+        begin();
+        check(!menu->isVisible(),"Native menu tracking reopened hidden popout");
+    }
+    menu->popup(QPoint(300,200));app.processEvents();menu.reset();begin();
+    NSApp.mainMenu=previousMenu;[previousMenu release];
+    [nativeMenu release];[contextMenu release];
+    puts("PASS: native menu begin dismisses shared popout, ignores menu updates, reopens cleanly and safely removes hidden/destroyed/self-removing observers");
+    return true;
+}
 static bool runMacResizeInputTest(QApplication &app) {
     if(!app.arguments().contains("--mac-resize-input-test"))return false;
     for(bool floating:{false,true}) {
@@ -722,6 +757,7 @@ bool runPlatformWindowTests(QApplication &app) {
     if(runMacGridTest(app))return true;
     if(runMacPresentationTest(app))return true;
     if(runMacResizeInputTest(app))return true;
+    if(runMacMenuTrackingTest(app))return true;
     if(runMacPlacementTest(app)) return true;
     if(runMacMainSnapTest(app)) {
         if(app.arguments().contains("--mac-main-drag-test")) runMacMainResizeTest(app);

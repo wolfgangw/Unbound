@@ -118,3 +118,7 @@ release tests are run on Windows; they cannot be certified by this Mac build.
 `--mac-resize-input-test` checks scoped Shift filtering for main/floating resize
 edges and corners, preservation of original grid input and other modifiers, and
 content/keyboard isolation. Native physical gestures still require Resolve testing.
+
+`--mac-menu-tracking-test` checks native menu-bar dismissal of the shared layout
+popout, exclusion of menu updates/unrelated context menus, reopening and safe
+observer cleanup on hide, destruction and callback-driven removal.

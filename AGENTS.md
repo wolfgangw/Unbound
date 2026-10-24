@@ -546,6 +546,11 @@ after Cinema exit so content appears without requiring a main-window resize.
 
 ### Cocoa windowing
 
+While the layout popout is visible, Cocoa observes native application-menu tracking
+and invokes shared popout dismissal immediately. Remove the observer on hide or
+destruction; native menu updates and unrelated editing context menus do not dismiss
+it. Windows retains the shared Qt outside-input path.
+
 Cocoa converts bottom-left native points to shared top-left logical geometry.
 Main-window gestures and floating resizing observe native frame changes, applying
 shared snapping separately. Resolve owns its integrated main-title movement;

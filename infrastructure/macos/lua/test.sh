@@ -27,7 +27,7 @@ binary="$build/src/platforms/macos/pane-float-smoke"
 run_native "$build/src/platforms/macos/UnboundLayoutTests"
 run_native "$build/src/platforms/macos/UnboundLayoutTests" --index-header-drag
 run_native "$build/src/platforms/macos/UnboundLayoutTests" --color-clips-startup
-for mode in --mac-resize-input-test --mac-grid-test --mac-presentation-test --mac-window-test --mac-main-resize-test --mac-floating-resize-test --mac-main-snap-test --mac-main-drag-test --mac-placement-test --mac-layout-test --header-button-test --inspector-title-test \
+for mode in --mac-menu-tracking-test --mac-resize-input-test --mac-grid-test --mac-presentation-test --mac-window-test --mac-main-resize-test --mac-floating-resize-test --mac-main-snap-test --mac-main-drag-test --mac-placement-test --mac-layout-test --header-button-test --inspector-title-test \
     --settings-json-test --nodes-canvas-test --main-placement-test --reclaim-test \
     --fairlight-test --standalone-test --shutdown-test --close-all-test; do
     run_native "$binary" "$mode" "$helper"
