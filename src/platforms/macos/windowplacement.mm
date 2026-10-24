@@ -3,6 +3,7 @@
 #include "windowplacement.h"
 #include "geometryjson.h"
 #include "panegeometryrestore.h"
+#include "panegridreferences.h"
 #include <QWidget>
 namespace Unbound { namespace Platform {
 namespace {
@@ -75,5 +76,13 @@ bool windowPlacementEligible(QWidget *window)
     // Qt can report normal state while Cocoa is still changing Spaces and
     // temporarily removing the title frame. Never persist that intermediate frame.
     return !native || !(native.styleMask & NSWindowStyleMaskFullScreen);
+}
+QRect windowPlacementReference(QWidget *window,const QJsonObject &saved)
+{
+    QList<QRect> areas;for(auto screen:QGuiApplication::screens())areas.append(screen->availableGeometry());
+    const auto rect=gridSavedRect(saved,areas);
+    if(rect.isEmpty() || saved.value("maximized").toBool() || saved.value("fullScreen").toBool())return rect;
+    auto native=nativeWindow(window);
+    return native ? reachableWindowGeometry(logicalRect([native frameRectForContentRect:cocoaRect(rect)]),areas) : rect;
 }
 } }

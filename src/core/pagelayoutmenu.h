@@ -27,6 +27,7 @@
 #include <functional>
 #include "panesettings.h"
 #include "windowinteraction.h"
+#include "nativemenutracking.h"
 namespace Unbound {
 class LayoutActionIcon final : public QIconEngine {
 public:
@@ -182,6 +183,7 @@ public:
         refresh();
     }
     ~PageLayoutMenu() override {
+        m_nativeMenuTracking.reset();
         // Focus-out can occur while QWidget destroys its children, after our
         // members have gone. Disconnect inline-edit callbacks before that.
         for(const auto &row:m_rows) { row.editor->finish={}; row.load->renameRequested={}; }
@@ -229,9 +231,11 @@ protected:
         painter.drawRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5),4,4);
     }
     void showEvent(QShowEvent *event) override {
+        m_nativeMenuTracking=observeNativeMenuTracking([this] { hide(); });
         qApp->installEventFilter(this); QFrame::showEvent(event);
     }
     void hideEvent(QHideEvent *event) override {
+        m_nativeMenuTracking.reset();
         m_openingButtons=Qt::NoButton;
         m_recalling=false;
         finishRename(false);
@@ -260,6 +264,7 @@ protected:
         return QFrame::eventFilter(object,event);
     }
 private:
+    std::unique_ptr<NativeMenuTracking> m_nativeMenuTracking;
     bool ownsInput(QObject *object) const {
         if(object==windowHandle()) return true;
         auto widget=qobject_cast<QWidget *>(object);

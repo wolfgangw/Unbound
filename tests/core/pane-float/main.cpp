@@ -1,3 +1,6 @@
+#include "gridreferenceimage.h"
+#include "panegridreferences.h"
+#include "panegridsnap.h"
 #include "fixtures.h"
 #include "fairlighttest.h"
 
@@ -438,6 +441,80 @@ int main(int argc, char **argv)
         return 0;
     }
     {
+        {
+            QTemporaryDir refsDir;Unbound::PaneSettings refs(refsDir.filePath("refs.json"));
+            const QRect paneRect(48,72,240,480),mainRect(400,0,1000,900);
+            const auto paneJson=QJsonObject{{"clientRect",Unbound::rectangleJson(paneRect)}};
+            const auto mainJson=QJsonObject{{"clientRect",Unbound::rectangleJson(mainRect)}};
+            for(const auto &key:{QString("frameEditPageInspector"),QString("Audio/frameInspectorContainer"),QString("Color/m_pWidgetGallery")}) {
+                check(refs.save(key,Unbound::qtGeometryBytes(paneJson)).isEmpty(),"Reference geometry write failed");
+                check(refs.saveFloating(key,true).isEmpty(),"Reference floating state write failed");
+            }
+            check(refs.save("MainWindow/WStackPage_Audio",Unbound::qtGeometryBytes(mainJson)).isEmpty(),"Reference main write failed");
+            check(refs.save("MainWindow/WStackPage_Color",Unbound::qtGeometryBytes(mainJson)).isEmpty(),"Duplicate main write failed");
+            check(refs.save("frameEditPageMediaPool",Unbound::qtGeometryBytes(QJsonObject{{"clientRect",Unbound::rectangleJson(QRect(1,2,300,400))}})).isEmpty(),"Current-page fixture write failed");
+            refs.saveFloating("frameEditPageMediaPool",true);
+            // Reload models pages not visited in this session. Saved layouts are
+            // deliberately not enumerated: only the last working arrangement.
+            Unbound::PaneSettings loaded(refsDir.filePath("refs.json"));
+            const QList<QRect> areas{QRect(0,0,1920,1080)};
+            auto resolveMain=[&](const QJsonObject &value){return Unbound::gridSavedRect(value,areas);};
+            auto rectangles=Unbound::gridPageReferences(loaded,"WStackPage_Conform",areas,resolveMain);
+            check(rectangles.size()==2 && rectangles.contains(paneRect) && rectangles.contains(mainRect),
+                "Grid references omitted unvisited pages/main, included current page or duplicated outlines");
+            loaded.saveFloating("Audio/frameInspectorContainer",false);loaded.saveFloating("Color/m_pWidgetGallery",false);
+            rectangles=Unbound::gridPageReferences(loaded,"WStackPage_Conform",areas,resolveMain);
+            check(rectangles.size()==1 && rectangles.first()==mainRect,"Docked panes appeared as references");
+            check(Unbound::gridSavedRect(QJsonObject{{"clientRect",Unbound::rectangleJson(QRect(-2000,0,240,400))}},areas)==QRect(0,0,240,400),
+                "Reference geometry did not recover a removed monitor");
+            check(Unbound::gridSavedRect(QJsonObject{{"clientRect",Unbound::rectangleJson(paneRect)},{"maximized",true}},areas)==areas.first(),
+                "Maximized reference did not use work area");
+            std::puts("PASS: other-page references, main placement, unvisited settings, deduplication, docking exclusion and monitor recovery");
+        }
+        {
+            const QRect rect(20,20,60,60),area(0,0,100,100);
+            const auto single=Unbound::gridReferenceImage({rect},area,1);
+            const auto duplicate=Unbound::gridReferenceImage({rect,rect},area,1);
+            const auto neighbor=Unbound::gridReferenceImage({rect.translated(2,0)},area,1);
+            const auto combined=Unbound::gridReferenceImage({rect,rect.translated(2,0)},area,1);
+            check(single==duplicate,"Duplicate outlines increased intensity");
+            for(int y=0;y<100;++y)for(int x=0;x<100;++x)
+                check(qAlpha(combined.pixel(x,y))==qMax(qAlpha(single.pixel(x,y)),qAlpha(neighbor.pixel(x,y))),
+                    "Nearby outlines increased intensity above the stronger individual contribution");
+            check(qAlpha(single.pixel(50,19))==qAlpha(single.pixel(50,20)) &&
+                qAlpha(single.pixel(50,20))>qAlpha(single.pixel(50,22)) &&
+                qAlpha(single.pixel(50,22))>qAlpha(single.pixel(50,24)),"Outline falloff is not smooth and centered");
+            check(qAlpha(single.pixel(20,20))<qAlpha(single.pixel(30,20)),"Reference corners were not rounded");
+            const auto retina=Unbound::gridReferenceImage({rect},area,2);
+            check(retina.size()==QSize(200,200) && retina.devicePixelRatio()==2,"Outline raster did not scale for high DPI");
+            std::puts("PASS: rounded outline raster, smooth symmetric falloff, max-opacity overlap and DPI scaling");
+        }
+        Unbound::PaneGridSnap grid;
+        const QRect work(-1920,40,1920,1040);
+        const QSize min(1,1),max(16777215,16777215);
+        QPoint engaged;
+        auto gridMove=[&](int x) {return grid.offset(QRect(x,49,101,79),work,24,true,true,true,true,min,max,&engaged);};
+        check(gridMove(-1915)==QPoint(-5,-9) && engaged==QPoint(1,1),"Grid work-area origin or negative monitor coordinates failed");
+        check(gridMove(-1907).x()==-13,"Grid midpoint hysteresis lost previous line");
+        check(gridMove(-1905).x()==9,"Grid failed to advance to next line");
+        check(grid.takeChanged()==QPoint(1,1) && grid.takeChanged().isNull(),"Grid retarget notification failed");
+        grid.reset();
+        check(grid.offset(QRect(0,0,250,100),QRect(0,0,1920,1080),24,false,true,false,false,
+            QSize(245,1),QSize(300,1000)).x()==14,"Grid did not skip a line below minimum width");
+        grid.reset();
+        check(grid.offset(QRect(0,0,250,100),QRect(0,0,1920,1080),24,false,true,false,false,
+            QSize(1,1),QSize(250,1000)).x()==-10,"Grid exceeded maximum width");
+        grid.reset();
+        check(grid.offset(QRect(0,0,250,100),QRect(0,0,1920,1080),24,false,true,false,false,
+            QSize(250,1),QSize(250,1000),&engaged).isNull() && !engaged.x(),"Grid forced an impossible fixed-width snap");
+        grid.reset();
+        check(grid.offset(QRect(11,11,229,229),QRect(0,0,1920,1080),24,true,false,true,false,
+            QSize(240,240),max)==QPoint(-11,-11),"Grid leading resize changed fixed opposite edges");
+        grid.reset();
+        check(grid.offset(QRect(53,73,500,400),QRect(0,0,3840,2160),48,true,true,true,true,min,max)==QPoint(-5,23),
+            "DPI-scaled grid spacing failed");
+        check(Unbound::paneGridArea(QPoint(-100,100),{work,QRect(0,0,1920,1080)})==work,"Grid selected wrong monitor");
+        std::puts("PASS: grid spacing, negative work-area origins, midpoint hysteresis, resize limits, fixed sizes and DPI units");
         using Unbound::paneSnapOffset;
         Unbound::PaneSnapTransition transition;
         check(transition.update(QPoint(-12,0),QPoint(1,0),0).isNull() && transition.animating(),

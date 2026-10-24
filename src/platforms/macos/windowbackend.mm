@@ -2,10 +2,13 @@
 #import <AppKit/AppKit.h>
 #include "windowbackend.h"
 #include "panesnap.h"
+#include "panegridsnap.h"
+#include "panegridguide.h"
 #include "geometryjson.h"
 #include "panegeometryrestore.h"
 #include "panewindowappearance.h"
 #include "windowinteraction.h"
+#include "resizeinput.h"
 #include <QApplication>
 #include <QCursor>
 #include <QElapsedTimer>
@@ -49,13 +52,14 @@ public:
         qApp->installEventFilter(this);
         QPointer<MacWindowInteraction> alive(this);
         m_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:
-            NSEventMaskLeftMouseDown | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp | NSEventMaskKeyDown
+            NSEventMaskLeftMouseDown | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp | NSEventMaskKeyDown | NSEventMaskFlagsChanged
             handler:^NSEvent *(NSEvent *event) {
                 return alive ? alive->nativeEvent(event) : event;
             }];
         auto center = NSNotificationCenter.defaultCenter;
         m_beginResize = [center addObserverForName:NSWindowWillStartLiveResizeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            if (!alive || !alive->m_floating || note.object != nativeWindow(alive->m_window) || alive->m_button) return;
+            if (!alive || (!alive->m_floating && !alive->m_resizePress)
+                || note.object != nativeWindow(alive->m_window) || alive->m_button) return;
             // Cocoa owns the cursor and its complete edge/corner hit regions.
             // Some native resize starts lie outside our thin frame press band.
             if (!alive->m_active) alive->begin({},false,true);
@@ -99,7 +103,7 @@ public:
             m_window->frameGeometry().right()-m_start.right(), m_window->frameGeometry().bottom()-m_start.bottom());
         m_minimum = m_window->minimumSize().expandedTo(m_window->minimumSizeHint()).expandedTo(QSize(1,1));
         m_maximum = m_window->maximumSize().expandedTo(m_minimum);
-        m_targets.clear(); m_areas.clear(); m_transition.reset();
+        m_targets.clear(); m_areas.clear(); m_transition.reset();m_grid.reset();m_gridMode=false;
         for (auto peer : QApplication::topLevelWidgets())
             if (peer != m_window && peer->isVisible() && !peer->isMinimized()
                 && (peer->property("unboundFloatingWindow").toBool() || peer->objectName() == "UiMainWindow"))
@@ -127,12 +131,18 @@ public:
         QRect frame = desired.marginsAdded(m_margins);
         QPoint correction, engaged;
         const bool bypass = ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
-        if (!bypass) correction = paneSnapOffset(frame, m_targets, PaneSnapDistance, left, right, top, bottom,
+        const bool grid=([NSEvent modifierFlags]&NSEventModifierFlagShift)!=0;
+        if(grid!=m_gridMode) {m_grid.reset();m_transition.reset();m_gridMode=grid;}
+        if(grid && !bypass)m_gridGuide.show(paneGridArea(cursor,m_areas));else m_gridGuide.hide();
+        if(!bypass && grid) correction=m_grid.offset(frame,paneGridArea(cursor,m_areas),PaneGridSpacing,left,right,top,bottom,
+            m_minimum+QSize(m_margins.left()+m_margins.right(),m_margins.top()+m_margins.bottom()),
+            m_maximum+QSize(m_margins.left()+m_margins.right(),m_margins.top()+m_margins.bottom()),&engaged);
+        else if (!bypass) correction = paneSnapOffset(frame, m_targets, PaneSnapDistance, left, right, top, bottom,
             m_minimum+QSize(m_margins.left()+m_margins.right(),m_margins.top()+m_margins.bottom()),
             m_maximum+QSize(m_margins.left()+m_margins.right(),m_margins.top()+m_margins.bottom()),m_areas,&engaged);
-        if (bypass) { m_transition.reset(); m_frame.stop(); }
+        if (bypass) { m_transition.reset();m_grid.reset(); m_frame.stop(); }
         else if (!settle) {
-            correction = m_transition.update(correction,engaged,m_clock.elapsed());
+            correction = m_transition.update(correction,engaged,m_clock.elapsed(),m_grid.takeChanged());
             if (m_transition.animating()) { if (!m_frame.isActive()) m_frame.start(); }
             else m_frame.stop();
         }
@@ -162,7 +172,7 @@ public:
                 }
             }
         }
-        m_active = m_button = m_nativeResize = false; m_frame.stop();
+        m_active = m_button = m_nativeResize = m_resizePress = false; m_frame.stop();m_gridGuide.hide();
         if (m_layout) { auto layout=m_layout.data(); m_layout=nullptr; layout->setEnabled(true); layout->invalidate(); layout->activate(); }
     }
 protected:
@@ -242,7 +252,19 @@ private:
     }
     NSEvent *nativeEvent(NSEvent *event)
     {
+        if (event.type==NSEventTypeLeftMouseDown)
+            m_resizePress=m_window && event.window==nativeWindow(m_window) && macResizePress(event);
+        // Save the scope before mouse-up finishes the gesture. Ordinary content
+        // clicks, header moves, keyboard shortcuts and other windows keep Shift.
+        const bool resizing=m_window && !m_button &&
+            ((m_active && (m_nativeResize || m_edges)) ||
+             (event.window==nativeWindow(m_window) && macResizePress(event)));
+        return macResizeInput(handleNativeEvent(event),resizing);
+    }
+    NSEvent *handleNativeEvent(NSEvent *event)
+    {
         if (!m_window) return event;
+        if(m_active && event.type==NSEventTypeFlagsChanged)update(m_cursor);
         if (event.type==NSEventTypeLeftMouseDown) {
             // Even a content click must invalidate the preceding gesture's
             // completion; it may trigger a layout or another placement change.
@@ -287,6 +309,7 @@ private:
     QPointer<QWidget> m_window;
     QPointer<QLayout> m_layout;
     bool m_floating=false, m_active=false, m_button=false, m_applying=false, m_nativeResize=false;
+    bool m_resizePress=false;
     Qt::Edges m_edges;
     QPoint m_startCursor, m_cursor;
     QRect m_start, m_nativeProposal, m_target;
@@ -298,6 +321,9 @@ private:
     QSize m_minimum, m_maximum;
     QVector<QRect> m_targets, m_areas;
     PaneSnapTransition m_transition;
+    PaneGridSnap m_grid;
+    PaneGridPresentation m_gridGuide;
+    bool m_gridMode=false;
     QElapsedTimer m_clock;
     QTimer m_frame;
     id m_monitor=nil, m_beginResize=nil, m_move=nil, m_resize=nil, m_end=nil;

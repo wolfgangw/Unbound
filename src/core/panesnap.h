@@ -8,6 +8,7 @@ namespace Unbound {
 // Shared interaction policy. Backends convert logical distance to native units
 // and drive the frame timer using their own event loops.
 inline constexpr int PaneSnapDistance=24;
+inline constexpr int PaneGridSpacing=24;
 inline constexpr int PaneSnapFrameIntervalMs=16;
 inline constexpr int PaneSnapTransitionDurationMs=32;
 // Ease only the magnetic correction. Raw pointer movement never trails behind
@@ -19,8 +20,8 @@ class PaneSnapTransition {
         double start=0,current=0;
         qint64 began=-PaneSnapTransitionDurationMs;
         bool pending=false;
-        int update(int desired,bool active,qint64 now) {
-            if(active!=engaged) { start=current; began=now; engaged=active; }
+        int update(int desired,bool active,qint64 now,bool retarget=false) {
+            if(retarget || active!=engaged) { start=current; began=now; engaged=active; }
             const double t=qBound(0.,double(now-began)/PaneSnapTransitionDurationMs,1.);
             // A short accelerating pull: gentle entry, fastest at contact.
             const double eased=t*t;
@@ -32,8 +33,8 @@ class PaneSnapTransition {
     Axis m_x,m_y;
 public:
     void reset() { m_x=Axis{}; m_y=Axis{}; }
-    QPoint update(QPoint desired,QPoint engaged,qint64 now) {
-        return {m_x.update(desired.x(),engaged.x()!=0,now),m_y.update(desired.y(),engaged.y()!=0,now)};
+    QPoint update(QPoint desired,QPoint engaged,qint64 now,QPoint retarget={}) {
+        return {m_x.update(desired.x(),engaged.x()!=0,now,retarget.x()!=0),m_y.update(desired.y(),engaged.y()!=0,now,retarget.y()!=0)};
     }
     bool animating() const { return m_x.pending || m_y.pending; }
 };

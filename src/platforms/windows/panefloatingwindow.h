@@ -82,6 +82,7 @@ public:
         m_snapFrame.stop();
         if(m_dragHit && settle) updateInteractiveDrag(m_dragCursor,true);
         const bool releaseCapture = m_dragHit != 0 && !m_buttonMove;
+        m_snap.end();
         m_dragHit = 0;
         m_buttonMove = false;
         if (releaseCapture && GetCapture() == reinterpret_cast<HWND>(effectiveWinId())) ReleaseCapture();
@@ -193,6 +194,9 @@ protected:
             DeleteObject(background);
             *result = 1;
             return true;
+        }
+        if(msg->message==PaneSnapWindows::modifierMessage() && m_dragHit) {
+            updateInteractiveDrag(m_dragCursor);*result=0;return true;
         }
         if (msg->message == WM_NCLBUTTONDOWN
             && (msg->wParam == HTCAPTION || (msg->wParam >= HTLEFT && msg->wParam <= HTBOTTOMRIGHT))) {

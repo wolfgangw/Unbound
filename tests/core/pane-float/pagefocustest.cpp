@@ -28,7 +28,7 @@ void testPageFocus() {
     auto viewerLayout=new QVBoxLayout(&viewer); auto timecode=new QLineEdit; viewerLayout->addWidget(timecode);
     // Taskbar setup forces native creation before the first show in production.
     effects.winId(); viewer.winId();
-    main.show(); main.activateWindow(); editText->setFocus(); settle();
+    main.show(); LayoutTest::activate(main); editText->setFocus(); settle();
     Unbound::PageFocus memory; memory.attach(&main);
     QObject::connect(stack,&QStackedWidget::currentChanged,&main,[&] {
         // Resolve selects main before hiding its outgoing floating windows.

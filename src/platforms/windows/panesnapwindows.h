@@ -2,6 +2,10 @@
 #ifndef UNBOUND_PANESNAPWINDOWS_H
 #define UNBOUND_PANESNAPWINDOWS_H
 #include "panesnap.h"
+#include "panegridsnap.h"
+#include "panegridguide.h"
+#include <QCursor>
+#include <QScreen>
 #include <QApplication>
 #include <QWidget>
 #include <QPointer>
@@ -65,9 +69,15 @@ inline QRect paneContactBounds(HWND handle)
 class PaneSnapWindows
 {
 public:
+    ~PaneSnapWindows() { end(); }
+    static UINT modifierMessage() {static const UINT value=RegisterWindowMessageW(L"Unbound.SnapModifierChanged");return value;}
+    void end() {m_gridGuide.hide();if(m_keyboard)UnhookWindowsHookEx(m_keyboard);m_keyboard=nullptr;if(s_modifierTarget==m_handle)s_modifierTarget=nullptr;}
     void begin(HWND handle)
     {
-        m_handle = handle;
+        end();m_handle = handle;
+        s_modifierTarget=handle;
+        m_keyboard=SetWindowsHookExW(WH_KEYBOARD,keyboard,nullptr,GetCurrentThreadId());
+        m_grid.reset();m_gridMode=false;
         m_transition.reset(); m_clock.start();
         m_windows.clear();
         m_workAreas.clear();
@@ -89,7 +99,7 @@ public:
     void apply(RECT &target, int hit, const MINMAXINFO &limits, bool bypass = false, QPoint *engaged = nullptr) const
     {
         if(engaged) *engaged=QPoint();
-        if (!m_handle || bypass || (GetAsyncKeyState(VK_MENU) & 0x8000)) return;
+        if (!m_handle || bypass || (GetAsyncKeyState(VK_MENU) & 0x8000)) {m_gridGuide.hide();return;}
         QVector<QRect> targets;
         for (const auto &widget : m_windows) {
             if (!widget || !widget->isVisible() || widget->isMinimized()) continue;
@@ -111,7 +121,16 @@ public:
         const QSize maximum(limits.ptMaxTrackSize.x > 0 ? limits.ptMaxTrackSize.x - horizontal : 16777215,
             limits.ptMaxTrackSize.y > 0 ? limits.ptMaxTrackSize.y - vertical : 16777215);
         const int distance = qMax(1, MulDiv(PaneSnapDistance, GetDpiForWindow(m_handle), 96));
-        const auto offset = paneSnapOffset(visible, targets, distance, left, right, top, bottom, minimum, maximum, m_workAreas, engaged);
+        const bool grid=(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0;
+        if(grid!=m_gridMode) {m_grid.reset();m_transition.reset();m_gridMode=grid;}
+        if(grid) {
+            auto screen=QGuiApplication::screenAt(QCursor::pos());
+            if(screen)m_gridGuide.show(screen->availableGeometry());
+        } else m_gridGuide.hide();
+        POINT cursor{};GetCursorPos(&cursor);
+        const auto offset = grid ? m_grid.offset(visible,paneGridArea({cursor.x,cursor.y},m_workAreas),
+            qMax(1,MulDiv(PaneGridSpacing,GetDpiForWindow(m_handle),96)),left,right,top,bottom,minimum,maximum,engaged)
+            : paneSnapOffset(visible, targets, distance, left, right, top, bottom, minimum, maximum, m_workAreas, engaged);
         if (left) target.left += offset.x();
         if (right) target.right += offset.x();
         if (top) target.top += offset.y();
@@ -119,11 +138,11 @@ public:
     }
     void applyAnimated(RECT &target,int hit,const MINMAXINFO &limits,bool settle=false)
     {
-        if(!m_handle || (GetAsyncKeyState(VK_MENU)&0x8000)) { m_transition.reset(); return; }
+        if(!m_handle || (GetAsyncKeyState(VK_MENU)&0x8000)) { m_transition.reset(); m_grid.reset();m_gridGuide.hide(); return; }
         const RECT raw=target;
         QPoint engaged;
         apply(target,hit,limits,false,&engaged);
-        if(settle) { m_transition.reset(); return; }
+        if(settle) { m_transition.reset(); m_grid.reset();m_gridGuide.hide(); return; }
         const bool move=hit==HTCAPTION;
         const bool left=move || hit==HTLEFT || hit==HTTOPLEFT || hit==HTBOTTOMLEFT;
         const bool right=move || hit==HTRIGHT || hit==HTTOPRIGHT || hit==HTBOTTOMRIGHT;
@@ -131,7 +150,7 @@ public:
         const bool bottom=move || hit==HTBOTTOM || hit==HTBOTTOMLEFT || hit==HTBOTTOMRIGHT;
         const QPoint desired(left ? target.left-raw.left : target.right-raw.right,
             top ? target.top-raw.top : target.bottom-raw.bottom);
-        const auto offset=m_transition.update(desired,engaged,m_clock.elapsed());
+        const auto offset=m_transition.update(desired,engaged,m_clock.elapsed(),m_grid.takeChanged());
         target=raw;
         if(left) target.left+=offset.x();
         if(right) target.right+=offset.x();
@@ -149,6 +168,17 @@ public:
     }
     bool animating() const { return m_transition.animating(); }
 private:
+    // Thread-local, gesture-scoped observation; never consume or rewrite keys.
+    static LRESULT CALLBACK keyboard(int code,WPARAM key,LPARAM flags) {
+        if(code==HC_ACTION && s_modifierTarget && (key==VK_SHIFT || key==VK_MENU))
+            PostMessage(s_modifierTarget,modifierMessage(),0,0);
+        return CallNextHookEx(nullptr,code,key,flags);
+    }
+    inline static thread_local HWND s_modifierTarget=nullptr;
+    HHOOK m_keyboard=nullptr;
+    mutable PaneGridSnap m_grid;
+    mutable PaneGridPresentation m_gridGuide;
+    mutable bool m_gridMode=false;
     static BOOL CALLBACK collectWorkArea(HMONITOR monitor, HDC, LPRECT, LPARAM data)
     {
         MONITORINFO info{};
@@ -163,7 +193,7 @@ private:
     QList<QPointer<QWidget>> m_windows;
     QVector<QRect> m_workAreas;
     QMargins m_insets;
-    PaneSnapTransition m_transition;
+    mutable PaneSnapTransition m_transition;
     QElapsedTimer m_clock;
 };
 
