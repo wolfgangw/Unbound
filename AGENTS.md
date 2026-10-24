@@ -551,7 +551,12 @@ Main-window gestures and floating resizing observe native frame changes, applyin
 shared snapping separately. Resolve owns its integrated main-title movement;
 disable competing Cocoa title dragging while attached and restore it on detach.
 Ordinary native title bars keep their behavior. Cocoa owns corner/resize hit tests;
-floating header dragging uses pointer movement directly. Content layout is deferred
+floating header dragging uses pointer movement directly. Shift is reserved for the
+shared grid: copy native resize mouse/modifier events with Shift removed before
+Cocoa handles them, preventing its proportional resize. Preserve physical Shift
+state for grid selection and leave other modifiers, content clicks and keyboard
+shortcuts unchanged. Shift-grid resizing is user-validated on macOS.
+Content layout is deferred
 through live resize and settles on completion/cancellation. Main snap completion
 runs after Cocoa and Resolve's queued Qt release, matching that gesture's timestamp
 so unrelated input and placement remain unaffected.

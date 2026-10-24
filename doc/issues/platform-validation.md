@@ -15,6 +15,10 @@ This file tracks validation gaps, not build/session history.
   (left/Nodes/Effects), interruption, fresh-session restoration and page/layout
   transitions on each backend; fixture coverage does not establish all of
   Resolve's native behavior.
+- macOS Shift-grid resizing is user-validated. Broader live Resolve coverage remains
+  for stationary modifier changes, Option bypass, other-page outlines and release
+  cleanup. Cocoa overlay properties and shared grid/reference calculations are
+  fixture-validated; native Intel remains unvalidated.
 - Browser-download distribution checks and signing remain open: Windows code
   signing and macOS Developer ID/notarization. These are distribution limitations,
   not missing pane features.

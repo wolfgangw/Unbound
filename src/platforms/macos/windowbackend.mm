@@ -8,6 +8,7 @@
 #include "panegeometryrestore.h"
 #include "panewindowappearance.h"
 #include "windowinteraction.h"
+#include "resizeinput.h"
 #include <QApplication>
 #include <QCursor>
 #include <QElapsedTimer>
@@ -57,7 +58,8 @@ public:
             }];
         auto center = NSNotificationCenter.defaultCenter;
         m_beginResize = [center addObserverForName:NSWindowWillStartLiveResizeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            if (!alive || !alive->m_floating || note.object != nativeWindow(alive->m_window) || alive->m_button) return;
+            if (!alive || (!alive->m_floating && !alive->m_resizePress)
+                || note.object != nativeWindow(alive->m_window) || alive->m_button) return;
             // Cocoa owns the cursor and its complete edge/corner hit regions.
             // Some native resize starts lie outside our thin frame press band.
             if (!alive->m_active) alive->begin({},false,true);
@@ -170,7 +172,7 @@ public:
                 }
             }
         }
-        m_active = m_button = m_nativeResize = false; m_frame.stop();m_gridGuide.hide();
+        m_active = m_button = m_nativeResize = m_resizePress = false; m_frame.stop();m_gridGuide.hide();
         if (m_layout) { auto layout=m_layout.data(); m_layout=nullptr; layout->setEnabled(true); layout->invalidate(); layout->activate(); }
     }
 protected:
@@ -250,6 +252,17 @@ private:
     }
     NSEvent *nativeEvent(NSEvent *event)
     {
+        if (event.type==NSEventTypeLeftMouseDown)
+            m_resizePress=m_window && event.window==nativeWindow(m_window) && macResizePress(event);
+        // Save the scope before mouse-up finishes the gesture. Ordinary content
+        // clicks, header moves, keyboard shortcuts and other windows keep Shift.
+        const bool resizing=m_window && !m_button &&
+            ((m_active && (m_nativeResize || m_edges)) ||
+             (event.window==nativeWindow(m_window) && macResizePress(event)));
+        return macResizeInput(handleNativeEvent(event),resizing);
+    }
+    NSEvent *handleNativeEvent(NSEvent *event)
+    {
         if (!m_window) return event;
         if(m_active && event.type==NSEventTypeFlagsChanged)update(m_cursor);
         if (event.type==NSEventTypeLeftMouseDown) {
@@ -296,6 +309,7 @@ private:
     QPointer<QWidget> m_window;
     QPointer<QLayout> m_layout;
     bool m_floating=false, m_active=false, m_button=false, m_applying=false, m_nativeResize=false;
+    bool m_resizePress=false;
     Qt::Edges m_edges;
     QPoint m_startCursor, m_cursor;
     QRect m_start, m_nativeProposal, m_target;

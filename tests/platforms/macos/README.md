@@ -40,6 +40,12 @@ fixture for Fairlight Media Pool and Edit/Fairlight Sound Library. It models hos
 command context and checks notification ordering, exclusions and teardown; native
 Resolve playback and waveform interaction still require a live check.
 
+`--mac-grid-test` checks the shared grid overlay's Cocoa work-area coverage,
+transparency, click-through behavior, level above main/floating windows, focus
+preservation, fade/reversal lifecycle, reference refresh and disposal. It runs in
+the normal suite; physical Shift/Option move/resize gestures in Resolve still
+require live validation.
+
 `--mac-main-resize-test` exercises shrinking from all main-window edges and corners
 through the native event monitor. Cocoa frame proposals precede Qt geometry/pointer
 updates; opposite edges and the committed size must remain stable after release.
@@ -108,3 +114,7 @@ Live checklist for a fresh Resolve instance (Free or Studio):
 
 A compile or synthetic fixture pass does not certify the live checklist. Windows
 release tests are run on Windows; they cannot be certified by this Mac build.
+
+`--mac-resize-input-test` checks scoped Shift filtering for main/floating resize
+edges and corners, preservation of original grid input and other modifiers, and
+content/keyboard isolation. Native physical gestures still require Resolve testing.

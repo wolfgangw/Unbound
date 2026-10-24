@@ -2,6 +2,8 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include "windowpresentation.h"
+#include "resizeinput.h"
+#include "panegridguide.h"
 #include "fixtures.h"
 #include "windowinteraction.h"
 #include "pagelayoutmenu.h"
@@ -430,6 +432,51 @@ static bool runMacMainSnapTest(QApplication &app) {
     puts("PASS: Cocoa and queued host Qt release snapping, early/settled release, repeated gaps, new gestures and unrelated input/placement isolation");
     return true;
 }
+static bool runMacResizeInputTest(QApplication &app) {
+    if(!app.arguments().contains("--mac-resize-input-test"))return false;
+    for(bool floating:{false,true}) {
+        std::unique_ptr<QWidget> window(floating ? new Unbound::PaneFloatingWindow : new QWidget);
+        window->setGeometry(250,200,600,400);window->show();app.processEvents();
+        auto native=reinterpret_cast<NSView *>(window->winId()).window;
+        const auto size=native.frame.size;
+        const auto flags=NSEventModifierFlagShift|NSEventModifierFlagOption|NSEventModifierFlagCommand;
+        auto mouse=[&](NSEventType type,NSPoint point,NSEventModifierFlags modifiers) {
+            return [NSEvent mouseEventWithType:type location:point modifierFlags:modifiers
+                timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:native.windowNumber
+                context:nil eventNumber:42 clickCount:1 pressure:1];
+        };
+        for(NSPoint point:{NSMakePoint(1,size.height/2),NSMakePoint(size.width-1,size.height/2),
+            NSMakePoint(size.width/2,1),NSMakePoint(size.width/2,size.height-1),
+            NSMakePoint(8,8),NSMakePoint(size.width-8,8),
+            NSMakePoint(8,size.height-8),NSMakePoint(size.width-8,size.height-8)}) {
+            auto event=mouse(NSEventTypeLeftMouseDown,point,flags);
+            check(Unbound::macResizePress(event),"Native edge/corner press excluded from Shift filtering");
+            for(auto type:{NSEventTypeLeftMouseDown,NSEventTypeLeftMouseDragged,NSEventTypeLeftMouseUp}) {
+                event=mouse(type,point,flags);
+                auto filtered=Unbound::macResizeInput(event,true);
+                check(filtered && !(filtered.modifierFlags & NSEventModifierFlagShift),"Cocoa resize retained proportional Shift modifier");
+                check(filtered.modifierFlags==(event.modifierFlags & ~NSEventModifierFlagShift),"Resize filtering changed another modifier");
+                check(event.modifierFlags & NSEventModifierFlagShift,"Resize filtering mutated original grid input");
+                check(filtered.type==event.type && filtered.windowNumber==event.windowNumber &&
+                    NSEqualPoints(filtered.locationInWindow,event.locationInWindow) && qAbs(filtered.timestamp-event.timestamp)<1e-9,
+                    "Resize filtering changed event identity or coordinates");
+                check(Unbound::macResizeInput(event,false)==event,"Non-resize input lost Shift");
+            }
+        }
+        auto content=mouse(NSEventTypeLeftMouseDown,NSMakePoint(40,40),flags);
+        check(!Unbound::macResizePress(content),"Content press treated as native resizing");
+        auto plain=mouse(NSEventTypeLeftMouseDragged,NSMakePoint(1,100),NSEventModifierFlagOption);
+        check(Unbound::macResizeInput(plain,true)==plain,"Ordinary resize input was replaced");
+        auto change=[NSEvent keyEventWithType:NSEventTypeFlagsChanged location:NSZeroPoint modifierFlags:flags
+            timestamp:1 windowNumber:native.windowNumber context:nil characters:@"" charactersIgnoringModifiers:@"" isARepeat:NO keyCode:56];
+        check(!(Unbound::macResizeInput(change,true).modifierFlags & NSEventModifierFlagShift),"Mid-resize Shift press leaked to Cocoa");
+        auto key=[NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:flags
+            timestamp:1 windowNumber:native.windowNumber context:nil characters:@"x" charactersIgnoringModifiers:@"x" isARepeat:NO keyCode:7];
+        check(Unbound::macResizeInput(key,true)==key,"Resize filtering changed keyboard input");
+    }
+    puts("PASS: Cocoa Shift resize input on main/floating edges/corners, original grid state, other modifiers and content/keyboard isolation");
+    return true;
+}
 static bool runMacFloatingResizeTest(QApplication &app) {
     if(!app.arguments().contains("--mac-floating-resize-test")) return false;
     auto settle=[] { QEventLoop loop; QTimer::singleShot(40,&loop,&QEventLoop::quit); loop.exec(); };
@@ -556,6 +603,23 @@ static bool runMacMainResizeTest(QApplication &app) {
         settle();
         check(window.geometry()==expected,"Main resize reverted after release or queued Qt events");
     }
+    // A native corner handle can start inside the thin edge band. The live
+    // resize notification must adopt it without treating title moves as resize.
+    window.setGeometry(original);settle();
+    const auto before=window.geometry();const auto frame=native.frame;
+    const NSPoint corner=NSMakePoint(8,8);
+    [NSApp postEvent:mouse(NSEventTypeLeftMouseDown,corner) atStart:NO];
+    QTimer::singleShot(50,[&,frame,corner] {
+        [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillStartLiveResizeNotification object:native];
+        NSRect proposed=frame;proposed.origin.x+=60;proposed.origin.y+=80;
+        proposed.size.width-=60;proposed.size.height-=80;
+        [native setFrame:proposed display:YES];
+        [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidEndLiveResizeNotification object:native];
+        [NSApp postEvent:mouse(NSEventTypeLeftMouseUp,corner) atStart:NO];
+    });
+    settle();
+    check(observer.starts==gestures+1 && window.geometry()==before.adjusted(60,0,0,-80),
+        "Native main corner fallback did not retain both resize axes");
     puts("PASS: Cocoa main-window shrinking on all edges/corners, native geometry precedence, fixed opposite edges and release stability");
     return true;
 }
@@ -601,8 +665,63 @@ static bool runMacPresentationTest(QApplication &app) {
     puts("PASS: Cocoa own-window native-layer presentation, content crop, input transparency, release and pending cancellation");
     return true;
 }
+static bool runMacGridTest(QApplication &app) {
+    if(!app.arguments().contains("--mac-grid-test"))return false;
+    struct References : QObject {
+        int requests=0;
+        bool eventFilter(QObject *,QEvent *event) override {
+            if(event->type()!=Unbound::GridReferenceEvent::eventType())return false;
+            ++requests;
+            static_cast<Unbound::GridReferenceEvent *>(event)->rectangles={QRect(48,72,240,300)};
+            return true;
+        }
+    } references;
+    app.installEventFilter(&references);
+    QWidget main;main.resize(400,300);main.show();main.activateWindow();
+    Unbound::PaneFloatingWindow floating;floating.resize(260,200);floating.show();floating.activateWindow();
+    auto wait=[](const std::function<bool()> &ready) {
+        QElapsedTimer deadline;deadline.start();
+        while(!ready() && deadline.elapsed()<1500) {
+            QEventLoop loop;QTimer::singleShot(10,&loop,&QEventLoop::quit);loop.exec();
+        }
+        return ready();
+    };
+    auto mainNative=reinterpret_cast<NSView *>(main.winId()).window;
+    auto floatingNative=reinterpret_cast<NSView *>(floating.winId()).window;
+    check(wait([&]{return floatingNative.isKeyWindow;}),"Grid fixture could not establish native focus");
+    auto area=QGuiApplication::primaryScreen()->availableGeometry();
+    QPointer<QWidget> retained;
+    {
+        Unbound::PaneGridPresentation presentation;presentation.show(area);
+        for(auto widget:QApplication::topLevelWidgets())
+            if(widget->objectName()=="unboundGridGuide")retained=widget;
+        check(retained && retained->geometry()==area,"Grid overlay does not cover the logical work area");
+        auto native=reinterpret_cast<NSView *>(retained->winId()).window;
+        check(!native.opaque && native.ignoresMouseEvents,"Cocoa grid is opaque or intercepts mouse input");
+        check(native.level>mainNative.level && native.level>floatingNative.level,
+            "Cocoa grid does not appear above main and floating windows");
+        check(!native.isKeyWindow && floatingNative.isKeyWindow,"Grid overlay stole native keyboard focus");
+        check(wait([&]{return native.alphaValue>0.99;}),"Cocoa grid failed to fade in");
+        check(references.requests==1,"Grid did not query other-page references once on activation");
+        presentation.show(area);app.processEvents();
+        check(references.requests==1,"Visible grid rereads references on movement");
+        presentation.hide();presentation.show(area);
+        check(wait([&]{return native.alphaValue>0.99;}) && retained->isVisible(),"Interrupted fade failed to restore grid");
+        check(references.requests==2,"Reactivated grid did not refresh references");
+        presentation.hide();
+        check(wait([&]{return !retained->isVisible();}),"Cocoa grid failed to hide after fade-out");
+        check(floatingNative.isKeyWindow,"Grid lifecycle changed native focus");
+        presentation.show(area);
+        check(retained->isVisible(),"Retained grid did not reopen");
+    }
+    check(retained.isNull(),"Grid owner destruction retained a native overlay");
+    puts("PASS: Cocoa grid work-area coverage, native transparency, click-through, window level, focus, fades, reference refresh and disposal");
+    return true;
+}
 bool runPlatformWindowTests(QApplication &app) {
+    if(runMacGridTest(app))return true;
     if(runMacPresentationTest(app))return true;
+    if(runMacResizeInputTest(app))return true;
     if(runMacPlacementTest(app)) return true;
     if(runMacMainSnapTest(app)) {
         if(app.arguments().contains("--mac-main-drag-test")) runMacMainResizeTest(app);
