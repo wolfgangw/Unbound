@@ -12,6 +12,9 @@ button) lets you undock/dock.
 
 <img width="97" height="51" alt="Unbound - Button" src="https://github.com/user-attachments/assets/b275e6b3-60ac-4c85-81d0-7ead4d02579e" /> <img width="32" height="32" alt="unbound-64" src="https://github.com/user-attachments/assets/1be1d772-15ea-407d-9ace-058a1f17763e" />
 
+Move undocked panels by dragging their header bars or the Unbound button.
+
+Snapping is fine-tuned to feel helpful and still overridable. Hold Alt / Option to bypass magnetism altogether. Hold Shift to meet The Grid.
 
 Right-click on any of the Unbound buttons to manage layouts. Each Resolve page has its own set
 of layouts. Hold a layout name for one second to rename it. Layouts are saved and restored
