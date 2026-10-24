@@ -13,7 +13,7 @@ public:
     {
         const auto handle = window ? reinterpret_cast<HWND>(window->effectiveWinId()) : nullptr;
         if (handle == m_handle) return;
-        stopFrames(); m_liveTarget=false;
+        stopFrames(); m_liveTarget=false;m_snap.end();
         if (m_handle) RemoveWindowSubclass(m_handle, dispatch, reinterpret_cast<UINT_PTR>(this));
         m_handle = nullptr;
         m_active = false;
@@ -26,7 +26,7 @@ private:
     {
         auto self = reinterpret_cast<MainWindowSnap *>(data);
         if (message == WM_NCDESTROY) {
-            self->stopFrames();
+            self->stopFrames();self->m_snap.end();
             RemoveWindowSubclass(handle, dispatch, id);
             self->m_handle = nullptr;
             self->m_active = false;
@@ -36,14 +36,16 @@ private:
     }
     LRESULT process(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
     {
-        if(message==WM_TIMER && wParam==reinterpret_cast<UINT_PTR>(this)) {
+        if((message==WM_TIMER && wParam==reinterpret_cast<UINT_PTR>(this)) || message==PaneSnapWindows::modifierMessage()) {
             if(!m_active || !m_liveTarget || !IsWindowVisible(handle) || IsZoomed(handle) || IsIconic(handle)) {
                 stopFrames(); return 0;
             }
             RECT frame=m_rawRect;
             m_snap.applyAnimated(frame,m_hit,m_limits);
             putRect(handle,frame);
-            if(!m_snap.animating()) stopFrames();
+            if(m_snap.animating() && !m_frameTimer)
+                m_frameTimer=SetTimer(handle,reinterpret_cast<UINT_PTR>(this),PaneSnapFrameIntervalMs,nullptr);
+            else if(!m_snap.animating()) stopFrames();
             return 0;
         }
         if (message == commitMessage()) {
@@ -77,7 +79,7 @@ private:
         }
         if (message == WM_CANCELMODE || (message == WM_KEYDOWN && wParam == VK_ESCAPE)) {
             m_topAligned = m_commitPending = false;
-            stopFrames(); m_liveTarget=false;
+            stopFrames(); m_liveTarget=false;m_snap.end();
         }
         if (message == WM_EXITSIZEMOVE) {
             const bool settle=m_liveTarget;
@@ -89,6 +91,7 @@ private:
                 m_snap.applyAnimated(final,m_hit,m_limits,true);
                 putRect(handle,final);
             }
+            m_snap.end();
             if (m_topAligned && !(GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
                 m_commitPending = true;
                 PostMessage(handle, commitMessage(), 0, 0);

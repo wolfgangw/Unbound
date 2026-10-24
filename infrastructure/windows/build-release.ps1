@@ -99,6 +99,7 @@ try {
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
         Invoke-UnboundNativeTest $test @('--audition-taskbar-native')
         Invoke-UnboundNativeTest $test @('--snap-native')
+        Invoke-UnboundNativeTest $test @('--grid-native')
         Invoke-UnboundNativeTest $test @('--captionless-native')
         Invoke-UnboundNativeTest $test @('--frame-paint-native')
     }

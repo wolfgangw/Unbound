@@ -172,6 +172,38 @@ Established locks follow proposals; release commits exact geometry. Cancellation
 stops without committing, and Alt clears transitions immediately. Preserve native
 constraints and measured contact bounds rather than adding arbitrary offsets.
 
+Shift replaces all window/work-area edge targets with a display-wide grid during
+move/resize. `panegridsnap.h` selects the work area under the pointer (nearest when
+outside), anchors lines at its top-left, and spaces them 24 logical pixels apart.
+Moves align left/top without changing size; resizes align only manipulated edges,
+excluding positions outside native minimum/maximum sizes. If no valid grid line
+exists, retain the native constrained position. A two-logical-pixel midpoint
+hysteresis avoids jitter; line changes reuse the 32 ms accelerating transition.
+Release Shift to return to ordinary snapping within the gesture; Alt overrides
+both modes. Reset grid/transition state on mode changes and gesture boundaries.
+
+`panegridguide.h` supplies a faint, nonactivating, input-transparent work-area grid
+only during Shift gestures. It also draws unlabeled playhead-red outlines with 10-logical-pixel corner radii and a smooth
+Gaussian alpha falloff (sigma 2, six-pixel reach on either side) from the exact edge centerline
+for other pages' last working main-window and floating-pane placements, including
+pages not yet visited. Combine identical rectangles; docked panes, current-page
+windows and archived layout snapshots are excluded. These are visual references,
+never magnetic targets. Query the controller's in-memory settings once when the
+overlay opens, without file reads or layout changes. Shared recovery handles
+missing displays; native main placement converts to logical contact coordinates
+through the platform adapter. Use maximum per-pixel alpha, never additive blending, so shared/nearby edges
+cannot intensify each other. Cache the DPI-scaled raster during a gesture, rebuild
+only on reference/display changes, and free it after fade-out. Fade the entire overlay in/out over
+100 ms on activation/release, including mouse release and Alt bypass. Reverse
+interrupted fades from current opacity; hide on fade-out completion. Retain the
+hidden overlay for reuse, refreshing references on activation; stop animation and
+destroy it with its gesture owner. Animation runs only during fades.
+Windows scales grid units with window DPI; Cocoa uses logical screen points.
+Windows observes modifier changes through a gesture-scoped GUI-thread keyboard
+hook that only posts a refresh and never consumes keys. Cocoa observes flags-changed
+events. Neither backend polls modifiers while idle. Native macOS grid behavior
+requires validation; shared calculations and Windows builds run in normal fixtures.
+
 ## Specialized pane mechanisms
 
 ### Edit viewers

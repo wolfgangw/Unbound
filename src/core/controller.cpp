@@ -16,6 +16,8 @@
 #include "editviewers.h"
 #include "pagelayoutmenu.h"
 #include "pagefocus.h"
+#include "gridreferenceevent.h"
+#include "panegridreferences.h"
 
 namespace {
 namespace Catalogue = Unbound::PaneCatalogue;
@@ -71,6 +73,14 @@ public:
 protected:
     bool eventFilter(QObject *object, QEvent *event) override
     {
+        if(object==qApp && event->type()==Unbound::GridReferenceEvent::eventType()) {
+            QList<QRect> areas;for(auto screen:QGuiApplication::screens())areas.append(screen->availableGeometry());
+            static_cast<Unbound::GridReferenceEvent *>(event)->rectangles=Unbound::gridPageReferences(
+                m_settings,currentPage(),areas,[this](const QJsonObject &saved) {
+                    return Unbound::Platform::windowPlacementReference(m_window,saved);
+                });
+            return true;
+        }
         switch (event->type()) {
         case QEvent::ChildAdded:
         case QEvent::ChildPolished:

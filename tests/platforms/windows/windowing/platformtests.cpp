@@ -1,3 +1,4 @@
+#include "windowplacement.h"
 #include "fixtures.h"
 #include "mainwindowsnap.h"
 #include "windowgroupactivation.h"
@@ -571,6 +572,52 @@ bool runPlatformWindowTests(QApplication &app)
         std::puts("PASS: native group activation from main/each pane, selected focus, peer order, geometry, hidden/minimized exclusion, stale activation and modal dialog");
         return true;
     }
+    if (app.arguments().contains("--grid-native")) {
+        Unbound::PaneFloatingWindow pane;
+        pane.setGeometry(301,251,401,303);pane.show();pane.activateWindow();app.processEvents();
+        const auto hwnd=reinterpret_cast<HWND>(pane.winId());
+        const auto foregroundThread=GetWindowThreadProcessId(GetForegroundWindow(),nullptr);
+        const auto thread=GetCurrentThreadId();
+        const bool attached=foregroundThread!=thread && AttachThreadInput(thread,foregroundThread,TRUE);
+        SetForegroundWindow(hwnd);SetFocus(hwnd);
+        if(attached)AttachThreadInput(thread,foregroundThread,FALSE);
+        app.processEvents();
+        check(GetForegroundWindow()==hwnd,"Grid fixture could not acquire foreground input");
+        const auto original=Unbound::paneContactBounds(hwnd);
+        MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
+        POINT cursor{};GetCursorPos(&cursor);
+        GetMonitorInfo(MonitorFromPoint(cursor,MONITOR_DEFAULTTONEAREST),&monitor);
+        auto wait=[] {QEventLoop loop;QTimer::singleShot(160,&loop,&QEventLoop::quit);loop.exec();};
+        auto key=[](WORD code,bool down) {INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wVk=code;
+            input.ki.dwFlags=down?0:KEYEVENTF_KEYUP;SendInput(1,&input,sizeof(input));};
+        auto guide=[] {for(auto w:QApplication::topLevelWidgets())if(w->objectName()=="unboundGridGuide" && w->isVisible())return w;return static_cast<QWidget *>(nullptr);};
+        const bool began=pane.beginButtonMove();
+        const auto start=pane.dragStartPosition();pane.updateInteractiveDrag({start.x+13,start.y+17});wait();
+        const auto raw=Unbound::paneContactBounds(hwnd);
+        key(VK_SHIFT,true);wait();
+        const auto snapped=Unbound::paneContactBounds(hwnd);
+        const int spacing=MulDiv(Unbound::PaneGridSpacing,GetDpiForWindow(hwnd),96);
+        const bool aligned=(snapped.x()-monitor.rcWork.left)%spacing==0 && (snapped.y()-monitor.rcWork.top)%spacing==0;
+        auto overlay=guide();
+        const bool passive=overlay && overlay->windowFlags().testFlag(Qt::WindowTransparentForInput)
+            && overlay->testAttribute(Qt::WA_ShowWithoutActivating) && GetForegroundWindow()==hwnd;
+        key(VK_MENU,true);wait();
+        const bool bypass=Unbound::paneContactBounds(hwnd)==raw && !guide();
+        key(VK_MENU,false);wait();
+        const bool resumed=guide()!=nullptr;
+        key(VK_SHIFT,false);wait();
+        const bool released=Unbound::paneContactBounds(hwnd)==raw && !guide();
+        pane.finishButtonMove();
+        // Always release physical modifiers before any assertion can exit.
+        key(VK_MENU,false);key(VK_SHIFT,false);wait();
+        check(began && original.size()==snapped.size(),"Grid move changed window size");
+        check(aligned,"Native Shift grid did not align contact edges without pointer motion");
+        check(passive,"Grid guide stole focus or accepted input");
+        check(bypass && resumed,"Alt did not bypass/resume Shift grid");
+        check(released,"Shift release did not restore normal snapping without pointer motion");
+        std::puts("PASS: native Shift grid, stationary modifier switching, Alt precedence, passive guide and cleanup");
+        return true;
+    }
     if (app.arguments().contains("--snap-native")) {
         check(QGuiApplication::platformName() == "windows", "Snapping requires the Windows platform");
         ResolveTopEdgeFixture main;
@@ -619,6 +666,23 @@ bool runPlatformWindowTests(QApplication &app)
                     "Windows 11 snap bounds retained an outline or overlapped pane content");
             }
         }
+        QJsonArray signature;
+        for(auto screen:QGuiApplication::screens()) {
+            const auto rect=screen->availableGeometry();
+            signature.append(QJsonArray{screen->name(),rect.x(),rect.y(),rect.width(),rect.height(),screen->devicePixelRatio()});
+        }
+        auto referenceSaved=Unbound::placementJson(Unbound::Platform::saveWindowPlacement(&main,signature));
+        auto falseFallback=referenceSaved.value("qtFallback").toObject();
+        falseFallback.insert("clientRect",Unbound::rectangleJson(QRect(10,10,100,100)));
+        referenceSaved.insert("qtFallback",falseFallback);
+        const auto preview=Unbound::Platform::windowPlacementReference(&main,referenceSaved);
+        auto screen=main.screen();const auto scale=screen->devicePixelRatio();
+        MONITORINFO sourceMonitor{};sourceMonitor.cbSize=sizeof(sourceMonitor);
+        GetMonitorInfo(MonitorFromWindow(handle,MONITOR_DEFAULTTONEAREST),&sourceMonitor);
+        const QRect expected(screen->geometry().x()+qRound((contact.x()-sourceMonitor.rcMonitor.left)/scale),
+            screen->geometry().y()+qRound((contact.y()-sourceMonitor.rcMonitor.top)/scale),
+            qRound(contact.width()/scale),qRound(contact.height()/scale));
+        check(preview==expected,"Main reference outline ignored native placement or contact compensation");
         Unbound::MainWindowSnap filter;
         filter.setWindow(&main);
         SendMessage(handle, WM_ENTERSIZEMOVE, 0, 0);
