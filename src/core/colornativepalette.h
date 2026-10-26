@@ -8,6 +8,9 @@
 #include <QVBoxLayout>
 #include <functional>
 #include "panecatalogue.h"
+#ifdef UNBOUND_PALETTE_SIZE_DIAGNOSTICS
+#include "palettesizediagnostics.h"
+#endif
 
 namespace Unbound {
 // Resolve supplies histogram/image data to registered expanded palettes even
@@ -55,6 +58,9 @@ public:
         dialog->setAttribute(Qt::WA_ShowWithoutActivating);
         embed();
         dialog->installEventFilter(this); m_palette->installEventFilter(this);
+#ifdef UNBOUND_PALETTE_SIZE_DIAGNOSTICS
+        recordPaletteSizes(host,slot->objectName());
+#endif
         return {};
     }
     bool intact() const {

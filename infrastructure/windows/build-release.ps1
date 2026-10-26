@@ -2,9 +2,11 @@ param(
     [string]$Version = '',
     [int]$BuildNumber = 0,
     [switch]$InternalBuild,
+    [switch]$PaletteSizeDiagnostics,
     [string]$QtPath = "$env:USERPROFILE\Qt\5.15.2\msvc2019_64"
 )
 $ErrorActionPreference = 'Stop'
+if ($PaletteSizeDiagnostics -and !$InternalBuild) { throw 'Palette size diagnostics require an internal build.' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'version.ps1')
@@ -43,7 +45,8 @@ try {
     $build = Join-Path $repoRoot "build\windows\unbound\$outputVersion"
     Invoke-Checked 'cmake' @('-S', $repoRoot, '-B', $build,
         '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath",
-        "-DUNBOUND_VERSION=$version", "-DUNBOUND_BUILD=$BuildNumber", "-DUNBOUND_BUILD_ID=$buildId")
+        "-DUNBOUND_VERSION=$version", "-DUNBOUND_BUILD=$BuildNumber", "-DUNBOUND_BUILD_ID=$buildId",
+        "-DUNBOUND_PALETTE_SIZE_DIAGNOSTICS=$($PaletteSizeDiagnostics.IsPresent)")
     Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--', '/m:1', '/nr:false')
     & (Join-Path $repoRoot 'tests\platforms\windows\version\main.ps1')
     $loader = Join-Path $build 'Release\UnboundLuaLoader.dll'
