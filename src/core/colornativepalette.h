@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include <functional>
 #include "panecatalogue.h"
+#include "activestacksize.h"
 #ifdef UNBOUND_PALETTE_SIZE_DIAGNOSTICS
 #include "palettesizediagnostics.h"
 #endif
@@ -19,7 +20,7 @@ namespace Unbound {
 class ColorNativePalette final : public QObject {
 public:
     explicit ColorNativePalette(QObject *owner) : QObject(owner) {}
-    ~ColorNativePalette() override { unwatch(); }
+    ~ColorNativePalette() override { unwatch(); delete m_modeSize; }
     std::function<void()> dockRequested;
     static bool supports(QWidget *slot) {
         return slot && (slot->objectName()==QLatin1String("curvesTab")
@@ -54,6 +55,7 @@ public:
             return QStringLiteral("DaVinci Resolve did not provide the expected expanded Color palette.");
         m_dialog=qobject_cast<QDialog *>(dialog); m_parent=dialog->parentWidget();
         m_flags=dialog->windowFlags(); m_geometry=dialog->geometry();
+        m_minimum=dialog->minimumSize();
         m_showWithoutActivating=dialog->testAttribute(Qt::WA_ShowWithoutActivating);
         dialog->setAttribute(Qt::WA_ShowWithoutActivating);
         embed();
@@ -71,9 +73,11 @@ public:
     bool stop() {
         if(!intact()) return false;
         m_stopping=true; unwatch();
+        delete m_modeSize; m_modeSize=nullptr;
         if(m_dialog) {
             m_host->layout()->removeWidget(m_dialog);
             m_dialog->setParent(m_parent,m_flags);
+            m_dialog->setMinimumSize(m_minimum);
             m_dialog->setGeometry(m_geometry);
             m_dialog->setAttribute(Qt::WA_ShowWithoutActivating,m_showWithoutActivating);
             // Reparenting hides the dialog. QDialog::closeEvent does not call
@@ -105,10 +109,18 @@ protected:
 private:
     void embed() {
         m_dialog->setParent(m_host,Qt::Widget);
+        // Expanded dialogs impose a separate window minimum. While embedded,
+        // let their unchanged child layouts supply the useful control minimums.
+        // Keep registration, size policies and all descendant constraints intact.
+        m_dialog->setMinimumSize(0,0);
+        if(m_dialog->layout()) m_dialog->layout()->invalidate();
         if(!m_host->layout()) {
             auto layout=new QVBoxLayout(m_host); layout->setContentsMargins(0,0,0,0);
         }
         m_host->layout()->addWidget(m_dialog); m_dialog->show();
+        if(!m_modeSize && m_slot && m_palette && m_slot->objectName()==QLatin1String("colorMapperTab"))
+            if(auto stack=m_palette->findChild<QStackedWidget *>("m_WidgetPanel",Qt::FindDirectChildrenOnly))
+                m_modeSize=new ActiveStackSize(stack,this);
     }
     void unwatch() {
         if(m_dialog) m_dialog->removeEventFilter(this);
@@ -133,6 +145,8 @@ private:
     QPointer<QDialog> m_dialog;
     Qt::WindowFlags m_flags;
     QRect m_geometry;
+    QSize m_minimum;
+    ActiveStackSize *m_modeSize=nullptr;
     bool m_showWithoutActivating=false,m_stopping=false,m_queued=false,m_dockQueued=false;
 };
 }

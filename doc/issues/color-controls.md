@@ -27,10 +27,25 @@ Key's matte updates work with its existing implementation. Remaining coverage:
 
 - Curves and Warper floating together, including alternate modes and clip/node changes.
 - Page/layout switches, geometry recall and restart restoration.
-- Native replacement-tool selection and expanded-palette minimum sizes.
+- Native replacement-tool selection.
 - Native menu/shortcut expansion and return paths beyond the guarded buttons.
 - macOS native expansion, ownership and graphics-surface behavior.
 
 Fixtures cover native-dialog retention/return, page hiding, already-expanded
 adoption, native Close/Escape and rejected-close recovery. They do not replace
 validation in Resolve.
+
+## Active-mode sizing validation
+
+The shared Warper sizing mechanism is documented in AGENTS.md. Validate in Resolve:
+
+- Switching among Chroma Warp, Hue/Saturation and Chroma/Luma grows the host when
+  required, preserves controls, and permits shrinking again after returning.
+- Both Curves and Warper still update together after playback stops, including
+  page/layout changes, docking/refloating and restart restoration.
+- macOS behavior, native rendering and mode-dependent minimums.
+
+Fixtures cover mode selection, late/removed pages, active control minimums,
+policy restoration, native registration and rejected-close recovery. Optional
+public Qt size captures are described in
+[the Windows infrastructure README](../../infrastructure/windows/README.md).

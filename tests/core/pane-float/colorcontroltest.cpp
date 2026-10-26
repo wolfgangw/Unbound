@@ -12,6 +12,7 @@ public:
     NativePaletteDialog(QWidget *scope,QWidget *slot,QWidget *palette)
         : QDialog(scope),slot(slot),palette(palette) {
         setObjectName("UiFloatingPaletteWidgetDialog"); new QVBoxLayout(this);
+        setMinimumSize(960,420);
     }
     void expand() { registered=true; layout()->addWidget(palette); palette->show(); show(); }
     bool registered=false,rejectClose=false;
@@ -63,6 +64,7 @@ void testColorControls() {
         auto expand=new QPushButton("Expand"); expand->setObjectName("btnUndock"); row->addWidget(expand);
         NativePaletteDialog *dialog=nullptr;
         if(expanded) {
+            if(control.objectName!="colorMapperTab") content->setMinimumSize(360,180);
             dialog=new NativePaletteDialog(stack,slot,content);
             // Keep QDialog's real closeEvent: hidden close does not call reject.
             // Resolve returns registered palettes in its virtual reject path.
@@ -77,6 +79,19 @@ void testColorControls() {
         QToolButton *options=nullptr;
         if(!control.anchor.isEmpty()) { options=new QToolButton; options->setObjectName(control.anchor); row->addWidget(options); }
         QWidget *wheels=nullptr;
+        QStackedWidget *warperModes=nullptr;
+        QList<QSizePolicy> warperPolicies;
+        if(control.objectName=="colorMapperTab") {
+            warperModes=new QStackedWidget(content); warperModes->setObjectName("m_WidgetPanel");
+            body->addWidget(warperModes);
+            for(const auto minimum:{QSize(747,337),QSize(586,300),QSize(360,180)}) {
+                auto mode=new QWidget; auto modeLayout=new QVBoxLayout(mode);
+                modeLayout->setContentsMargins(0,0,0,0);
+                auto controls=new QWidget; controls->setMinimumSize(minimum); modeLayout->addWidget(controls);
+                warperPolicies.append(mode->sizePolicy()); warperModes->addWidget(mode);
+            }
+            warperModes->setCurrentIndex(2);
+        }
         QSizePolicy originalPolicy;
         if(control.objectName=="colorWheelsTab") {
             wheels=new QWidget; wheels->setObjectName("colorWheelsStackedWidget"); body->addWidget(wheels);
@@ -102,6 +117,43 @@ void testColorControls() {
         decoration.setFloating(true); LayoutTest::settle();
         if(dialog) require(dialog->registered && dialog->parentWidget()==session.floatingWindow()
             && !dialog->isWindow(),"Expanded palette registration/ownership was lost");
+        auto checkPaletteSizing=[&] {
+            auto host=session.floatingWindow();
+            host->resize(600,300); LayoutTest::settle();
+            require(host->width()<960 && host->height()<420,
+                "Expanded dialog minimum still constrains the Unbound host");
+            host->resize(1,1); LayoutTest::settle();
+            require(content->minimumSize()==(warperModes ? QSize(0,0) : QSize(360,180))
+                && host->width()>=360 && host->height()>=180,
+                "Palette control minimum was lost");
+            require(dialog->registered,"Resizing lost expanded palette registration");
+        };
+        if(dialog) checkPaletteSizing();
+        if(warperModes) {
+            auto host=session.floatingWindow();
+            for(int index:{0,1,2}) {
+                warperModes->setCurrentIndex(index); LayoutTest::settle();
+                host->resize(1,1); LayoutTest::settle();
+                const int expected=index==0 ? 747 : index==1 ? 586 : 360;
+                require(host->width()>=expected,"Active Warper mode lost its native minimum");
+                if(index!=0) require(host->width()<747,"Inactive Warper mode still imposes its minimum");
+                require(warperModes->currentWidget()->sizePolicy()==warperPolicies[index],
+                    "Active Warper mode sizing policy changed");
+                require(dialog->registered,"Warper mode switch lost native registration");
+            }
+            auto late=new QWidget; auto lateLayout=new QVBoxLayout(late);
+            auto lateControls=new QWidget; lateControls->setMinimumSize(900,500); lateLayout->addWidget(lateControls);
+            const auto latePolicy=late->sizePolicy(); warperModes->addWidget(late); LayoutTest::settle();
+            host->resize(600,300); LayoutTest::settle();
+            require(host->width()<747,"Late hidden Warper mode inflated host minimum");
+            warperModes->setCurrentWidget(late); LayoutTest::settle();
+            host->resize(1,1); LayoutTest::settle();
+            require(host->width()>=900 && host->height()>=500,"Late active mode lost control minimums");
+            warperModes->setCurrentIndex(2); warperModes->removeWidget(late); LayoutTest::settle();
+            require(late->sizePolicy()==latePolicy,"Removed mode policy was not restored");
+            delete late;
+            checkPaletteSizing();
+        }
         if(key) {
             require(slot->findChild<QWidget *>(control.headerOwner,Qt::FindDirectChildrenOnly)==content
                 && native->itemAt(0)->widget()==content && content->layout()!=body,
@@ -161,11 +213,15 @@ void testColorControls() {
             dialog->rejectClose=true;
             require(!session.dock().isEmpty() && session.active() && dialog->registered
                 && content->window()==session.floatingWindow(),"Rejected native close lost floating palette");
+            checkPaletteSizing();
             dialog->rejectClose=false;
         }
         require(session.dock().isEmpty(),"Color control dock failed"); LayoutTest::settle();
         if(dialog) require(!dialog->registered && dialog->parentWidget()==stack && dialog->isWindow(),
             "Native palette close did not restore registration/ownership");
+        if(dialog) require(dialog->minimumSize()==QSize(960,420),"Native dialog minimum was not restored");
+        if(warperModes) for(int i=0;i<warperModes->count();++i)
+            require(warperModes->widget(i)->sizePolicy()==warperPolicies[i],"Docking failed to restore Warper mode policies");
         require(!session.active() && slot->layout()==native && content->parentWidget()==slot,
             "Native Color layout was not restored");
         if(lateExpand) require(lateExpand->isEnabled(),"Late Scopes Expand was not restored on docking");
@@ -183,6 +239,7 @@ void testColorControls() {
             require(session.start(slot,control.label,&page,false,false,true,false).isEmpty(),
                 "Already expanded palette could not be hosted");
             decoration.setFloating(true); LayoutTest::settle();
+            checkPaletteSizing();
             dialog->close(); LayoutTest::settle();
             require(!session.active() && !dialog->registered && content->parentWidget()==slot,
                 "Native close did not route through normal session docking");

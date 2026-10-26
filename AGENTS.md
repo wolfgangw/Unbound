@@ -329,8 +329,26 @@ Curves and Color Warper use `ColorNativePalette`: activate the native Expand but
 and retain its registered `UiFloatingPaletteWidgetDialog` as a child inside the
 normal Unbound host. Discover the palette/dialog by names and ancestry. Resolve's
 expanded-palette registration keeps histogram/image data updating when another
-Color tool is selected; plain reparenting does not. Native minimum sizes and
-replacement-tool selection remain Resolve's. Warper mode is clip/node dependent;
+Color tool is selected; plain reparenting does not. While embedded, clear only the
+expanded dialog's explicit minimum size; retain descendant constraints and layout
+size hints so the controls determine the useful minimum width and height. Restore
+the dialog minimum before native return, and relax it again if return is rejected.
+For floating Warper only, `ActiveStackSize` makes `m_WidgetPanel` use the active
+mode's native size requirements. QStackedLayout otherwise includes hidden modes,
+whose bottom controls can impose a wider minimum on Chroma Warp. Temporarily use
+Ignored size policies on inactive page containers, retaining all descendant
+constraints; restore each page's policy when selected and all policies before
+native return. Preserve newer native policy changes. Current-page signals and
+coalesced child/layout events handle mode changes and late pages. Refresh layout
+minimums through the host after policy changes; native layout grows for larger
+modes, while shrinking remains the user's choice. Do not stretch the square
+graphic, change the selected mode, or alter other Color controls.
+Compact palette resizing and simultaneous updates are user-validated on Windows.
+Curves' native histogram source remains the user's choice: Input shows the signal
+entering the node; Output reflects adjustments within that node. Do not force
+Output or treat an unchanged Input histogram during grading as an update failure.
+Native expanded-state toolbar appearance, return actions and replacement-tool
+selection remain Resolve's. Warper mode is clip/node dependent;
 never overwrite it. Already-expanded palettes use the same host path. Docking
 restores the dialog's native parent/flags and calls its public virtual
 `QDialog::reject()` to return content and registration through Resolve. Reparenting
