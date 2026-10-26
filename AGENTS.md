@@ -373,7 +373,9 @@ Backends emit `WindowInteractionEvent` before user move/resize starts, including
 native-child edges; programmatic recall geometry does not emit it.
 
 Use main-window background palette, 4 px popup corners, 3 px highlight corners,
-5 px row-control gaps and 2 px vertical margins. Dirty save uses playhead red;
+5 px row-control gaps and 2 px vertical margins. Layout-name highlights, rename
+fields, dirty-save indicators and trash hover highlights share a 30-logical-pixel
+height with no theme-dependent vertical padding. Dirty save uses playhead red;
 trash stays neutral. Preserve active highlighting through hover/focus.
 
 Hold a name for one second to edit inline; activate the popout, focus the editor

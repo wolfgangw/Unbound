@@ -147,6 +147,8 @@ public:
         m_background=(parent ? parent->palette() : qApp->palette()).color(QPalette::Window);
         setStyleSheet("QFrame#unboundLayoutMenu { background: transparent; border: none; }"
             "QFrame#unboundLayoutMenu QAbstractButton { color: #dddddd; background: transparent; border: none; border-radius: 3px; padding: 6px 8px; text-align: left; }"
+            "QFrame#unboundLayoutMenu QPushButton#unboundLayoutRecall { margin: 0px; padding: 0px 8px; }"
+            "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate, QFrame#unboundLayoutMenu QToolButton#unboundLayoutDelete { margin: 0px; padding: 0px; }"
             "QFrame#unboundLayoutMenu QAbstractButton:hover { background: #414141; }"
             "QFrame#unboundLayoutMenu QAbstractButton:focus { background: #414141; }"
             "QFrame#unboundLayoutMenu QAbstractButton[activeLayout='true'] { background: #40566a; color: #ffffff; }"
@@ -154,7 +156,7 @@ public:
             "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate { background: #ed4b3f; }"
             "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate:hover { background: #f65b4f; }"
             "QFrame#unboundLayoutMenu QToolButton#unboundLayoutUpdate:focus { background: #f65b4f; }"
-            "QFrame#unboundLayoutMenu QLineEdit { color: #dddddd; background: #292929; border: 1px solid #777777; border-radius: 3px; padding: 4px 7px; selection-background-color: #40566a; }"
+            "QFrame#unboundLayoutMenu QLineEdit { color: #dddddd; background: #292929; border: 1px solid #777777; border-radius: 3px; margin: 0px; padding: 0px 7px; selection-background-color: #40566a; }"
             "QFrame#unboundLayoutMenu QLabel { color: #999999; padding: 5px 8px; background: transparent; }");
         m_save=new QPushButton(this); m_save->setObjectName("unboundLayoutSave");
         m_save->setText(QStringLiteral("Save as new %1 layout").arg(PaneSettings::pageLabel(m_page)));
@@ -371,23 +373,26 @@ private:
         if(submit || isVisible()) afterAction({});
     }
     LayoutRow makeRow(const QString &id) {
+        constexpr int highlightHeight=30;
         auto row=new QWidget(this); auto layout=new QHBoxLayout(row);
         layout->setContentsMargins(0,2,0,2); layout->setSpacing(5);
-        auto nameArea=new QStackedWidget(row); layout->addWidget(nameArea,1);
+        auto nameArea=new QStackedWidget(row); nameArea->setFixedHeight(highlightHeight); layout->addWidget(nameArea,1);
         auto load=new LayoutNameButton(nameArea); load->setObjectName("unboundLayoutRecall"); load->setAutoDefault(false);
-        load->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); nameArea->addWidget(load);
+        load->setFixedHeight(highlightHeight);
+        load->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed); nameArea->addWidget(load);
         load->setProperty("layoutId",id);
         auto editor=new LayoutNameEdit(nameArea); editor->setObjectName("unboundLayoutNameEdit");
+        editor->setFixedHeight(highlightHeight);
         editor->setProperty("layoutId",id); nameArea->addWidget(editor);
         load->renameRequested=[this,id] { beginRename(id); };
         editor->finish=[this](bool submit) { finishRename(submit); };
         auto updateButton=new QToolButton(row); updateButton->setObjectName("unboundLayoutUpdate");
         updateButton->setProperty("layoutId",id);
         updateButton->setIcon(QIcon(new LayoutActionIcon(true))); updateButton->setIconSize(QSize(18,18));
-        updateButton->setFixedSize(30,30); layout->addWidget(updateButton);
+        updateButton->setFixedSize(highlightHeight,highlightHeight); layout->addWidget(updateButton);
         auto trash=new QToolButton(row); trash->setObjectName("unboundLayoutDelete");
         trash->setProperty("layoutId",id);
-        trash->setIcon(QIcon(new LayoutActionIcon)); trash->setIconSize(QSize(18,18)); trash->setFixedSize(30,30);
+        trash->setIcon(QIcon(new LayoutActionIcon)); trash->setIconSize(QSize(18,18)); trash->setFixedSize(highlightHeight,highlightHeight);
         layout->addWidget(trash);
         m_layout->insertWidget(m_layout->indexOf(m_status),row);
         connect(load,&QPushButton::clicked,this,[this,id] {
