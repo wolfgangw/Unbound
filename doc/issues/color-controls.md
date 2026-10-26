@@ -16,3 +16,21 @@ Remaining checks:
 The original tool slots retain placeholders while their controls float. Lower
 region reclamation and automatic selection of a replacement docked tool remain
 unsettled; viewer reclamation is tracked separately in color-viewer.md.
+
+## Curves and Color Warper native-expansion validation
+
+The shared implementation retains Resolve's registered expanded dialog inside the
+standard Unbound host; the mechanism is documented in AGENTS.md.
+
+Windows user testing confirms both floating palettes update and dock correctly.
+Key's matte updates work with its existing implementation. Remaining coverage:
+
+- Curves and Warper floating together, including alternate modes and clip/node changes.
+- Page/layout switches, geometry recall and restart restoration.
+- Native replacement-tool selection and expanded-palette minimum sizes.
+- Native menu/shortcut expansion and return paths beyond the guarded buttons.
+- macOS native expansion, ownership and graphics-surface behavior.
+
+Fixtures cover native-dialog retention/return, page hiding, already-expanded
+adoption, native Close/Escape and rejected-close recovery. They do not replace
+validation in Resolve.

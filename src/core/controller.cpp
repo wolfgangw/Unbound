@@ -276,7 +276,7 @@ private:
             const auto key=settingsKey(it.key());
             if(it.key()==QLatin1String("m_pLightBox") || Unbound::PaneSettings::pageForPane(key)!=page || !m_settings.floating(key) || m_restoreAttempted.contains(it.key())) continue;
             auto pane=it.value()->pane();
-            if(pane && panePage(pane) && panePage(pane)->isVisible() && pane->layout() && pane->layout()->count()) return;
+            if(pane && panePage(pane) && panePage(pane)->isVisible() && pane->layout() && (pane->layout()->count() || Unbound::ColorNativePalette::palette(pane))) return;
         }
         m_restoringToggles=true;
         for(bool checked:{false,true}) for(const auto &name:m_pendingLayoutToggles.values()) {
@@ -656,7 +656,7 @@ private:
             auto decoration=m_decorations.value(name);
             auto pane = decoration->pane();
             auto root = pane ? panePage(pane) : nullptr;
-            if (!root || !root->isVisible() || !pane->layout() || !pane->layout()->count()) continue;
+            if (!root || !root->isVisible() || !pane->layout() || (!pane->layout()->count() && !Unbound::ColorNativePalette::palette(pane))) continue;
             bool requested = false;
             const auto &descriptor=*Catalogue::find(name);
             if (descriptor.initializeBeforeRestore

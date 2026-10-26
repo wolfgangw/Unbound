@@ -6,12 +6,31 @@
 #include <QPushButton>
 #include <cstdio>
 
+namespace {
+class NativePaletteDialog : public QDialog {
+public:
+    NativePaletteDialog(QWidget *scope,QWidget *slot,QWidget *palette)
+        : QDialog(scope),slot(slot),palette(palette) {
+        setObjectName("UiFloatingPaletteWidgetDialog"); new QVBoxLayout(this);
+    }
+    void expand() { registered=true; layout()->addWidget(palette); palette->show(); show(); }
+    bool registered=false,rejectClose=false;
+    void reject() override {
+        if(rejectClose) return;
+        registered=false; slot->layout()->addWidget(palette); palette->show();
+        QDialog::reject();
+    }
+private:
+    QWidget *slot,*palette;
+};
+}
+
 void testColorControls() {
     using namespace Unbound;
     using LayoutTest::require;
     QWidget page; page.setObjectName("WStackPage_Color"); page.resize(800,500);
     auto outer=new QVBoxLayout(&page);
-    auto stack=new QStackedWidget; outer->addWidget(stack);
+    auto stack=new QStackedWidget; stack->setObjectName("UiSecWidgetContainer"); outer->addWidget(stack);
     auto other=new QWidget; stack->addWidget(other);
     page.show(); LayoutTest::settle();
     for(const auto &control:PaneCatalogue::colorControls()) {
@@ -22,10 +41,11 @@ void testColorControls() {
         // Camera Raw/HDR own multiple layout entries, transferred as a unit.
         if(control.wholeLayout) native->addWidget(new QLabel("Footer"));
         const bool key=control.objectName=="keyTab" || control.objectName=="sizingTab";
-        auto owner=key ? content : new QWidget;
+        const bool expanded=ColorNativePalette::supports(slot);
+        auto owner=key || expanded ? content : new QWidget;
         owner->setObjectName(control.headerOwner);
-        if(!key) body->addWidget(owner);
-        auto ownerLayout=key ? body : new QVBoxLayout(owner);
+        if(!key && !expanded) body->addWidget(owner);
+        auto ownerLayout=key || expanded ? body : new QVBoxLayout(owner);
         auto header=new QFrame; header->setObjectName(control.header); ownerLayout->addWidget(header);
         auto row=new QHBoxLayout(header); row->addWidget(new QLabel(control.label),1);
         QWidget *paletteTitle=nullptr;
@@ -41,6 +61,19 @@ void testColorControls() {
             paletteAction=new QPushButton("Native mode"); selectorRow->addWidget(paletteAction);
         }
         auto expand=new QPushButton("Expand"); expand->setObjectName("btnUndock"); row->addWidget(expand);
+        NativePaletteDialog *dialog=nullptr;
+        if(expanded) {
+            dialog=new NativePaletteDialog(stack,slot,content);
+            // Keep QDialog's real closeEvent: hidden close does not call reject.
+            // Resolve returns registered palettes in its virtual reject path.
+            dialog->expand(); dialog->hide();
+            require(dialog->close() && dialog->registered,"Hidden QDialog close unexpectedly returned palette");
+            dialog->reject();
+            require(!dialog->registered && content->parentWidget()==slot,"Native reject fixture failed");
+            QObject::connect(expand,&QPushButton::clicked,dialog,[dialog,stack,other] {
+                dialog->expand(); stack->setCurrentWidget(other);
+            });
+        }
         QToolButton *options=nullptr;
         if(!control.anchor.isEmpty()) { options=new QToolButton; options->setObjectName(control.anchor); row->addWidget(options); }
         QWidget *wheels=nullptr;
@@ -67,6 +100,8 @@ void testColorControls() {
         require(session.start(slot,control.label,&page,false,false,descriptor->preserveNativeLayout(),false).isEmpty(),
             "Color control detach failed");
         decoration.setFloating(true); LayoutTest::settle();
+        if(dialog) require(dialog->registered && dialog->parentWidget()==session.floatingWindow()
+            && !dialog->isWindow(),"Expanded palette registration/ownership was lost");
         if(key) {
             require(slot->findChild<QWidget *>(control.headerOwner,Qt::FindDirectChildrenOnly)==content
                 && native->itemAt(0)->widget()==content && content->layout()!=body,
@@ -122,7 +157,15 @@ void testColorControls() {
         value->click(); require(clicks==1,"Native tool connection lost");
         page.hide(); LayoutTest::settle(); require(!session.floatingWindow()->isVisible(),"Tool stayed visible on another page");
         page.show(); LayoutTest::settle(); require(session.floatingWindow()->isVisible(),"Tool failed page return");
+        if(dialog) {
+            dialog->rejectClose=true;
+            require(!session.dock().isEmpty() && session.active() && dialog->registered
+                && content->window()==session.floatingWindow(),"Rejected native close lost floating palette");
+            dialog->rejectClose=false;
+        }
         require(session.dock().isEmpty(),"Color control dock failed"); LayoutTest::settle();
+        if(dialog) require(!dialog->registered && dialog->parentWidget()==stack && dialog->isWindow(),
+            "Native palette close did not restore registration/ownership");
         require(!session.active() && slot->layout()==native && content->parentWidget()==slot,
             "Native Color layout was not restored");
         if(lateExpand) require(lateExpand->isEnabled(),"Late Scopes Expand was not restored on docking");
@@ -130,6 +173,26 @@ void testColorControls() {
         if(key) require(content->layout()==body,"Retained tool original content layout was not restored");
         require(expand->isEnabled() && stack->currentWidget()==other,"Dock changed native stack selection or failed to restore Expand");
         stack->setCurrentWidget(slot); value->click(); require(clicks==2,"Native action lost after docking");
+        if(dialog) {
+            decoration.setFloating(false);
+            // Take over an already-native-expanded palette whose slot is empty.
+            expand->click(); LayoutTest::settle();
+            require(native->count()==0 && dialog->registered,"Native expansion fixture failed");
+            decoration.refreshNativeHeader();
+            require(decoration.button()->parentWidget()==header,"Already expanded palette lost header button");
+            require(session.start(slot,control.label,&page,false,false,true,false).isEmpty(),
+                "Already expanded palette could not be hosted");
+            decoration.setFloating(true); LayoutTest::settle();
+            dialog->close(); LayoutTest::settle();
+            require(!session.active() && !dialog->registered && content->parentWidget()==slot,
+                "Native close did not route through normal session docking");
+            // A queued close must not affect a subsequent floating session.
+            require(session.start(slot,control.label,&page,false,false,true,false).isEmpty(),"Repeated expansion failed");
+            QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);
+            QApplication::sendEvent(dialog,&escape); LayoutTest::settle();
+            require(!session.active() && !dialog->registered,"Expanded palette Escape did not dock");
+            delete dialog;
+        }
         // Destruction order: decoration/session outlive their content through
         // this scope, so remove the test page after both objects are destroyed.
         stack->removeWidget(slot); slot->hide(); slot->deleteLater();

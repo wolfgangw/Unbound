@@ -316,13 +316,32 @@ scope, header owner and selector. Scope disambiguates repeated names such as
 `sizingTab`. Retain stack entries and indices; transfer their contents with
 `SidebarFloatSession`. Camera Raw and HDR transfer the whole multi-entry layout;
 other tools preserve the native layout and move its single content widget, except
-Key and Sizing: retain `keyWidget` (`UiSecKeyWidgetImp`) and `sizingWidget`
+Curves/Color Warper (native expansion below) and Key/Sizing. For Key and Sizing,
+retain `keyWidget` (`UiSecKeyWidgetImp`) and `sizingWidget`
 as the first widgets in their respective `keyTab`/`sizingTab` native layouts;
 transfer each tool object's own layout contents instead. Resolve's
 native tool lookup requires that container in its original slot and dereferences
 these lookups without a null check. Keep its identity, stack index and native
 connections intact throughout floating/docking; never replace it with a placeholder.
 The placeholder belongs inside the retained tool container.
+
+Curves and Color Warper use `ColorNativePalette`: activate the native Expand button
+and retain its registered `UiFloatingPaletteWidgetDialog` as a child inside the
+normal Unbound host. Discover the palette/dialog by names and ancestry. Resolve's
+expanded-palette registration keeps histogram/image data updating when another
+Color tool is selected; plain reparenting does not. Native minimum sizes and
+replacement-tool selection remain Resolve's. Warper mode is clip/node dependent;
+never overwrite it. Already-expanded palettes use the same host path. Docking
+restores the dialog's native parent/flags and calls its public virtual
+`QDialog::reject()` to return content and registration through Resolve. Reparenting
+hides the dialog; `close()` on a hidden QDialog can succeed without calling reject
+or returning the palette. Native Close/Escape requests defer normal session docking
+until the event unwinds; rejected closes
+retain a usable floating host. Page visibility, geometry, layouts, header dragging
+and snapping reuse the standard session. No private offsets, update polling or
+transport interception. Key's matte updates work through its existing retained
+container and do not require native expansion.
+
 Insert buttons in existing header rows, before recognized options where present;
 use the existing `PaneHeaderDrag` and floating hosts. Tool selectors are not
 visibility toggles: never switch them off for reclamation. Explicit docking

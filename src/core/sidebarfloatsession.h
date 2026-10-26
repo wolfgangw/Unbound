@@ -21,6 +21,7 @@
 #include "panedockingguard.h"
 #include "colorclipsadapter.h"
 #include "colorexpandguard.h"
+#include "colornativepalette.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -153,11 +154,12 @@ public:
                 return QStringLiteral("The native tool container is unavailable; no changes made.");
             preserveNativeLayout=false;
         }
+        const bool nativePalette=ColorNativePalette::supports(slot);
         auto layout = layoutSlot->layout();
-        if (!layout || (!qobject_cast<QBoxLayout *>(layout) && !qobject_cast<QGridLayout *>(layout)) || layout->count() == 0)
+        if (!layout || (!qobject_cast<QBoxLayout *>(layout) && !qobject_cast<QGridLayout *>(layout)) || (!nativePalette && layout->count() == 0))
             return QStringLiteral("Expected a nonempty box or grid layout; no changes made.");
         auto nativeGrid = qobject_cast<QGridLayout *>(layout);
-        if (preserveNativeLayout && (layout->count() != 1 || !layout->itemAt(0)->widget()))
+        if (!nativePalette && preserveNativeLayout && (layout->count() != 1 || !layout->itemAt(0)->widget()))
             return QStringLiteral("Expected a layout containing one content widget; no changes made.");
         const bool clips=slot->objectName()==QLatin1String("m_pLightBox")
             && pageRoot && pageRoot->objectName()==QLatin1String("WStackPage_Color");
@@ -193,7 +195,17 @@ public:
         host->setObjectName(QStringLiteral("unboundFloating_") + slot->objectName());
         host->setWindowTitle(label);
         host->resize(slot->size().expandedTo(QSize(360, 300)));
-        if (preserveNativeLayout) {
+        if (nativePalette) {
+            m_nativePalette=new ColorNativePalette(this);
+            const auto error=m_nativePalette->start(slot,host,m_root);
+            if(!error.isEmpty()) { delete host; clear(); return error; }
+            m_nativePalette->dockRequested=[this] { if(active()) dock(); };
+            auto placeholder=new QLabel(QStringLiteral("%1 is floating.").arg(label),slot);
+            placeholder->setObjectName(QStringLiteral("unboundSidebarPlaceholder"));
+            placeholder->setAlignment(Qt::AlignCenter);
+            m_placeholder=placeholder;
+            layout->addWidget(placeholder); placeholder->show();
+        } else if (preserveNativeLayout) {
             // Retain Resolve's native layout during visibility/selector changes.
             // Move only its sole content widget and preserve its layout slot.
             m_nativeLayout = layout;
@@ -355,7 +367,7 @@ public:
         if (m_restoring) return QString();
         // A close can arrive before the queued native-toggle recovery.
         recoverFloatingGraph();
-        const bool layoutIntact = m_nativeLayout
+        const bool layoutIntact = m_nativePalette ? m_nativePalette->intact() : m_nativeLayout
             ? (m_content && m_hostLayout && m_slot && m_slot->layout() == m_nativeLayout
                 && m_host->layout() == m_hostLayout && m_content->parentWidget() == m_host)
             : (m_slot && m_layoutSlot && m_layout && m_placeholderLayout && m_layoutSlot->layout() == m_placeholderLayout
@@ -367,6 +379,20 @@ public:
         m_restoring = true;
         stopAuditionBridge();
         restoreNativeExpand();
+        const bool nativePalette=bool(m_nativePalette);
+        if(nativePalette) {
+            delete m_placeholder.data();
+            if(!m_nativePalette->stop()) {
+                auto placeholder=new QLabel(QStringLiteral("%1 is floating.").arg(m_host->windowTitle()),m_slot);
+                placeholder->setObjectName(QStringLiteral("unboundSidebarPlaceholder"));
+                placeholder->setAlignment(Qt::AlignCenter);
+                m_placeholder=placeholder; m_layout->addWidget(placeholder); placeholder->show();
+                m_expandGuard=new ColorExpandGuard(m_host,this);
+                m_restoring=false;
+                return QStringLiteral("DaVinci Resolve could not return this palette; it remains floating.");
+            }
+            delete m_nativePalette; m_nativePalette=nullptr;
+        }
         restoreInspectorTitlePolicy();
         restoreWheelsPolicy();
         if (m_root) m_root->removeEventFilter(this);
@@ -378,7 +404,7 @@ public:
             delete m_placeholder.data();
             addNativeContent(m_content);
             m_content->setVisible(!m_contentWasHidden);
-        } else {
+        } else if(!nativePalette) {
             delete m_placeholderLayout.data();
             delete m_placeholder.data();
             m_layoutSlot->setLayout(m_layout);
@@ -519,8 +545,10 @@ private:
     }
     void restoreNativeExpand() { delete m_expandGuard; m_expandGuard=nullptr; }
     ColorExpandGuard *m_expandGuard=nullptr;
+    ColorNativePalette *m_nativePalette=nullptr;
     void clear()
     {
+        delete m_nativePalette; m_nativePalette=nullptr;
         restoreNativeExpand();
         stopAuditionBridge();
         restoreInspectorTitlePolicy();

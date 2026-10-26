@@ -2,6 +2,7 @@
 #ifndef UNBOUND_PANEDECORATION_H
 #define UNBOUND_PANEDECORATION_H
 #include "panecatalogue.h"
+#include "colornativepalette.h"
 #include <QWidget>
 #include <QToolButton>
 #include <QAbstractButton>
@@ -289,6 +290,8 @@ private:
         const auto paneDescriptor=PaneCatalogue::find(m_pane->objectName());
         if(const auto control=PaneCatalogue::colorControl(m_pane->objectName())) {
             auto root=m_floating && button() ? button()->window() : m_pane.data();
+            if(!m_floating && ColorNativePalette::supports(m_pane))
+                if(auto palette=ColorNativePalette::palette(m_pane)) root=palette;
             auto add=[this](QWidget *header,QBoxLayout *row,QAbstractButton *anchor,bool mirror=false) {
                 // Retain installed rows and add only newly created native variants.
                 for(auto b:m_buttons) if(b && b->parentWidget()==header
