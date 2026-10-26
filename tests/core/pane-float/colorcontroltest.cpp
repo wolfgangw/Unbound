@@ -28,17 +28,17 @@ void testColorControls() {
         auto ownerLayout=key ? body : new QVBoxLayout(owner);
         auto header=new QFrame; header->setObjectName(control.header); ownerLayout->addWidget(header);
         auto row=new QHBoxLayout(header); row->addWidget(new QLabel(control.label),1);
-        QWidget *sizingTitle=nullptr;
-        QPushButton *sizingAction=nullptr;
-        if(control.objectName=="sizingTab") {
+        QWidget *paletteTitle=nullptr;
+        QPushButton *paletteAction=nullptr;
+        if(control.objectName=="sizingTab" || control.objectName=="trackerTab" || control.objectName=="blurTab" || control.objectName=="colorWheelsTab" || control.objectName=="tab3D") {
             // A control ancestor models UiPaletteSelector's exclusion from
             // generic header dragging. Only its plain child frame is a root.
-            auto selector=new QPushButton; selector->setObjectName("cbWidgets"); row->addWidget(selector,1);
+            auto selector=new QPushButton; selector->setObjectName(control.objectName=="sizingTab" ? "cbWidgets" : control.objectName=="trackerTab" ? "cbBoxTrackStableSelection" : control.objectName=="colorWheelsTab" ? "cbColorWidgets" : "cmbSetTo"); row->addWidget(selector,1);
             auto selectorRow=new QHBoxLayout(selector);
             auto titleFrame=new QFrame; selectorRow->addWidget(titleFrame,1);
             auto titleRow=new QHBoxLayout(titleFrame);
-            sizingTitle=new QLabel("Sizing - Input Sizing"); titleRow->addWidget(sizingTitle);
-            sizingAction=new QPushButton("Native mode"); selectorRow->addWidget(sizingAction);
+            paletteTitle=new QLabel("Native tool title"); titleRow->addWidget(paletteTitle);
+            paletteAction=new QPushButton("Native mode"); selectorRow->addWidget(paletteAction);
         }
         auto expand=new QPushButton("Expand"); expand->setObjectName("btnUndock"); row->addWidget(expand);
         QToolButton *options=nullptr;
@@ -73,7 +73,7 @@ void testColorControls() {
                 "Native tool container disappeared from its original stack slot");
             require(session.floatingWindow()->layout()==body,"Retained tool content layout was not transferred intact");
         }
-        if(sizingTitle && QGuiApplication::platformName()!=QLatin1String("offscreen")) {
+        if(paletteTitle && QGuiApplication::platformName()!=QLatin1String("offscreen")) {
             auto host=static_cast<PaneFloatingWindow *>(session.floatingWindow());
             auto gesture=[&](QWidget *target,bool expected) {
                 const QPoint start(3,target->height()/2);
@@ -83,12 +83,12 @@ void testColorControls() {
                 };
                 send(QEvent::MouseButtonPress,start,Qt::LeftButton,Qt::LeftButton);
                 send(QEvent::MouseMove,start+QPoint(QApplication::startDragDistance()+1,0),Qt::NoButton,Qt::LeftButton);
-                require(host->interactiveDragActive()==expected,"Sizing title/action drag routing incorrect");
+                require(host->interactiveDragActive()==expected,"Palette title/action drag routing incorrect");
                 send(QEvent::MouseButtonRelease,start,Qt::LeftButton,Qt::NoButton);
-                require(!host->interactiveDragActive(),"Sizing header retained drag after release");
+                require(!host->interactiveDragActive(),"Palette header retained drag after release");
             };
-            gesture(sizingTitle,true);
-            gesture(sizingAction,false);
+            gesture(paletteTitle,true);
+            gesture(paletteAction,false);
         }
         if(wheels) {
             require(wheels->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored,"Wheel allocation still feeds host minimum");

@@ -335,7 +335,8 @@ Native expansion while docked is unchanged. Header decoration extends to newly
 created variants on bounded discovery events, including Scopes. Nested palette
 selectors place a button before each native options variant and mirror its explicit
 visibility; their plain child frames reuse `PaneHeaderDrag`, excluding controls.
-Sizing's `cbWidgets` palette selector uses that same child-frame handling.
+Sizing's `cbWidgets`, Tracker's `cbBoxTrackStableSelection`, Blur/3D's `cmbSetTo`
+and Color Wheels' `cbColorWidgets` selectors use that same child-frame handling.
 Floating Color Wheels ignores the wheel stack's horizontal size hint, whose native
 child minimums follow the last expanded allocation. A stable minimum is derived
 from intrinsic group hints and layout spacing; docking restores the original stack

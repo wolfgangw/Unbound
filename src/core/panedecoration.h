@@ -308,12 +308,18 @@ private:
                 if(!row || (row->direction()!=QBoxLayout::LeftToRight && row->direction()!=QBoxLayout::RightToLeft)) continue;
                 bool nested=false;
                 for(auto selector:header->findChildren<QWidget *>()) {
-                    // Sizing uses the same native palette selector under a
-                    // different object name. Its title/background frames are
+                    // Several tools use the native palette selector under
+                    // different object names. Its title/background frames are
                     // safe drag roots; selector buttons remain native controls.
                     if(selector->objectName()!=QLatin1String("m_WidgetSelector")
                         && !(control->objectName==QLatin1String("sizingTab")
-                            && selector->objectName()==QLatin1String("cbWidgets"))) continue;
+                            && selector->objectName()==QLatin1String("cbWidgets"))
+                        && !(control->objectName==QLatin1String("trackerTab")
+                            && selector->objectName()==QLatin1String("cbBoxTrackStableSelection"))
+                        && !((control->objectName==QLatin1String("blurTab") || control->objectName==QLatin1String("tab3D"))
+                            && selector->objectName()==QLatin1String("cmbSetTo"))
+                        && !(control->objectName==QLatin1String("colorWheelsTab")
+                            && selector->objectName()==QLatin1String("cbColorWidgets"))) continue;
                     for(auto actions:selector->findChildren<QWidget *>("frameHeaderButtons")) {
                         auto actionsRow=qobject_cast<QBoxLayout *>(actions->layout());
                         if(!actionsRow) continue;

@@ -7,7 +7,7 @@ Remaining checks:
 
 - Validate macOS, including native graphics surfaces.
 - Validate 3D with stereoscopic material; it is disabled in the current Windows
-  test project.
+  test project. Include title/background dragging and native selector clicks.
 - Check alternate menu/shortcut routes to native expansion. The recognized
   Expand buttons are guarded while floating.
 - Compare Scopes' empty plot immediately after a mode change against native
