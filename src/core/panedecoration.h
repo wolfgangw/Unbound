@@ -203,6 +203,7 @@ public:
     QWidget *pane() const { return m_pane; }
     QToolButton *button() const { for(auto b:m_buttons) if(b) return b; return nullptr; }
     bool usesNativeHeader() const { return m_native; }
+    void refreshNativeHeader() { if(m_pane && PaneCatalogue::colorControl(m_pane->objectName())) refresh(); }
     void setDockingFailure(const QString &message) {
         m_failure=message;
         for(auto b:m_buttons) if(b) static_cast<UndockButton *>(b.data())->setDockingFailure(message);
@@ -215,11 +216,15 @@ public:
             static_cast<UndockButton *>(b.data())->setFloatingState(floating);
             b->show();
         }
+        syncMenuButtons();
         position();
     }
 protected:
-    bool eventFilter(QObject *,QEvent *event) override
+    bool eventFilter(QObject *object,QEvent *event) override
     {
+        if(event->type()==QEvent::ShowToParent || event->type()==QEvent::HideToParent)
+            for(const auto &pair:m_menuButtons) if(pair.first==object && pair.second)
+                pair.second->setVisible(!pair.first->isHidden());
         if(event->type()==QEvent::Resize || event->type()==QEvent::Show || event->type()==QEvent::LayoutRequest) {
             if(!m_floating) refresh();
             position();
@@ -264,13 +269,76 @@ private:
             m_pane->setContentsMargins(m_margins);
         m_strip=0;
     }
+    void syncMenuButtons() {
+        for(const auto &pair:m_menuButtons) if(pair.first && pair.second)
+            pair.second->setVisible(!pair.first->isHidden());
+    }
+    QList<QPair<QPointer<QAbstractButton>,QPointer<QToolButton>>> m_menuButtons;
+    void addHeaderDrag(QWidget *header) {
+        for(const auto &surface:m_controlDragSurfaces) if(surface==header) return;
+        m_controlDragSurfaces.append(header);
+        m_headerDrags.append(new PaneHeaderDrag(header,this));
+    }
+    QList<QPointer<QWidget>> m_controlDragSurfaces;
     void refresh()
     {
-        if(m_refreshing || !m_pane || m_floating) return;
+        if(m_refreshing || !m_pane || (m_floating && !PaneCatalogue::colorControl(m_pane->objectName()))) return;
         m_refreshing=true;
         bool any=false; for(auto b:m_buttons) if(b) any=true;
-        if(m_native && any) {m_refreshing=false; return;}
+        if(m_native && any && !PaneCatalogue::colorControl(m_pane->objectName())) {m_refreshing=false; return;}
         const auto paneDescriptor=PaneCatalogue::find(m_pane->objectName());
+        if(const auto control=PaneCatalogue::colorControl(m_pane->objectName())) {
+            auto root=m_floating && button() ? button()->window() : m_pane.data();
+            auto add=[this](QWidget *header,QBoxLayout *row,QAbstractButton *anchor,bool mirror=false) {
+                // Retain installed rows and add only newly created native variants.
+                for(auto b:m_buttons) if(b && b->parentWidget()==header
+                    && (!anchor || b->property("unboundAnchor").value<QObject *>()==anchor)) return;
+                auto b=makeButton(header); b->setProperty("unboundAnchor",QVariant::fromValue(static_cast<QObject *>(anchor)));
+                const bool rtl=row->direction()==QBoxLayout::RightToLeft;
+                row->insertWidget(anchor ? row->indexOf(anchor)+(rtl ? 1 : 0) : row->count(),b,0,Qt::AlignVCenter);
+                if(mirror) {
+                    m_menuButtons.append({anchor,b}); anchor->installEventFilter(this);
+                    b->setVisible(!anchor->isHidden());
+                } else b->show();
+                m_native=true;
+            };
+            for(auto header:root->findChildren<QWidget *>(control->header)) {
+                if(!header->parentWidget() || header->parentWidget()->objectName()!=control->headerOwner) continue;
+                auto row=qobject_cast<QBoxLayout *>(header->layout());
+                if(!row || (row->direction()!=QBoxLayout::LeftToRight && row->direction()!=QBoxLayout::RightToLeft)) continue;
+                bool nested=false;
+                for(auto selector:header->findChildren<QWidget *>()) {
+                    // Sizing uses the same native palette selector under a
+                    // different object name. Its title/background frames are
+                    // safe drag roots; selector buttons remain native controls.
+                    if(selector->objectName()!=QLatin1String("m_WidgetSelector")
+                        && !(control->objectName==QLatin1String("sizingTab")
+                            && selector->objectName()==QLatin1String("cbWidgets"))) continue;
+                    for(auto actions:selector->findChildren<QWidget *>("frameHeaderButtons")) {
+                        auto actionsRow=qobject_cast<QBoxLayout *>(actions->layout());
+                        if(!actionsRow) continue;
+                        const auto anchors=actions->findChildren<QAbstractButton *>(QString(),Qt::FindDirectChildrenOnly);
+                        for(auto anchor:anchors) if(QByteArray(anchor->metaObject()->className())=="BmdDavUI::UiMenuButton"
+                            && anchor->objectName().isEmpty() && actionsRow->indexOf(anchor)>=0) {
+                            add(actions,actionsRow,anchor,true); nested=true;
+                        }
+                    }
+                    // UiPaletteSelector is a native control, not itself a safe
+                    // drag target. Its plain child frames use our standard filter.
+                    for(auto surface:selector->findChildren<QWidget *>(QString(),Qt::FindDirectChildrenOnly)) {
+                        const QByteArray type=surface->metaObject()->className();
+                        if(type=="QWidget" || type=="QFrame") addHeaderDrag(surface);
+                    }
+                }
+                if(!nested) {
+                    auto anchor=control->anchor.isEmpty() ? nullptr : header->findChild<QAbstractButton *>(control->anchor,Qt::FindDirectChildrenOnly);
+                    if(!control->anchor.isEmpty() && (!anchor || row->indexOf(anchor)<0)) continue;
+                    add(header,row,anchor);
+                }
+                addHeaderDrag(header);
+            }
+            m_refreshing=false; return;
+        }
         if(paneDescriptor && paneDescriptor->header==PaneCatalogue::Header::ClipsGutter) {
             if(auto content=m_pane->findChild<QWidget *>("frameLightBoxBorder",Qt::FindDirectChildrenOnly)) {
                 m_gutterContent=content; m_gutterMargins=content->contentsMargins();
@@ -322,6 +390,14 @@ private:
             if(descriptor && !descriptor->additionalDragHeader.isEmpty())
                 if(auto header=m_pane->findChild<QWidget *>(descriptor->additionalDragHeader))
                     m_headerDrags.append(new PaneHeaderDrag(header,this));
+            if(descriptor && descriptor->header==PaneCatalogue::Header::ColorViewer) {
+                // The viewer's second header row is a stack of native tool
+                // pages. Observe each page with the same safe-surface rules;
+                // controls retain clicks and only unused background drags.
+                if(auto tools=m_pane->findChild<QWidget *>("m_StackedWidgetSubOptions"))
+                    for(auto page:tools->findChildren<QWidget *>(QString(),Qt::FindDirectChildrenOnly))
+                        m_headerDrags.append(new PaneHeaderDrag(page,this));
+            }
         } else if(!any && !requiresNativeHeader()) {
             m_native=false; m_buttons.clear(); m_strip=24;
             m_pane->setContentsMargins(m_margins.left(),m_margins.top()+m_strip,m_margins.right(),m_margins.bottom());

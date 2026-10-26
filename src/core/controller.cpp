@@ -36,6 +36,12 @@ QString settingsKey(const QString &name) {
 QWidget *panePage(QWidget *pane) {
     const auto entry=Catalogue::find(pane->objectName());
     if(!entry) return nullptr;
+    if(const auto control=Catalogue::colorControl(pane->objectName())) {
+        bool found=false;
+        for(auto p=pane->parentWidget();p;p=p->parentWidget())
+            if(p->objectName()==control->scope) { found=true; break; }
+        if(!found) return nullptr;
+    }
     const auto &rootName=Catalogue::page(entry->page).paneRoot;
     for(auto p=pane->parentWidget();p;p=p->parentWidget())
         if(p->objectName()==rootName) return p;
@@ -459,6 +465,13 @@ private:
             // A close on an inactive page must not select that page. Apply its
             // native toggle when the user returns and its toolbar is available.
             if (!root || !root->isVisible()) continue;
+            if(const auto control=Catalogue::colorControl(name)) {
+                if(auto bottom=root->findChild<QWidget *>("frameColorBottom"))
+                    for(auto button:bottom->findChildren<QAbstractButton *>(control->selector))
+                        if(button->isVisible() && button->isEnabled()) { button->click(); break; }
+                m_pendingDockToggles.remove(name);
+                continue;
+            }
             if (auto toggle = nativeToggle(pane, name)) {
                 if (!toggle->isChecked()) toggle->click();
                 settingsError(m_settings.saveToggle(settingsKey(name), toggle->isChecked()));
@@ -604,7 +617,7 @@ private:
                 m_restoreAttempted.remove(it.key());
                 delete it.value(); it = m_decorations.erase(it);
             }
-            else ++it;
+            else { it.value()->refreshNativeHeader(); ++it; }
         }
         for (auto pane : m_candidates) {
             if (!pane) continue;

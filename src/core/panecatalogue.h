@@ -11,7 +11,7 @@ namespace PaneCatalogue {
 enum class Page { Edit, Color, Fairlight, Media, Cut, Fusion, Deliver };
 enum class Kind { Sidebar, Viewer };
 enum class Header { None, MediaPool, SoundLibrary, Keyframes, Effects, Index,
-    Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner, ClipsGutter };
+    Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner, ClipsGutter, ColorViewer, ColorControl };
 struct PageDescriptor {
     Page id;
     QString objectName, label, legacyName, paneRoot, settingsPrefix;
@@ -35,6 +35,41 @@ inline const PageDescriptor &page(Page id) {
     for(const auto &entry:pages()) if(entry.id==id) return entry;
     Q_UNREACHABLE();
 }
+// Lower Color tools retain their native stack slots. Header identity includes
+// its immediate owner so nested controls with generic names cannot match.
+struct ColorControlDescriptor {
+    QString objectName,label,scope,header,headerOwner,anchor,selector;
+    bool wholeLayout=false;
+};
+inline const QVector<ColorControlDescriptor> &colorControls() {
+    static const QVector<ColorControlDescriptor> entries={
+        {"cameraRawTab","Camera Raw","UiPrimaryWidgetContainer","cameraRawHeader","cameraRawTab","m_RefreshPushBtn","btnScene",true},
+        {"colorMatchTab","Color Match","UiPrimaryWidgetContainer","frameHeader","frameBackground","btnMenu","btnColorMatch",false},
+        {"colorWheelsTab","Color Wheels","UiPrimaryWidgetContainer","colorWheelTopFrame","colorWheelsMainContainer","","btnColorWheels",false},
+        {"colorHDRTab","HDR","UiPrimaryWidgetContainer","colorWheelTopFrame","colorHDRTab","btnOptionsMenu","btnHdr",true},
+        {"maskingTab","RGB Mixer","UiPrimaryWidgetContainer","frameHeader","frame","","btnMasking",false},
+        {"motionEffectsTab","Motion Effects","UiPrimaryWidgetContainer","frameMotionEffectsHeader","frame","","btnMotionEffects",false},
+        {"curvesTab","Curves","UiSecWidgetContainer","frameTop","curvesTabWidget","","btnCurves",false},
+        {"colorSlice","ColorSlice","UiSecWidgetContainer","frameTopBar","colorSliceWidget","","btnColorSlice",false},
+        {"colorMapperTab","Color Warper","UiSecWidgetContainer","frameTop","colorMapperTabWidget","","btnColorMapper",false},
+        {"qualTab","Qualifier","UiSecWidgetContainer","frameTop","qualTabWidget","","btnQualifier",false},
+        {"windowTab","Window","UiSecWidgetContainer","secWindowTopFrame","windowWidget","btnResetMenu","btnWindow",false},
+        {"trackerTab","Tracker","UiSecWidgetContainer","frameTrackingHeader","trackerWidget","btnContextMenu","btnTracker",false},
+        {"personMaskTab","Magic Mask","UiSecWidgetContainer","secWindowTopFrame","personMaskTabWidget","btnResetMenu","btnPersonMask",false},
+        {"blurTab","Blur","UiSecWidgetContainer","headerFrame","frame","","btnBlur",false},
+        {"keyTab","Key","UiSecWidgetContainer","m_KeyHeaderFrame","keyWidget","","btnKey",false},
+        {"sizingTab","Sizing","UiSecWidgetContainer","sizingTopFrame","sizingWidget","btnResetMenu","btnSizing",false},
+        {"tab3D","3D","UiSecWidgetContainer","m_FrameTitle3D","stereoWidget","m_ButtonTiltleBar","btn3D",false},
+        {"keyframesWidgetContainer","Keyframes","UiMarkTimelineContainer","frameHeader","keyframesWidget","","btnKeyframes",false},
+        {"scopesWidget","Scopes","UiMarkTimelineContainer","headerFrame","UiWaveformViewerItem","btnWaveformViewerItemOptions","btnScopes",false},
+        {"infoWidgetContainer","Info","UiMarkTimelineContainer","frameTitle","infoWidget","","btnInfo",false},
+    };
+    return entries;
+}
+inline const ColorControlDescriptor *colorControl(const QString &name) {
+    for(const auto &entry:colorControls()) if(entry.objectName==name) return &entry;
+    return nullptr;
+}
 struct PaneDescriptor {
     QString objectName, label;
     Page page;
@@ -51,12 +86,12 @@ struct PaneDescriptor {
         for(const auto &suffix:owner.toggleSuffixes) names.append(owner.togglePrefix+toggleName+suffix);
         return names;
     }
-    bool preserveNativeLayout() const { return page==Page::Color; }
-    bool requireNativeHeader() const { return page==Page::Fairlight || header==Header::ClipsGutter; }
+    bool preserveNativeLayout() const { const auto control=colorControl(objectName); return page==Page::Color && !(control && control->wholeLayout); }
+    bool requireNativeHeader() const { return page==Page::Fairlight || (header==Header::ClipsGutter || header==Header::ColorViewer || header==Header::ColorControl); }
     bool serializeInitialization() const { return page==Page::Color || page==Page::Fairlight; }
 };
 inline const QVector<PaneDescriptor> &panes() {
-    static const QVector<PaneDescriptor> entries={
+    static const QVector<PaneDescriptor> entries=[] { QVector<PaneDescriptor> result={
         {"frameEditPageMediaPool","Media Pool",Page::Edit,"MediaPool","mediaPool",Header::MediaPool,false},
         {"frameEditPageSoundLibrary","Sound Library",Page::Edit,"SoundLibrary","soundLibrary",Header::SoundLibrary,false},
         {"frameEditPageKeyframeEditor","Keyframe Editor",Page::Edit,"KeyframeEditor","keyframeEditor",Header::Keyframes,false},
@@ -71,6 +106,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"m_pWidgetMediaPool","Media Pool",Page::Color,"btnColorToggleMediaPool","mediaPool",Header::MediaPool,true},
         {"m_pFrameOFXPlugin","Effects",Page::Color,"btnColorToggleOpenFX","",Header::Effects,true},
         {"timelineFrame","Timeline",Page::Color,"btnColorToggleTimeline","",Header::TimelineCorner,true},
+        {"m_pFramePlayer","Viewer",Page::Color,"","",Header::ColorViewer,false,Kind::Sidebar,"framePlayerStatusPrimary"},
         {"m_pLightBox","Clips",Page::Color,"btnToggleTimelineClips","",Header::ClipsGutter,false},
         {"frameAudioPanelMediaPoolContainer","Media Pool",Page::Fairlight,"MediaPool","",Header::MediaPool,true},
         {"frameAudioPanelEffectsLibraryContainer","Effects",Page::Fairlight,"EffectsLibrary","",Header::Effects,true},
@@ -84,6 +120,8 @@ inline const QVector<PaneDescriptor> &panes() {
         {"widgetEditTimelinePlayer","Program Viewer",Page::Edit,"","",Header::None,false,Kind::Viewer},
         {"stackedEditSourceOfflinePlayers","Source Viewer",Page::Edit,"","",Header::None,false,Kind::Viewer}
     };
+    for(const auto &control:colorControls()) result.append({control.objectName,control.label,Page::Color,"","",Header::ColorControl,false});
+    return result; }();
     return entries;
 }
 inline const PaneDescriptor *find(const QString &objectName) {
@@ -121,6 +159,8 @@ inline bool matchesHeader(Header header,const QString &name,const QString &paren
     case Header::Nodes: return name=="btnOptions" && parent=="rightFrame" && grandparent=="m_NGHeaderFrame";
     case Header::Groups: return name=="m_BtnMenu" && parent=="frameHeaderTitle";
     case Header::Adr: return name=="optionsBtn" && parent=="headerFrame";
+    case Header::ColorViewer: return name=="btnOptions" && parent=="framePlayerTitleRight" && grandparent=="framePlayerStatusPrimary";
+    case Header::ColorControl: return false;
     case Header::None: return false;
     case Header::TimelineCorner: return false;
     case Header::ClipsGutter: return false;

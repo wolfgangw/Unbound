@@ -44,7 +44,7 @@ These distribution limitations do not imply missing features.
 | Page | Supported content |
 | --- | --- |
 | Edit | Media Pool, Effects, Sound Library, Keyframe Editor, Edit Index, Inspector, Metadata, Mixer, Program and Source viewers |
-| Color | Nodes, Gallery, LUTs, Media Pool, Effects, Timeline, Clips |
+| Color | Nodes, Gallery, LUTs, Media Pool, Effects, Timeline, Clips, Viewer and lower Color controls (listed below) |
 | Fairlight | Media Pool, Effects, Index, Groups, Sound Library, ADR, Mixer, Metadata, Inspector; Meters excluded |
 
 Use **layout** terminology in UI, code and tests. Preserve compatibility wire keys
@@ -298,6 +298,49 @@ ScreenCaptureKit discovers only current-process windows without TCC consent
 remove after restored layout/repaint delivery, or immediately if cancelled before
 preparation completes. Failure leaves mode/widths unchanged and restores updates.
 No persistent capture stream, screen-access request, polling or private offsets.
+
+### Color viewer and lower controls
+
+The Color viewer transfers `UiMainViewerForm` from `m_pFramePlayer` using the
+shared native-layout-preserving session. Its outer `m_pFramePlayerContainer`
+remains available to native layout and the Clips adapter. Header/status and
+native tool-page backgrounds use `PaneHeaderDrag`. Windows floating playback
+and interaction are user-validated; space reclamation remains deferred.
+
+Lower Color controls include Camera Raw, Color Match, Color Wheels, HDR, RGB
+Mixer, Motion Effects, Curves, ColorSlice, Color Warper, Qualifier, Window,
+Tracker, Magic Mask, Blur, Key, Sizing, 3D, Keyframes, Scopes and Info. General
+floating-control use is user-validated on Windows; 3D requires separate validation
+with stereoscopic material. Controls are catalogued with their native stack-family
+scope, header owner and selector. Scope disambiguates repeated names such as
+`sizingTab`. Retain stack entries and indices; transfer their contents with
+`SidebarFloatSession`. Camera Raw and HDR transfer the whole multi-entry layout;
+other tools preserve the native layout and move its single content widget, except
+Key and Sizing: retain `keyWidget` (`UiSecKeyWidgetImp`) and `sizingWidget`
+as the first widgets in their respective `keyTab`/`sizingTab` native layouts;
+transfer each tool object's own layout contents instead. Resolve's
+native tool lookup requires that container in its original slot and dereferences
+these lookups without a null check. Keep its identity, stack index and native
+connections intact throughout floating/docking; never replace it with a placeholder.
+The placeholder belongs inside the retained tool container.
+Insert buttons in existing header rows, before recognized options where present;
+use the existing `PaneHeaderDrag` and floating hosts. Tool selectors are not
+visibility toggles: never switch them off for reclamation. Explicit docking
+selects the native tool, deferred until page return. While a tool floats, disable
+recognized native Expand buttons and restore their original state on docking.
+`ColorExpandGuard` observes only that floating subtree: enforce disabling on native
+enabled/show changes and coalesce child-addition discovery for late header variants.
+Remove the guard before returning content, preserving explicit disabled state.
+Native expansion while docked is unchanged. Header decoration extends to newly
+created variants on bounded discovery events, including Scopes. Nested palette
+selectors place a button before each native options variant and mirror its explicit
+visibility; their plain child frames reuse `PaneHeaderDrag`, excluding controls.
+Sizing's `cbWidgets` palette selector uses that same child-frame handling.
+Floating Color Wheels ignores the wheel stack's horizontal size hint, whose native
+child minimums follow the last expanded allocation. A stable minimum is derived
+from intrinsic group hints and layout spacing; docking restores the original stack
+policy and minimum. Remaining validation is tracked in
+`doc/issues/color-controls.md`. No lower-region reclamation yet.
 
 ### Other pane constraints
 

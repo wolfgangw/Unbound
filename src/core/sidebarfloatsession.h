@@ -20,6 +20,7 @@
 #include "panecatalogue.h"
 #include "panedockingguard.h"
 #include "colorclipsadapter.h"
+#include "colorexpandguard.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -141,7 +142,18 @@ public:
         if (active()) return QStringLiteral("This pane is already floating.");
         if (!slot || slot->isWindow() || !slot->parentWidget() || !(pageRoot ? pageRoot : slot->parentWidget())->isVisible())
             return QStringLiteral("Open this pane's Resolve page before undocking it.");
-        auto layout = slot->layout();
+        auto layoutSlot=slot;
+        if(slot->objectName()==QLatin1String("keyTab") || slot->objectName()==QLatin1String("sizingTab")) {
+            // Resolve looks up Key and Sizing through the native stack even
+            // when another tool is selected. Keep that container discoverable;
+            // transfer its layout contents, not the native tool object itself.
+            layoutSlot=slot->findChild<QWidget *>(slot->objectName()==QLatin1String("keyTab")
+                ? QStringLiteral("keyWidget") : QStringLiteral("sizingWidget"),Qt::FindDirectChildrenOnly);
+            if(!layoutSlot)
+                return QStringLiteral("The native tool container is unavailable; no changes made.");
+            preserveNativeLayout=false;
+        }
+        auto layout = layoutSlot->layout();
         if (!layout || (!qobject_cast<QBoxLayout *>(layout) && !qobject_cast<QGridLayout *>(layout)) || layout->count() == 0)
             return QStringLiteral("Expected a nonempty box or grid layout; no changes made.");
         auto nativeGrid = qobject_cast<QGridLayout *>(layout);
@@ -167,6 +179,7 @@ public:
         }
         ++m_generation;
         m_slot = slot;
+        m_layoutSlot = layoutSlot;
         m_root = pageRoot ? pageRoot : slot->parentWidget();
         m_layout = layout;
         auto host = new PaneFloatingWindow;
@@ -207,13 +220,13 @@ public:
         // QWidget::setLayout takes the existing layout off its previous widget
         // and reparents its child widgets into the new host.
         host->setLayout(layout);
-        if (slot->layout() || host->layout() != layout) {
-            if (!slot->layout() && host->layout() == layout) slot->setLayout(layout);
+        if (layoutSlot->layout() || host->layout() != layout) {
+            if (!layoutSlot->layout() && host->layout() == layout) layoutSlot->setLayout(layout);
             delete host;
             clear();
             return QStringLiteral("Could not transfer the pane layout.");
         }
-        auto placeholderLayout = new QVBoxLayout(slot);
+        auto placeholderLayout = new QVBoxLayout(layoutSlot);
         m_placeholderLayout = placeholderLayout;
         auto placeholder = new QLabel(QStringLiteral("%1 is floating.").arg(label), slot);
         m_placeholder = placeholder;
@@ -247,6 +260,31 @@ public:
                 host->layout()->activate();
             }
         }
+        if(slot->objectName()==QLatin1String("colorWheelsTab")) {
+            if(auto wheels=host->findChild<QWidget *>("colorWheelsStackedWidget")) {
+                // Resolve grows each wheel group's explicit minimum to its last
+                // allocated width. Use the intrinsic group hints for a stable
+                // floating minimum, rather than feeding that allocation back.
+                int minimum=0;
+                for(auto top:wheels->findChildren<QWidget *>("primaryTopHoldFrame")) {
+                    if(!top->layout()) continue;
+                    int width=top->layout()->minimumSize().width();
+                    for(auto group:top->findChildren<QWidget *>(QString(),Qt::FindDirectChildrenOnly))
+                        width-=qMax(0,group->minimumWidth()-qMax(0,group->minimumSizeHint().width()));
+                    minimum=qMax(minimum,width);
+                }
+                if(minimum>0) {
+                    m_wheels=wheels; m_wheelsPolicy=wheels->sizePolicy(); m_wheelsMinimum=wheels->minimumWidth();
+                    auto policy=m_wheelsPolicy; policy.setHorizontalPolicy(QSizePolicy::Ignored);
+                    wheels->setSizePolicy(policy); wheels->setMinimumWidth(minimum);
+                    for(auto parent=wheels;parent;parent=parent->parentWidget()) {
+                        if(parent->layout()) parent->layout()->invalidate();
+                        parent->updateGeometry(); if(parent==host) break;
+                    }
+                    host->layout()->activate();
+                }
+            }
+        }
         const bool fairlightAudition = slot->objectName() == QLatin1String("frameAudioPanelMediaPoolContainer")
             && m_root->objectName() == QLatin1String("WStackPage_Audio");
         const bool soundLibraryAudition =
@@ -265,6 +303,8 @@ public:
                     m_auditionHeaderDrag = new PaneHeaderDrag(header, this);
             }
         }
+        if(PaneCatalogue::colorControl(slot->objectName()))
+            m_expandGuard=new ColorExpandGuard(host,this);
         host->installEventFilter(this);
         m_root->installEventFilter(this);
         // If Resolve deletes the original slot, dispose only of our displaced
@@ -318,7 +358,7 @@ public:
         const bool layoutIntact = m_nativeLayout
             ? (m_content && m_hostLayout && m_slot && m_slot->layout() == m_nativeLayout
                 && m_host->layout() == m_hostLayout && m_content->parentWidget() == m_host)
-            : (m_slot && m_layout && m_placeholderLayout && m_slot->layout() == m_placeholderLayout
+            : (m_slot && m_layoutSlot && m_layout && m_placeholderLayout && m_layoutSlot->layout() == m_placeholderLayout
                 && m_host->layout() == m_layout);
         if (!layoutIntact || !m_placeholder)
             return QStringLiteral("Resolve changed this pane's layout. Restart Resolve to reset the experiment.");
@@ -326,7 +366,9 @@ public:
         rememberGeometry();
         m_restoring = true;
         stopAuditionBridge();
+        restoreNativeExpand();
         restoreInspectorTitlePolicy();
+        restoreWheelsPolicy();
         if (m_root) m_root->removeEventFilter(this);
         disconnect(m_destroyConnection);
         m_host->removeEventFilter(this);
@@ -339,7 +381,7 @@ public:
         } else {
             delete m_placeholderLayout.data();
             delete m_placeholder.data();
-            m_slot->setLayout(m_layout);
+            m_layoutSlot->setLayout(m_layout);
         }
         if(m_clipsAdapter) m_clipsAdapter->stop();
         m_layout->activate();
@@ -352,6 +394,7 @@ public:
             if (sameChildren) m_splitter->setSizes(m_splitterSizes);
         }
         // Other sidebar slots retain their current toolbar visibility.
+        restoreNativeExpand();
         auto host = m_host.data();
         clear();
         host->hide();
@@ -430,6 +473,13 @@ private:
         m_auditionBridge->deleteLater();
         m_auditionBridge = nullptr;
     }
+    void restoreWheelsPolicy() {
+        if(m_wheels) { m_wheels->setSizePolicy(m_wheelsPolicy); m_wheels->setMinimumWidth(m_wheelsMinimum); }
+        m_wheels=nullptr;
+    }
+    QPointer<QWidget> m_wheels;
+    QSizePolicy m_wheelsPolicy;
+    int m_wheelsMinimum=0;
     void restoreInspectorTitlePolicy()
     {
         if (m_inspectorTitle) m_inspectorTitle->setSizePolicy(m_inspectorTitlePolicy);
@@ -467,10 +517,14 @@ private:
         if (m_content->isHidden()) m_content->show();
         m_recoveringGraph = false;
     }
+    void restoreNativeExpand() { delete m_expandGuard; m_expandGuard=nullptr; }
+    ColorExpandGuard *m_expandGuard=nullptr;
     void clear()
     {
+        restoreNativeExpand();
         stopAuditionBridge();
         restoreInspectorTitlePolicy();
+        restoreWheelsPolicy();
         delete m_nodesBounds; m_nodesBounds=nullptr;
         m_geometryTimer->stop();
         m_returnFade->stop();
@@ -482,10 +536,10 @@ private:
         m_nativeLayout = nullptr; m_hostLayout = nullptr; m_content = nullptr;
         m_hiddenByPage = false;
         m_splitter = nullptr; m_splitterSizes.clear(); m_splitterWidgets.clear();
-        m_slot = nullptr; m_root = nullptr; m_host = nullptr;
+        m_slot = nullptr; m_layoutSlot=nullptr; m_root = nullptr; m_host = nullptr;
         m_layout = nullptr; m_placeholderLayout = nullptr; m_placeholder = nullptr;
     }
-    QPointer<QWidget> m_slot, m_root, m_host, m_placeholder;
+    QPointer<QWidget> m_slot, m_layoutSlot, m_root, m_host, m_placeholder;
     QPointer<QLabel> m_inspectorTitle;
     QSizePolicy m_inspectorTitlePolicy;
     NodesCanvasBounds *m_nodesBounds=nullptr;
