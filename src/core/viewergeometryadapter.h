@@ -8,14 +8,16 @@
 #include <functional>
 
 // Application filters run before QLayout::widgetEvent; widget filters run after
-// it. Inspect only the resize events of this adapter's retained widgets.
+// it. Inspect retained geometry and the main backing-store presentation boundary.
 class ViewerResizeGate final : public QObject {
 public:
     using QObject::QObject;
     std::function<bool(QObject *,QEvent *)> resize;
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
-        return event->type()==QEvent::Resize && resize && resize(object,event);
+        return (event->type()==QEvent::Resize || event->type()==QEvent::Move ||
+            event->type()==QEvent::UpdateRequest)
+            && resize && resize(object,event);
     }
 };
 
@@ -29,7 +31,7 @@ class ViewerGeometryAdapter final : public QObject
         QRect geometry;
         bool hidden=false;
     };
-    QPointer<QWidget> m_root,m_page;
+    QPointer<QWidget> m_root,m_page,m_main;
     QList<QPointer<QWidget>> m_resizeAncestors;
     Placement m_viewers,m_timeline;
     QList<Placement> m_splitters;
@@ -39,6 +41,25 @@ class ViewerGeometryAdapter final : public QObject
     QSize m_deliveredTimelineSize;
     ViewerResizeGate *m_resizeGate=nullptr;
     bool m_forwardingNativeResize=false;
+    bool m_updatesHeld=false;
+    bool m_presentationHeld=false,m_presentationPending=false;
+    void holdUpdates() {
+        m_presentationHeld=true;
+        if(!m_updatesHeld && m_root && m_root->updatesEnabled()) {
+            m_updatesHeld=true; m_root->setUpdatesEnabled(false);
+        }
+    }
+    void releaseUpdates() {
+        if(m_updatesHeld) {
+            m_updatesHeld=false;
+            if(m_root) m_root->setUpdatesEnabled(true);
+        }
+        m_presentationHeld=false;
+        if(m_presentationPending) {
+            m_presentationPending=false;
+            if(m_main) QCoreApplication::postEvent(m_main,new QEvent(QEvent::UpdateRequest));
+        }
+    }
     static void capture(Placement &p) {
         if (p.widget) { p.geometry=p.widget->geometry(); p.hidden=p.widget->isHidden(); }
     }
@@ -80,7 +101,7 @@ class ViewerGeometryAdapter final : public QObject
         if (!m_enabled || m_paused || m_pending) return;
         m_pending=true;
         QMetaObject::invokeMethod(this,[this] {
-            m_pending=false; apply();
+            m_pending=false; apply(); releaseUpdates();
         },Qt::QueuedConnection);
     }
     void restore() {
@@ -99,6 +120,27 @@ class ViewerGeometryAdapter final : public QObject
         m_applying=false;
     }
     bool resizeBeforeLayout(QObject *object,QEvent *event) {
+        if(event->type()==QEvent::UpdateRequest) {
+            // Disabling child paints does not prevent the top-level backing
+            // store from presenting cached pixels moved by native layout.
+            // Defer that flush too, without disabling floating descendants.
+            if(object==m_main && m_presentationHeld) {
+                m_presentationPending=true; return true;
+            }
+            return false;
+        }
+        if(m_enabled && !m_paused && !m_applying && !m_forwardingNativeResize) {
+            bool region=object==m_viewers.widget || object==m_timeline.widget;
+            for(const auto &p:m_sideRegions) if(object==p.widget) { region=true; break; }
+            for(const auto &p:m_splitters) if(object==p.widget) { region=true; break; }
+            if(region) {
+                // Sidebar toggles and docking can assign native geometry without
+                // resizing an ancestor. Keep that allocation from painting until
+                // the coalesced reclamation pass has completed.
+                holdUpdates(); schedule();
+            }
+        }
+        if(event->type()!=QEvent::Resize) return false;
         if(object!=m_timeline.widget) {
             bool ancestor=false;
             for(auto w:m_resizeAncestors) if(object==w) { ancestor=true; break; }
@@ -110,13 +152,13 @@ class ViewerGeometryAdapter final : public QObject
             // Higher ancestors can assign regions again after a nested root
             // resize returns. Keep the entire outer pass visually atomic,
             // including synchronous repaint requests from native handlers.
-            const bool updates=m_root && m_root->updatesEnabled();
-            if(updates) m_root->setUpdatesEnabled(false);
+            const bool alreadyHeld=m_presentationHeld;
+            holdUpdates();
             m_forwardingNativeResize=true;
             QCoreApplication::sendEvent(object,event);
             m_forwardingNativeResize=false;
             apply();
-            if(updates && m_root) m_root->setUpdatesEnabled(true);
+            if(!alreadyHeld) releaseUpdates();
             return true;
         }
         if(object==m_timeline.widget && event->type()==QEvent::Resize && !m_deliveringTimeline) {
@@ -151,7 +193,7 @@ protected:
             setEnabled(false); return false;
         }
         if (object==m_page && type==QEvent::Hide) {
-            m_paused=true; restore(); return false;
+            m_paused=true; restore(); releaseUpdates(); return false;
         }
         if (object==m_page && type==QEvent::Show) m_paused=false;
         if (type==QEvent::Move || type==QEvent::Resize || type==QEvent::Show || type==QEvent::Hide) {
@@ -174,6 +216,7 @@ protected:
 public:
     ViewerGeometryAdapter(QWidget *viewers,QWidget *page,QObject *owner)
         : QObject(owner),m_root(viewers?viewers->parentWidget():nullptr),m_page(page) {
+        if(m_root) m_main=m_root->window();
         m_viewers.widget=viewers;
         // Retain the complete native resize boundary once, rather than looking
         // up parents/discovering widgets on every event.
@@ -202,7 +245,7 @@ public:
     ~ViewerGeometryAdapter() override { setEnabled(false); }
     bool setEnabled(bool enabled) {
         if (enabled==m_enabled) return m_enabled;
-        if (!enabled) { m_enabled=false; restore(); qApp->removeEventFilter(m_resizeGate); return false; }
+        if (!enabled) { m_enabled=false; restore(); releaseUpdates(); qApp->removeEventFilter(m_resizeGate); return false; }
         if (!valid()) return false;
         capture(m_viewers); capture(m_timeline);
         m_deliveredTimelineSize=m_timeline.widget->size();

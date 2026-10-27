@@ -11,6 +11,13 @@ This builds FairlightSoundLibraryFocus.dll, so it cannot accidentally reuse an
 Edit diagnostic already loaded in the same process. The launcher name and
 commands remain the same. Use Sound Library on Fairlight for the comparisons.
 
+For the floating Edit Source viewer, use a separate build directory and
+  -DUNBOUND_EDIT_SOURCE_VIEWER=ON
+This builds SourceViewerFocus.dll and observes widgetEditSourcePlayer inside
+unboundFloating_stackedEditSourceOfflinePlayers. Compare genuine Source/window
+activation, J/K/L playback and timeline handoff. The same public Qt bridge is
+an experimental intervention; active-player signals alone do not prove playback.
+
 Run build/windows/sound-library-focus/Release/sound-library-focus.exe with:
   --passive  Observe docked/floating activation, focus, shortcuts and player signals.
   --bridge   Replace that capture with the experimental activation bridge.

@@ -14,6 +14,7 @@
 #include "viewergeometryadapter.h"
 #include "panesettings.h"
 #include "panedockingguard.h"
+#include "auditionactivationbridge.h"
 
 // Whole native viewer widgets retain their layout slots while floating.
 // Share the controller's settings instance so saves cannot overwrite each other.
@@ -23,6 +24,7 @@ class EditViewers : public QObject
         QPointer<QWidget> content, parent, placeholder;
         QPointer<QBoxLayout> originalLayout;
         QPointer<Unbound::PaneFloatingWindow> host;
+        QPointer<Unbound::AuditionActivationBridge> activationBridge;
         QList<QPointer<Unbound::UndockButton>> buttons;
         int stretch=0;
         Qt::Alignment alignment;
@@ -167,6 +169,8 @@ private:
         host->resize(content->size().expandedTo(QSize(640,400)).boundedTo(available.size()*0.7));
         auto hl=new QVBoxLayout(host); hl->setContentsMargins(0,0,0,0); hl->addWidget(content);
         pane.host=host; host->installEventFilter(this);
+        if(&pane==&m_source)
+            pane.activationBridge=new Unbound::AuditionActivationBridge(m_main,m_page,content,this,host->objectName());
         Unbound::applyPaneDarkCaption(host,parent->window());
         const auto saved=m_settings.geometry(content->objectName());
         if(saved.isEmpty() || !host->restoreGeometry(saved))
@@ -186,6 +190,11 @@ private:
     {
         pane.dockingGuard->cancel();
         if(!pane.host) return;
+        if(pane.activationBridge) {
+            pane.activationBridge->stop();
+            pane.activationBridge->deleteLater();
+            pane.activationBridge=nullptr;
+        }
         QScopedValueRollback<bool> ownVisibility(m_showingProgram,m_showingProgram || &pane==&m_program);
         remember(pane);
         restoreArea();

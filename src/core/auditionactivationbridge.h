@@ -9,7 +9,7 @@
 namespace Unbound {
 // Resolve selects a separate-window input scope before delivering WindowActivate
 // to a floating pane. Restore the page scope through its normal application notify
-// path, then let genuine Qt focus select the audition player. No private state.
+// path, then let genuine Qt focus select the player. No private state.
 class AuditionActivationBridge : public QObject
 {
 public:

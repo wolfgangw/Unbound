@@ -213,12 +213,25 @@ intent. Source restoration waits for native availability; do not force Single/Du
 Viewer Mode or add a separate control window. When no visible viewer stays docked,
 `viewergeometryadapter.h` expands the timeline using retained native baselines.
 
+Floating Source uses the activation bridge described under Audition players;
+native focus continues to select Source versus Program/timeline transport.
+Bind before first host show and stop before docking. Program needs no bridge.
+
 During resizing, an application filter scoped to reclamation intercepts retained
 timeline Resize events before QLayout processes child viewports. Coalesce interim
 half-height allocations, preserving the last delivered oldSize. Finish the native
 resize pass once through the retained ancestor chain up to main, then synchronously
 apply expanded regions. Defer main-region painting for this transaction; floating
-viewers keep updates. Docking restores native geometry. Do not call private layout
+viewers keep updates. Pane docking and native toggles can also assign regions
+without resizing an ancestor. While reclamation is active, the first retained
+region Move/Resize holds root painting until the queued correction finishes.
+Also defer main-window `UpdateRequest` delivery during the transaction: disabling
+child paints alone still permits backing-store presentation of cached pixels at
+interim geometry. Repost one deferred request after restoring the final geometry;
+coalesce the geometry burst and release on completion, page hide or disabling
+reclamation. Preserve an already-disabled update state. This is scoped to Edit
+viewer reclamation, not particular pane buttons or global input. Docking restores
+native geometry. Do not call private layout
 anchors or force the native video/audio divider ratio; no public setter is known.
 
 In Single Viewer Mode, Media Pool hover hides Program and shows Source. Keep a
@@ -230,9 +243,9 @@ interception or changes to native Source preview/viewer mode.
 
 ### Audition players
 
-`auditionactivationbridge.h` serves Edit/Fairlight Sound Library and Fairlight Media
-Pool. Bind the recognized host/page/player before first show. On genuine host
-activation, deliver one main-window activation notification to restore Resolve's
+`auditionactivationbridge.h` serves Edit/Fairlight Sound Library, Fairlight Media
+Pool and Edit Source viewer. Bind the recognized host/page/player before first show.
+On genuine host activation, deliver one main-window activation notification to restore Resolve's
 command context; consume that exact event before QWidget propagation and let
 actual focus select the player. Do not forward transport keys, force focus or alter
 waveforms. Stop before docking/reparenting; tolerate nested notification/destruction.

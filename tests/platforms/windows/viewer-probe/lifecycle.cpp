@@ -6,6 +6,16 @@
 #include <cstdio>
 #include <cstdlib>
 static void require(bool ok,const char *message) { if(!ok) { std::fprintf(stderr,"FAIL: %s\n",message); std::exit(1); } }
+class ViewerApplication : public QApplication {
+public:
+    using QApplication::QApplication;
+    QWidget *main=nullptr;
+    int mainActivations=0;
+    bool notify(QObject *object,QEvent *event) override {
+        if(object==main && event->type()==QEvent::WindowActivate) ++mainActivations;
+        return QApplication::notify(object,event);
+    }
+};
 class ViewportFixture : public QWidget {
 public:
     using QWidget::QWidget;
@@ -25,6 +35,15 @@ protected:
     bool eventFilter(QObject *,QEvent *event) override {
         if(event->type()==QEvent::Resize) { ++passes; layoutRegions(); }
         return false;
+    }
+};
+class MainWindowFixture : public QWidget {
+public:
+    int presentations=0;
+protected:
+    bool event(QEvent *event) override {
+        if(event->type()==QEvent::UpdateRequest) ++presentations;
+        return QWidget::event(event);
     }
 };
 // Model a native timeline whose divider is clamped when its viewport shrinks.
@@ -51,10 +70,11 @@ protected:
 };
 int main(int argc,char **argv)
 {
-    QApplication app(argc,argv);
+    ViewerApplication app(argc,argv);
     QTemporaryDir settingsDirectory;
     Unbound::PaneSettings settings(settingsDirectory.filePath("viewers.json"));
-    QWidget main;
+    MainWindowFixture main;
+    app.main=&main;
     auto mainLayout=new QVBoxLayout(&main);
     auto page=new QWidget(&main); page->setObjectName("WStackPage_Conform"); mainLayout->addWidget(page);
     auto pl=new QVBoxLayout(page);
@@ -112,6 +132,20 @@ int main(int argc,char **argv)
     for(int pass=0;pass<2;++pass) {
         experiment->toggleProgram(); experiment->toggleSource(); app.processEvents();
         require(program->window()!=&main && source->window()!=&main,"Whole viewers were not floated");
+        QApplication::setActiveWindow(&main); app.processEvents();
+        const int beforeSource=app.mainActivations;
+        QApplication::setActiveWindow(source->window()); app.processEvents();
+        require(app.mainActivations==beforeSource+1,
+            "Floating Source activation did not restore native page command context exactly once");
+        require(QApplication::activeWindow()==source->window(),
+            "Source activation bridge changed the active window");
+        const int beforeProgram=app.mainActivations;
+        QApplication::setActiveWindow(program->window()); app.processEvents();
+        require(app.mainActivations==beforeProgram,
+            "Program activation unexpectedly synthesized main activation");
+        QApplication::setActiveWindow(source->window()); app.processEvents();
+        require(app.mainActivations==beforeProgram+1,
+            "Returning to floating Source did not restore native page command context");
         if(pass==0) {
             context(program); context(source);
             require(viewerMenus==4 && program->window()!=&main && source->window()!=&main,
@@ -140,6 +174,26 @@ int main(int argc,char **argv)
         require(program->updatesEnabled() && source->updatesEnabled(),
             "Main-window repaint transaction disabled floating viewer playback updates");
         app.processEvents();
+        // Native sidebar toggles/docking can assign regions directly, without
+        // resizing any retained ancestor. Their synchronous paints must not see
+        // the temporary bottom-half timeline allocation.
+        nativeRegions();
+        require(!root->updatesEnabled(),"Pane layout change could paint temporary timeline geometry");
+        const int presentations=main.presentations;
+        QEvent presentation(QEvent::UpdateRequest);
+        QApplication::sendEvent(&main,&presentation);
+        require(main.presentations==presentations,
+            "Main backing store presented cached pixels at temporary timeline geometry");
+        require(program->updatesEnabled() && source->updatesEnabled(),
+            "Pane layout transaction disabled floating viewer updates");
+        app.processEvents(); app.processEvents();
+        require(root->updatesEnabled() && timeline->geometry()==expandedRegion(),
+            "Pane layout transaction failed to settle or restore painting");
+        require(main.presentations>presentations,"Deferred main-window presentation was lost");
+        root->setUpdatesEnabled(false);
+        nativeRegions(); app.processEvents(); app.processEvents();
+        require(!root->updatesEnabled(),"Reclamation enabled painting that was already disabled");
+        root->setUpdatesEnabled(true);
         nativeRegions(); app.processEvents();
         require(timeline->geometry()==expandedRegion() && players->height()==0,"Native resize burst defeated reclamation");
         require(timeline->divider==savedDivider,"Transient native shrink clamped the timeline divider");
@@ -161,7 +215,10 @@ int main(int argc,char **argv)
             "Repeated native layout bursts moved the divider or broke resize continuity");
         for(auto size:timeline->deliveredSizes)
             require(size.height()>root->height()/2,"Timeline content received the temporary native half-height resize");
+        nativeRegions();
+        require(!root->updatesEnabled(),"Missing pending layout transaction before page hide");
         page->hide(); app.processEvents();
+        require(root->updatesEnabled(),"Page hide left a pending layout transaction frozen");
         require(!program->isVisible() && !source->isVisible(),"Page hide did not hide hosts");
         require(players->height()>0 && timeline->y()>0,"Inactive page retained adapted geometry");
         page->show(); app.processEvents();
@@ -173,7 +230,10 @@ int main(int argc,char **argv)
         main.show(); app.processEvents(); app.processEvents();
         require(timeline->geometry()==expandedRegion() && players->height()==0,
             "Main-window return lost dual-viewer reclamation");
+        nativeRegions();
+        require(!root->updatesEnabled(),"Missing pending layout transaction before viewer docking");
         experiment->dockBoth(); app.processEvents();
+        require(root->updatesEnabled(),"Viewer docking left a pending layout transaction frozen");
         require(players->height()==root->height()/2-1 && timeline->y()==root->height()/2,"Docking did not restore latest native region geometry");
         require(!splitter->isHidden(),"Native divider was not restored");
         require(inspector->height()==root->height()/2-1,"Inspector native geometry was not restored");

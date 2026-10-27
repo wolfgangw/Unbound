@@ -28,7 +28,10 @@ public:
         const auto widgets=QApplication::allWidgets();
         for(auto w:widgets) {
             if(w->objectName()=="UiMainWindow") main=w;
-#ifdef UNBOUND_FAIRLIGHT_SOUND_LIBRARY
+#ifdef UNBOUND_EDIT_SOURCE_VIEWER
+            if(w->objectName()=="WStackPage_Conform") page=w;
+            if(w->objectName()=="widgetEditSourcePlayer") library=w;
+#elif defined(UNBOUND_FAIRLIGHT_SOUND_LIBRARY)
             if(w->objectName()=="WStackPage_Audio") page=w;
             if(w->objectName()=="soundLibraryWidget") library=w;
 #else
@@ -36,7 +39,11 @@ public:
             if(w->objectName()=="widgetEditSoundLibrary") library=w;
 #endif
         }
+#ifdef UNBOUND_EDIT_SOURCE_VIEWER
+        auto preview=library;
+#else
         auto preview=library ? library->findChild<QWidget *>("m_PlayerPreview") : nullptr;
+#endif
         log("start",{{"bridgeRequested",bridge},{"main",identity(main)},
             {"page",identity(page)},{"library",identity(library)},{"preview",identity(preview)}});
         // Bounded, explicit-start snapshot for docked/floating presentation comparison.
