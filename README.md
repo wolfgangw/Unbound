@@ -2,7 +2,7 @@
 
 Unbound lets you undock and rearrange DaVinci Resolve panels and viewers.
 
-<img width="979" height="1062" alt="Unbound - Flock of Panels" src="https://github.com/user-attachments/assets/faf08d33-34e2-49ad-9782-d92643aebfba" />
+<img width="1295" height="1391" alt="Unbound - Color page - Color controls 04" src="https://github.com/user-attachments/assets/9c223b85-5b6c-48d7-935b-b9c60844b517" />
 
 It supports a range of panels and viewers on the Edit, Color and Fairlight pages (more to come).
 You can arrange them across your displays, resize them, snap them alongside one another.
