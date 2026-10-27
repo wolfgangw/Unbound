@@ -1,4 +1,4 @@
-# <img width="24" height="24" alt="unbound-64" src="https://github.com/user-attachments/assets/7b3fb809-6db7-41f7-9e32-8c1aec3c73eb" /> Unbound - Floating panels for DaVinci Resolve
+# <img width="24" height="24" alt="unbound-64" src="https://github.com/user-attachments/assets/7b3fb809-6db7-41f7-9e32-8c1aec3c73eb" /> Unbound - Undocking panels in DaVinci Resolve
 
 Unbound lets you undock and rearrange DaVinci Resolve panels and viewers.
 
