@@ -37,6 +37,15 @@ float and more complex side-panel arrangements still need live validation.
 The current production mechanism is documented in
 `AGENTS.md` (Specialized pane mechanisms).
 
+`paint-trace-probe.exe` / `PaintTraceProbe.dll` passively record public Qt
+geometry, layout, paint, main-window update and mouse-button event ordering.
+First launch starts; a second launch stops and writes `paint-trace-TIME.json`
+beside the DLL. It stops automatically after 60 seconds, recording at most
+20,000 events in memory. Samples include widget names, geometry and update-enabled
+states, with elapsed microseconds; no addresses, call stacks or private data are
+inspected. The filter never consumes events or changes widget state. Use this
+to distinguish child painting from top-level backing-store presentation.
+
 `layout-state-probe.exe` / `LayoutStateProbe.dll` capture QObject identities and
 Qt metadata for native layout controllers reachable through the application and
 widget children. They do not inspect private connection structures, invoke
@@ -67,3 +76,32 @@ and starts observation; second launch disconnects its own subscriptions, writes
 and records at most 100 signal samples. Drag Resolve's native divider normally.
 The observer never dereferences the opaque anchor pointer or calls native slots.
 This is an inspection tool, not an anchor-position setter or reclamation feature.
+
+`navigation-trace-probe.exe` / `NavigationLatencyProbe.dll` measure native Up/Down
+key receipt, the next queued callback, a bounded set of paint/update events, and
+single-shot event-loop checkpoints through one second. Build with
+`cmake --build build/windows/viewer-probe --config Release --target NavigationLatencyProbe navigation-trace-probe`.
+Run once to start and again to stop; observation expires after three minutes and
+accepts at most 100 navigation commands. JSONL output is adjacent to the helper.
+Only these two keys are recorded. The public Qt native-event filter never consumes
+input or modifies focus, settings, widgets or player state. A late checkpoint
+indicates GUI event-loop unavailability, not the identity of a blocking operation
+or the time a GPU frame becomes visible. File logging adds measurement overhead;
+compare conditions using the same probe. This diagnostic is not shipped.
+
+`palette-size-probe.exe` / `ColorLayoutSizeProbe.dll` take a bounded public-Qt
+size snapshot of currently floating Wheels, Curves, Warper and the native Timeline region, without changing
+their state. Build with
+`cmake --build build/windows/viewer-probe --config Release --target ColorLayoutSizeProbe palette-size-probe`.
+Each invocation writes JSON under `%TEMP%/Unbound-palette-sizes/`, including widget
+policies, minimums, hints, active stack pages, layout margins and spacing. No
+recurring observer or private Resolve memory access is used. Loaded diagnostic
+DLLs cannot be replaced until Resolve exits; they are not shipped.
+
+`palette-trace-probe.exe` / `PaletteGeometryTrace.dll` record public Qt Resize,
+Show and LayoutRequest events on Warper hosts, with immediate and queued height,
+minimum and size-hint measurements. Build with
+`cmake --build build/windows/viewer-probe --config Release --target PaletteGeometryTrace palette-trace-probe`.
+Run once before a layout round trip. The observer removes itself after one minute
+and writes at most 600 samples to `%TEMP%/Unbound-palette-layout.jsonl`. It never
+consumes input or changes widget state. Wait for expiry before another capture.

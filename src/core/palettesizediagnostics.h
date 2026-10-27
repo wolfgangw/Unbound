@@ -35,6 +35,7 @@ inline void recordPaletteSizes(QWidget *host,const QString &pane) {
             if(auto stack=qobject_cast<QStackedWidget *>(w))
                 item.insert("currentPage",all.indexOf(stack->currentWidget()));
             if(auto layout=w->layout()) {
+                const auto margins=layout->contentsMargins();
                 QJsonArray entries;
                 for(int j=0;j<qMin(layout->count(),2048);++j) {
                     auto entry=layout->itemAt(j);
@@ -44,6 +45,8 @@ inline void recordPaletteSizes(QWidget *host,const QString &pane) {
                 }
                 item.insert("layout",QJsonObject{{"minimum",size(layout->minimumSize())},
                     {"hint",size(layout->sizeHint())},{"constraint",int(layout->sizeConstraint())},
+                    {"spacing",layout->spacing()},
+                    {"margins",QJsonArray{margins.left(),margins.top(),margins.right(),margins.bottom()}},
                     {"entries",entries}});
             }
             widgets.append(item);
