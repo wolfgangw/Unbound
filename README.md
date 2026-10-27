@@ -70,3 +70,7 @@ when offered:
 - **macOS:** try opening the app once, then go to **System Settings → Privacy &
   Security → Open Anyway** and confirm. See
   [Apple's instructions](https://support.apple.com/en-us/102445).
+
+## Discussion and feedback
+
+There is [a thread on Blackmagic's Forum where we are talking about Unbound](https://forum.blackmagicdesign.com/viewtopic.php?f=21&t=240898).
