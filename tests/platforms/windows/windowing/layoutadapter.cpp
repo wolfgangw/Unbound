@@ -3,11 +3,53 @@
 #include "windowplacement.h"
 #include <QApplication>
 #include <QMenu>
+#include <QAbstractNativeEventFilter>
 #include <QJsonDocument>
 #include <qt_windows.h>
 namespace LayoutTest {
-void requestActivation(QWidget &window) { window.raise(); window.activateWindow(); }
+void requestActivation(QWidget &window) {
+    window.raise(); window.activateWindow();
+    if(QGuiApplication::platformName()!=QLatin1String("windows")) return;
+    const auto handle=reinterpret_cast<HWND>(window.winId());
+    const auto thread=GetCurrentThreadId();
+    const auto foreground=GetWindowThreadProcessId(GetForegroundWindow(),nullptr);
+    const bool attached=foreground && foreground!=thread && AttachThreadInput(thread,foreground,TRUE);
+    SetForegroundWindow(handle); SetFocus(handle);
+    if(attached) AttachThreadInput(thread,foreground,FALSE);
+}
 void initialize() {}
+bool nativeVisible(QWidget &window) { return IsWindowVisible(reinterpret_cast<HWND>(window.winId())); }
+bool stackedAbove(QWidget &upper,QWidget &lower) {
+    const auto a=reinterpret_cast<HWND>(upper.winId()),b=reinterpret_cast<HWND>(lower.winId());
+    for(auto window=GetTopWindow(nullptr);window;window=GetWindow(window,GW_HWNDNEXT)) {
+        if(window==a) return true;
+        if(window==b) return false;
+    }
+    return false;
+}
+void verifyStackingDuring(QWidget &window,const QList<QWidget *> &pins,const std::function<void()> &action) {
+    class Observer : public QAbstractNativeEventFilter {
+    public:
+        QWidget *target=nullptr; QList<QWidget *> pins; bool exposed=false;
+        bool nativeEventFilter(const QByteArray &type,void *message,long *result) override {
+            if(type!="windows_generic_MSG" || !message || !result) return false;
+            const auto msg=static_cast<MSG *>(message);
+            if(msg->message!=WM_WINDOWPOSCHANGED || msg->hwnd!=reinterpret_cast<HWND>(target->winId())) return false;
+            for(auto pin:pins) if(!stackedAbove(*pin,*target)) exposed=true;
+            return false;
+        }
+    } observer;
+    observer.target=&window; observer.pins=pins;
+    qApp->installNativeEventFilter(&observer);
+    action(); settle();
+    qApp->removeNativeEventFilter(&observer);
+    require(!observer.exposed,"Ordinary window transiently crossed pinned panes");
+    for(auto pin:pins) require(stackedAbove(*pin,window),"Ordinary window covered pinned panes after action");
+}
+void verifyActivationBelowPins(QWidget &window,const QList<QWidget *> &pins) {
+    verifyStackingDuring(window,pins,[&] { activate(window); });
+    require(ownsKeyboardFocus(window),"Stack constraint interfered with activation");
+}
 class PlacementFrame final : public QWidget {
 protected:
     bool nativeEvent(const QByteArray &type,void *message,long *result) override {
@@ -87,6 +129,7 @@ void transientPopup(QWidget &menu) {
 }
 bool ownsKeyboardFocus(QWidget &window) {
     return QGuiApplication::platformName()!=QLatin1String("windows")
-        || GetAncestor(GetFocus(),GA_ROOT)==reinterpret_cast<HWND>(window.winId());
+        || (GetAncestor(GetFocus(),GA_ROOT)==reinterpret_cast<HWND>(window.winId())
+            && GetForegroundWindow()==reinterpret_cast<HWND>(window.winId()));
 }
 }

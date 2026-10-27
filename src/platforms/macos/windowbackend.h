@@ -3,6 +3,7 @@
 #include "panefloatingwindow.h"
 #include <QObject>
 #include <QPointer>
+#include "panewindowgroup.h"
 namespace Unbound {
 class MainWindowSnap {
 public:
@@ -12,17 +13,11 @@ public:
 private:
     std::unique_ptr<MacWindowInteraction> m_interaction;
 };
-class WindowGroupActivation : public QObject {
+class WindowGroupActivation : public PaneWindowGroup {
 public:
     WindowGroupActivation();
-    ~WindowGroupActivation() override;
-    void setWindow(QWidget *window) { m_main = window; }
-protected:
-    bool eventFilter(QObject *object, QEvent *event) override;
 private:
-    void raiseGroup();
-    QPointer<QWidget> m_main, m_selected;
-    bool m_pending = false, m_raising = false;
+    bool raiseGroup(QWidget *selected,const QList<QWidget *> &pins);
 };
 bool applyPaneDarkCaption(QWidget *host, QWidget *mainWindow);
 void inheritPaneTaskbarIdentity(QWidget *host, QWidget *mainWindow);

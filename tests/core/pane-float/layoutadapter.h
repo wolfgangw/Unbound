@@ -27,6 +27,10 @@ void verifyGestureDismissal(QWidget &floating,QWidget &main,QWidget &menu,const 
 void transientPopup(QWidget &menu);
 bool ownsKeyboardFocus(QWidget &window);
 void requestActivation(QWidget &window);
+bool stackedAbove(QWidget &upper,QWidget &lower);
+bool nativeVisible(QWidget &window);
+void verifyActivationBelowPins(QWidget &window,const QList<QWidget *> &pins);
+void verifyStackingDuring(QWidget &window,const QList<QWidget *> &pins,const std::function<void()> &action);
 inline void activate(QWidget &window) {
     // Synthetic input does not perform an OS click's foreground handoff. Wait
     // for that precondition, not for the behavior under test; do not retry input.

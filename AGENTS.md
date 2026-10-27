@@ -152,6 +152,37 @@ newer focus choices take priority. Automatic reveals must not activate hosts:
 set `WA_ShowWithoutActivating` before native creation on both backends. Manual
 undocking explicitly activates the new host.
 
+`panewindowgroup.h` owns application-local pinning and grouped minimization.
+The per-pane `keepAtop` preference orders visible pinned hosts above ordinary
+Resolve windows only while a member or its Unbound layout menu owns activation.
+The main-owned layout menu retains its popup level and focus above the pinned
+group; opening it, clean recall and renaming must not lift main above pinned panes
+or change their relative order. General Always-on-top use is user-validated on
+Windows; macOS validation remains outstanding. Native adapters keep all hosts at their ordinary OS window level and reorder without activation; no
+desktop-wide topmost flag, activation loop or polling is used. Dialogs, popups,
+other applications and newer focus choices retain priority. Windows additionally
+checks the actual foreground HWND before ordering the group. Submit the final
+pinned/selected/peer order directly, never demoting pins as an intermediate step.
+Windows constrains preliminary ordinary/menu raises and nonactivating pinned-peer
+raises in `WM_WINDOWPOSCHANGING` with `SWP_NOZORDER` while pins are visible, then
+applies the complete normal-window order in one `DeferWindowPos` batch. Genuine
+pinned-window activation remains native and updates shared MRU order. Changing
+only `hwndInsertAfter`, or trusting its proposed position, can still expose peers
+through native owner/owned ordering. Never insert normal hosts after the menu's
+topmost handle or reorder the menu itself in that batch. Preserve native activation,
+size and ownership flags; ignore unrelated windows, dialogs and inactive application state.
+
+Pinned peers use most-recent activation order for the running session. Ordinary
+activation preserves that order; newly restored hosts join in catalogue object-name
+order. This order is not persisted and does not dirty layouts. Native ownership,
+palette registration, keyboard routing and page visibility remain unchanged.
+When main is minimized, temporarily conceal its visible, non-minimized hosts;
+restore only that set on main restoration and only for available pages. Native
+conceal/reveal preserves Qt visibility intent, maximized/fullscreen state and focus.
+Windows uses nonactivating SetWindowPos visibility flags; Cocoa uses orderOut and
+orderFront. Grouped hosts leave the taskbar while concealed. Independently hidden
+or minimized panes remain so. No extra workspace window is introduced.
+
 Panes without a usable remembered position open centered in the available work
 area of the display containing their native pane's center (falling back to its
 window's screen). Shared placement includes Edit viewers and accounts for final
@@ -433,6 +464,17 @@ Index tab-row backgrounds also drag; tab/action controls retain native input.
 
 ## Layout menu
 
+The final entry, separated below the layout list/status, is the checkmarked
+`Always on top` preference for the invoking pane, including Edit viewers.
+It is disabled while docked; docking retains the preference for the next undock.
+Changes persist in working state even without a layout, participate in snapshots
+and dirty detection, and never overwrite a saved layout implicitly. Missing means
+false; unpinning removes the optional field so legacy snapshots become clean again.
+This is an additive format-7 field: loading pre-feature files does not rewrite them
+or modify saved layouts. First use changes only the requested working pane; old
+layout recall clears the preference where absent. Existing format 1-6 migrations
+remain unchanged, and settings writes retain their atomic-save safeguards.
+
 Right-click any Unbound button for up to five layouts per page. "Save as new Edit
 layout" (using the catalogue's current page label) creates a snapshot; identical
 configurations do not create duplicates. Only explicit update overwrites a snapshot.
@@ -487,7 +529,7 @@ unchanged; malformed layouts are rejected rather than recalled as empty state.
 
 - `mainWindow`: per-page native placement.
 - `panes`: objects keyed by the catalogue's persistence name, each containing
-  `floating`, optional `toolbarButtonChecked`, and `window` geometry.
+  `floating`, optional `toolbarButtonChecked` and `keepAtop`, and `window` geometry.
 - `presets`: up to five layout objects with stable UUID `id`, display `name`, and
   `configuration` containing only a `mainWindow`/`panes` snapshot.
 - `activePreset`: active layout UUID; manual changes preserve it, deletion of the

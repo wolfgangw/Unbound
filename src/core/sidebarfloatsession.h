@@ -60,6 +60,10 @@ public:
     std::function<void()> dockingFailed;
     std::function<void()> dockingSucceeded;
     void setSavedGeometry(const QByteArray &geometry) { if (!active()) m_savedGeometry = geometry; }
+    void setKeepAtop(bool value) {
+        m_keepAtop=value;
+        if(m_host) m_host->setProperty("unboundKeepAtop",value);
+    }
     void applySavedGeometry(const QByteArray &geometry) {
         ++m_initialGeometryGeneration;
         m_geometryTimer->stop(); m_savedGeometry=geometry;
@@ -191,6 +195,7 @@ public:
         m_root = pageRoot ? pageRoot : slot->parentWidget();
         m_layout = layout;
         auto host = new PaneFloatingWindow;
+        host->setProperty("unboundKeepAtop",m_keepAtop);
         host->setProperty("unboundPage",PaneCatalogue::pageForRoot(m_root->objectName()));
         // Keep the Fairlight Media Pool's original Qt ownership/ancestor path
         // while its host remains an independent top-level window.
@@ -620,6 +625,7 @@ private:
     QMetaObject::Connection m_destroyConnection;
     QByteArray m_savedGeometry; // Retained across restore/start for this pane.
     unsigned m_initialGeometryGeneration=0;
+    bool m_keepAtop=false;
     unsigned m_generation = 0;
     bool m_hiddenByPage = false;
     bool m_restoring = false;

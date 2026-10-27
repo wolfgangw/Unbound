@@ -254,15 +254,18 @@ void testColorClipsStartup();
 void testPageFocus();
 void testIndexHeaderDrag();
 void testDockingGuard();
+void testWindowGroup();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
     HostApplication app(argc,argv); if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
     if(app.arguments().contains("--color-clips-startup")) { testColorClipsStartup(); return 0; }
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
+    if(app.arguments().contains("--window-group-only")) { testWindowGroup(); return 0; }
     LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testColorClips(); storage(); layoutIdentity();
     testPageFocus();
     testDockingGuard();
+    testWindowGroup();
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("layouts.json").toUtf8());
     auto mainOwner=LayoutTest::makeMainWindow();
@@ -322,6 +325,28 @@ int main(int argc,char **argv) {
     require(control(menu,"unboundLayoutDockAll"),"Dock all is unavailable with a floating panel");
     click(control(menu,"unboundLayoutSave")); popup();
     require(control(menu,"unboundLayoutRecall","Edit-2"),"Floating configuration was not saved");
+    auto pin=menu->findChild<QCheckBox *>("unboundKeepAtop");
+    require(pin && pin->isVisible() && pin->isEnabled() && pin->text()=="Always on top",
+        "Pane-specific pin entry is missing or mislabeled");
+    require(menu->layout()->itemAt(menu->layout()->count()-1)->widget()==pin,"Pin entry is not last in the context menu");
+    click(pin); popup();
+    const auto menuCapture=qEnvironmentVariable("UNBOUND_MENU_CAPTURE");
+    if(!menuCapture.isEmpty()) require(menu->grab().save(menuCapture),"Cannot capture pinned menu fixture");
+    require(pin->isChecked() && floating->property("unboundKeepAtop").toBool() && control(menu,"unboundLayoutUpdate"),
+        "Menu pin did not apply to host and dirty the layout");
+    click(control(menu,"unboundLayoutUpdate")); popup();
+    menu->hide(); context(poolButton); menu=popup();
+    pin=menu->findChild<QCheckBox *>("unboundKeepAtop");
+    click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
+    require(menu->isVisible() && floating->property("unboundKeepAtop").toBool(),
+        "Clean active pinned layout recall dismissed menu or cleared pin");
+    if(QGuiApplication::platformName()!=QLatin1String("offscreen"))
+        require(LayoutTest::stackedAbove(*floating,main) && LayoutTest::stackedAbove(*menu,*floating),
+            "Clean active layout recall lost menu/pinned/main order");
+    click(pin); popup();
+    click(control(menu,"unboundLayoutUpdate")); popup(); // Restore the original unpinned snapshot.
+    require(!floating->property("unboundKeepAtop").toBool() && !control(menu,"unboundLayoutUpdate"),
+        "Menu unpin did not return layout to clean");
     LayoutTest::verifyGestureDismissal(*floating,main,*menu,[&]() -> QWidget * { context(poolButton); menu=popup(); return menu; });
     PopupEvents popupEvents; menu->installEventFilter(&popupEvents);
     const auto realRecall=menu->recall; int appliedRecalls=0; bool internalDismissal=false;

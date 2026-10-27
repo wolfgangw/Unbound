@@ -77,6 +77,7 @@ public:
     void restoreLayout() {
         m_saveTimer.stop();
         for(auto pane:{&m_program,&m_source}) if(pane->host && pane->content) {
+            pane->host->setProperty("unboundKeepAtop",m_settings.keepAtop(pane->content->objectName()));
             const auto geometry=m_settings.geometry(pane->content->objectName());
             if(!geometry.isEmpty()) pane->host->restoreGeometry(geometry);
         }
@@ -125,6 +126,7 @@ private:
             auto layout=qobject_cast<QBoxLayout *>(parent->layout());
             if(!layout || layout->indexOf(anchor)<0 || layout->direction()!=QBoxLayout::LeftToRight) continue;
             auto b=new Unbound::UndockButton(parent);
+            b->setProperty("unboundPaneName",pane.content->objectName());
             auto p=&pane;
             b->contextMenu=[this,p](QWidget *button,const QPoint &position) {
                 if(m_contextMenu) m_contextMenu(button,position);
@@ -162,6 +164,7 @@ private:
         if(!item) { delete placeholder; pane.placeholder=nullptr; return; }
         delete item;
         auto host=new Unbound::PaneFloatingWindow;
+        host->setProperty("unboundKeepAtop",m_settings.keepAtop(content->objectName()));
         host->setProperty("unboundPage",m_page->objectName());
         host->setParent(parent,host->windowFlags());
         Unbound::inheritPaneTaskbarIdentity(host,parent->window());

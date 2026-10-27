@@ -6,6 +6,10 @@ This file tracks validation gaps, not build/session history.
 - Native Intel Mac installation, startup and pane interaction remain unvalidated.
   Collect hardware, macOS, Resolve and Unbound versions with community reports.
 - Windows Free Resolve needs validation of startup and pane behavior.
+- Per-pane "Always on top" still needs native macOS validation: ordinary/pinned
+  activation, menus/dialogs, viewer/audition routing, page/layout recall and main
+  minimize/restore, including maximized panes. Broaden Windows coverage for
+  fullscreen, multi-display and unusual native dialog/ownership combinations.
 - macOS needs broader multi-display, Retina scaling, display-removal,
   Spaces/fullscreen and Fusion workflow coverage, plus native verification of
   page-return focus restoration and the current shared Color Clips adapter.

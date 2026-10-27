@@ -7,6 +7,16 @@
 #include <QMenu>
 namespace LayoutTest {
 void initialize() { qputenv("QT_STYLE_OVERRIDE","Fusion"); }
+bool nativeVisible(QWidget &window) { return reinterpret_cast<NSView *>(window.winId()).window.visible; }
+bool stackedAbove(QWidget &upper,QWidget &lower) {
+    auto a=reinterpret_cast<NSView *>(upper.winId()).window;
+    auto b=reinterpret_cast<NSView *>(lower.winId()).window;
+    for(NSWindow *window in NSApp.orderedWindows) {
+        if(window==a) return true;
+        if(window==b) return false;
+    }
+    return false;
+}
 void requestActivation(QWidget &window) {
     auto native=reinterpret_cast<NSView *>(window.winId()).window;
     // Synthetic recall can reparent native children while the tool window
@@ -21,6 +31,15 @@ void requestActivation(QWidget &window) {
         }
     }
     window.raise(); window.activateWindow();
+}
+void verifyStackingDuring(QWidget &window,const QList<QWidget *> &pins,const std::function<void()> &action) {
+    action(); settle();
+    for(auto pin:pins) require(stackedAbove(*pin,window),"Ordinary window covered pinned panes after action");
+}
+void verifyActivationBelowPins(QWidget &window,const QList<QWidget *> &pins) {
+    activate(window);
+    for(auto pin:pins) require(stackedAbove(*pin,window),"Activated window crossed pinned panes");
+    require(ownsKeyboardFocus(window),"Stack constraint interfered with activation");
 }
 std::unique_ptr<QWidget> makeMainWindow() { return std::make_unique<QWidget>(); }
 QRect nativeBounds(QWidget &window) { return window.frameGeometry(); }

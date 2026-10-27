@@ -105,6 +105,14 @@ public:
     }
     bool floating(const QString &name) const { return entry(name).value("floating").toBool(); }
     QString saveFloating(const QString &name,bool value) { return saveField(name,"floating",value); }
+    // Additive format-7 field: old files/snapshots need no rewrite or migration.
+    // Only an explicit preference change writes it; existing layouts stay intact.
+    bool keepAtop(const QString &name) const { return entry(name).value("keepAtop").toBool(); }
+    QString saveKeepAtop(const QString &name,bool value) {
+        // Missing means false. Returning to the default also returns an old
+        // layout to clean, rather than introducing a redundant false field.
+        return saveField(name,"keepAtop",value ? QJsonValue(true) : QJsonValue(QJsonValue::Undefined));
+    }
     bool hasToggle(const QString &name) const { return entry(name).value("toolbarButtonChecked").isBool(); }
     bool toggle(const QString &name) const { return entry(name).value("toolbarButtonChecked").toBool(); }
     QString saveToggle(const QString &name,bool value) { return saveField(name,"toolbarButtonChecked",value); }

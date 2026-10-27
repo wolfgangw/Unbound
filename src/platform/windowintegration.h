@@ -5,7 +5,9 @@
 // and beginButtonMove()/updateButtonMove()/finishButtonMove(bool cancel).
 // Button gestures retain Qt mouse delivery; the backend supplies native geometry.
 // MainWindowSnap: setWindow(QWidget *), safely detached on destruction.
-// WindowGroupActivation: setWindow(QWidget *), event-driven group raising.
+// WindowGroupActivation: setWindow(QWidget *), delegates stacking/minimize policy
+// to PaneWindowGroup. Native callbacks order ordinary-level windows and conceal /
+// reveal them without activation or changing Qt visibility intent/window state.
 // applyPaneDarkCaption(QWidget *, QWidget *) and inheritPaneTaskbarIdentity(...).
 // All window operations are performed on the Qt GUI thread.
 // User move/resize starts emit the shared WindowInteractionEvent, including

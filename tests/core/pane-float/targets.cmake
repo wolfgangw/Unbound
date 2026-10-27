@@ -15,6 +15,7 @@ function(unbound_add_layout_tests backend adapter)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/colorviewertest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/colorcontroltest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pagefocustest.cpp"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/windowgrouptest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/dockingguardtest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/indexheaderdragtest.cpp" "${adapter}")
     target_include_directories(UnboundLayoutTests PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")

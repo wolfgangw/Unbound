@@ -151,7 +151,13 @@ private:
         }
         return m_lastSettingsError;
     }
-    void openLayouts(const QString &page,QWidget *button,const QPoint &position) {
+    QWidget *floatingHost(const QString &name) const {
+        for(auto window:QApplication::topLevelWidgets())
+            if(window->property("unboundFloatingWindow").toBool()
+                && window->objectName()=="unboundFloating_"+name) return window;
+        return nullptr;
+    }
+    void openLayouts(const QString &page,QWidget *button,const QPoint &position,const QString &name={}) {
         if(!m_window || currentPage()!=page) return;
         settingsError(capturePage(page));
         delete m_layoutMenu.data();
@@ -177,6 +183,20 @@ private:
         };
         menu->rename=[this,page](const QString &id,const QString &name) { return m_settings.renameLayout(page,id,name); };
         menu->dockAll=[this,page] { return dockAll(page); };
+        if(const auto pane=Unbound::PaneCatalogue::find(name)) {
+            const auto key=pane->settingsKey();
+            menu->setPaneContext(key,[this,name] { return floatingHost(name)!=nullptr; });
+            menu->setKeepAtop=[this,name,key](bool value) {
+                auto host=floatingHost(name);
+                if(!host) return QStringLiteral("Undock this pane before changing its stacking preference.");
+                const auto error=m_settings.saveKeepAtop(key,value);
+                if(error.isEmpty()) {
+                    if(auto session=m_sessions.value(name)) session->setKeepAtop(value);
+                    else host->setProperty("unboundKeepAtop",value);
+                }
+                return error;
+            };
+        }
         menu->popup(button ? button->mapToGlobal(QPoint(0,button->height())) : position,button);
     }
     QString dockAll(const QString &page) {
@@ -259,6 +279,7 @@ private:
             m_pendingDockToggles.remove(it.key()); m_pendingColorToggles.remove(it.key());
             m_activationRequested.remove(it.key()); m_restoreAttempted.remove(it.key());
             if(auto session=m_sessions.value(it.key())) {
+                session->setKeepAtop(m_settings.keepAtop(key));
                 session->applySavedGeometry(m_settings.geometry(key));
                 if(session->active()) m_restoreAttempted.insert(it.key());
             }
@@ -486,6 +507,7 @@ private:
         auto session = m_sessions.value(name);
         if (!session) {
             session = new Unbound::SidebarFloatSession(this);
+            session->setKeepAtop(m_settings.keepAtop(settingsKey(name)));
             session->setSavedGeometry(m_settings.geometry(settingsKey(name)));
             session->geometrySaved = [this, name](const QByteArray &geometry) {
                 settingsError(m_settings.save(settingsKey(name), geometry));
@@ -627,7 +649,7 @@ private:
             auto decoration = new Unbound::PaneDecoration(pane, this, [this, name] {
                 undock(name);
             },[this,name](QWidget *button,const QPoint &position) {
-                openLayouts(Unbound::PaneSettings::pageForPane(settingsKey(name)),button,position);
+                openLayouts(Unbound::PaneSettings::pageForPane(settingsKey(name)),button,position,name);
             });
             m_decorations.insert(name, decoration);
         }
@@ -641,7 +663,9 @@ private:
             auto source=players ? players->findChild<QWidget *>("stackedEditSourceOfflinePlayers") : nullptr;
             if (program && source) {
                 m_viewers=new EditViewers(m_window,players,program,source,m_settings,this,
-                    [this](QWidget *button,const QPoint &position) { openLayouts("WStackPage_Conform",button,position); });
+                    [this](QWidget *button,const QPoint &position) {
+                        openLayouts("WStackPage_Conform",button,position,button->property("unboundPaneName").toString());
+                    });
                 m_viewers->dockingWarningChanged=[this] { if(m_layoutMenu) m_layoutMenu->refreshDockingWarning(); };
             }
         }

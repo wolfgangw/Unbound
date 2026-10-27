@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include <QFrame>
+#include <QCheckBox>
 #include <QScreen>
 #include <QVBoxLayout>
 #include <QToolButton>
@@ -122,6 +123,29 @@ protected:
 // A persistent Qt tool popout, deliberately outside Qt's transient-popup stack.
 // Resolve may close that stack while docking panels; our outside-input filter
 // supplies dismissal without an intervening hide/reopen during restoration.
+class LayoutCheckBox final : public QCheckBox {
+public:
+    using QCheckBox::QCheckBox;
+protected:
+    bool hitButton(const QPoint &point) const override { return rect().contains(point); }
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this); painter.setRenderHint(QPainter::Antialiasing);
+        if(isEnabled() && (underMouse() || hasFocus())) {
+            painter.setPen(Qt::NoPen); painter.setBrush(QColor("#414141"));
+            painter.drawRoundedRect(rect(),3,3);
+        }
+        const auto color=QColor(isEnabled() ? "#dddddd" : "#777777");
+        if(isChecked()) {
+            QPen pen(color,1.5,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin);
+            painter.setPen(pen);
+            const qreal middle=height()/2.0;
+            const QPointF points[]={{9,middle},{12,middle+3},{18,middle-4}};
+            painter.drawPolyline(points,3);
+        }
+        painter.setPen(color);
+        painter.drawText(rect().adjusted(26,0,-8,0),Qt::AlignLeft|Qt::AlignVCenter|Qt::TextShowMnemonic,text());
+    }
+};
 class PageLayoutMenu final : public QFrame {
 public:
     std::function<QString(QString &,bool &)> save;
@@ -131,6 +155,13 @@ public:
     std::function<QString()> dockAll;
     std::function<QString(const QString &,const QString &)> rename;
     std::function<QString()> dockingWarning;
+    std::function<QString(bool)> setKeepAtop;
+    void setPaneContext(QString key,std::function<bool()> floating) {
+        m_paneKey=std::move(key); m_paneFloating=std::move(floating);
+        m_atop->setText(QStringLiteral("Always on top"));
+        m_atop->setToolTip("Keep this window above other Resolve panes while Resolve is active.");
+        refresh();
+    }
     PageLayoutMenu(PaneSettings &settings,QString page,QWidget *parent,std::function<bool()> hasFloating={})
         : QFrame(parent),m_settings(settings),m_page(std::move(page)),m_hasFloating(std::move(hasFloating)) {
         setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
@@ -176,6 +207,14 @@ public:
         m_status=new QLabel(this); m_status->setObjectName("unboundLayoutStatus");
         m_status->setTextFormat(Qt::PlainText); m_status->setWordWrap(true); m_status->setMaximumWidth(300);
         addWidget(m_status);
+        m_atopSeparator=new QFrame(this); m_atopSeparator->setFixedHeight(1);
+        m_atopSeparator->setStyleSheet("background: #444444; border: none;");
+        m_layout->addSpacing(4); addWidget(m_atopSeparator); m_layout->addSpacing(4);
+        m_atop=new LayoutCheckBox(this); m_atop->setObjectName("unboundKeepAtop");
+        addWidget(m_atop); // Deliberately the last entry, separated from Dock all.
+        connect(m_atop,&QCheckBox::clicked,this,[this](bool checked) {
+            afterAction(setKeepAtop ? setKeepAtop(checked) : QStringLiteral("Pinning is unavailable."));
+        });
         connect(m_save,&QPushButton::clicked,this,[this] {
             if(!save) return;
             QString name; bool duplicate=false;
@@ -419,6 +458,9 @@ private:
         const bool painting=updatesEnabled();
         if(painting) setUpdatesEnabled(false);
         const bool floating=m_hasFloating && m_hasFloating();
+        m_atop->setVisible(!m_paneKey.isEmpty()); m_atopSeparator->setVisible(!m_paneKey.isEmpty());
+        m_atop->setEnabled(m_paneFloating && m_paneFloating());
+        m_atop->setChecked(m_settings.keepAtop(m_paneKey));
         m_dock->setEnabled(floating); m_dock->setVisible(floating);
         const auto entries=m_settings.layouts(m_page);
         QSet<QString> ids;
@@ -458,6 +500,10 @@ private:
     QLabel *m_status=nullptr;
     QLabel *m_dockingWarning=nullptr;
     QPushButton *m_dock=nullptr;
+    QCheckBox *m_atop=nullptr;
+    QFrame *m_atopSeparator=nullptr;
+    QString m_paneKey;
+    std::function<bool()> m_paneFloating;
     QVBoxLayout *m_layout=nullptr;
     std::function<bool()> m_hasFloating;
     QMap<QString,LayoutRow> m_rows;

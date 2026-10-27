@@ -380,29 +380,32 @@ void MainWindowSnap::setWindow(QWidget *window)
     m_interaction.reset();
     if (window) { m_interaction.reset(new MacWindowInteraction(window,false)); m_interaction->setProperty("window",QVariant::fromValue<QObject *>(window)); }
 }
-WindowGroupActivation::WindowGroupActivation() { qApp->installEventFilter(this); }
-WindowGroupActivation::~WindowGroupActivation() { if (qApp) qApp->removeEventFilter(this); }
-bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event)
+WindowGroupActivation::WindowGroupActivation() : PaneWindowGroup(
+    [this](QWidget *selected,const QList<QWidget *> &pins) { return raiseGroup(selected,pins); },
+    [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderOut:nil]; },
+    [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderFront:nil]; }) {}
+bool WindowGroupActivation::raiseGroup(QWidget *selected,const QList<QWidget *> &pins)
 {
-    if (event->type()!=QEvent::WindowActivate || m_raising) return false;
-    auto window=qobject_cast<QWidget *>(object);
-    if (!m_main || !window || (window!=m_main && !window->property("unboundFloatingWindow").toBool())) return false;
-    m_selected=window;
-    if (!m_pending) { m_pending=true; QTimer::singleShot(0,this,[this] { m_pending=false; raiseGroup(); }); }
-    return false;
-}
-void WindowGroupActivation::raiseGroup()
-{
-    auto selected=m_selected.data(); NSWindow *key=nativeWindow(selected);
+    NSWindow *key=nativeWindow(selected);
     if (!m_main || !selected || !key || NSApp.keyWindow!=key || !NSApp.active
-        || QApplication::activeModalWidget() || QApplication::activePopupWidget()) return;
+        || QApplication::activeModalWidget() || QApplication::activePopupWidget()) return false;
     QList<NSWindow *> peers;
     for (NSWindow *window in NSApp.orderedWindows)
         for (auto widget : QApplication::topLevelWidgets())
             if (widget!=selected && (widget==m_main || widget->property("unboundFloatingWindow").toBool())
                 && widget->isVisible() && !widget->isMinimized() && nativeWindow(widget)==window) peers.append(window);
-    m_raising=true; NSInteger above=key.windowNumber;
-    for (NSWindow *window : peers) { [window orderWindow:NSWindowBelow relativeTo:above]; above=window.windowNumber; }
-    m_raising=false;
+    QList<NSWindow *> ordered;
+    for(auto widget:pins) if(auto window=nativeWindow(widget)) {
+        peers.removeAll(window); ordered.append(window);
+    }
+    if(member(selected) && !ordered.contains(key)) ordered.append(key);
+    ordered.append(peers);
+    // Build the final order directly; do not first lower pinned panes behind key.
+    if(ordered.isEmpty()) return true;
+    NSWindow *front=ordered.takeFirst();
+    [front orderFront:nil];
+    NSInteger above=front.windowNumber;
+    for (NSWindow *window : ordered) { [window orderWindow:NSWindowBelow relativeTo:above]; above=window.windowNumber; }
+    return true;
 }
 }

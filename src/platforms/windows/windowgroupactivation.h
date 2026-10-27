@@ -4,55 +4,65 @@
 #include <QPointer>
 #include <QTimer>
 #include <QSet>
+#include <QAbstractNativeEventFilter>
 #include "panefloatingwindow.h"
 #include "cinemaviewervisibility.h"
+#include "panewindowgroup.h"
 
 namespace Unbound {
-// Activation is the only trigger. There are no hooks in other processes and
-// no recurring timer or work on painting/playback events.
-// The associated Cinema visibility guard handles native fullscreen transitions.
-class WindowGroupActivation : public QObject
+// Shared policy uses normal Z order only. The Cinema guard retains ownership
+// of native fullscreen transitions.
+class WindowGroupActivation : public PaneWindowGroup, public QAbstractNativeEventFilter
 {
 public:
-    WindowGroupActivation()
-    {
-        if (QGuiApplication::platformName() == QLatin1String("windows"))
-            qApp->installEventFilter(this);
-    }
-    void setWindow(QWidget *window) { m_main = window; m_cinema.setWindow(window); }
-protected:
-    bool eventFilter(QObject *object, QEvent *event) override
-    {
-        if (event->type() != QEvent::WindowActivate || m_raising) return false;
-        auto window = qobject_cast<QWidget *>(object);
-        if (!member(window)) return false;
-        m_selected = window;
-        if (!m_pending) {
-            m_pending = true;
-            QTimer::singleShot(0, this, [this] {
-                m_pending = false;
-                auto selected = m_selected.data();
-                m_selected = nullptr;
-                raiseGroup(selected);
-            });
+    WindowGroupActivation() : PaneWindowGroup(
+        [this](QWidget *selected,const QList<QWidget *> &pins) { return raiseGroup(selected,pins); },
+        [](QWidget *window) {
+            if(QGuiApplication::platformName()==QLatin1String("windows"))
+                SetWindowPos(reinterpret_cast<HWND>(window->effectiveWinId()),nullptr,0,0,0,0,
+                    SWP_HIDEWINDOW|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOOWNERZORDER);
+        },[](QWidget *window) {
+            if(QGuiApplication::platformName()==QLatin1String("windows"))
+                SetWindowPos(reinterpret_cast<HWND>(window->effectiveWinId()),nullptr,0,0,0,0,
+                    SWP_SHOWWINDOW|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOOWNERZORDER);
+        }) { qApp->installNativeEventFilter(this); }
+    ~WindowGroupActivation() override { if(qApp) qApp->removeNativeEventFilter(this); }
+    void setWindow(QWidget *window) { PaneWindowGroup::setWindow(window); m_cinema.setWindow(window); }
+private:
+    bool nativeEventFilter(const QByteArray &type,void *message,long *result) override {
+        if(type!="windows_generic_MSG" || !message || !result || m_raising) return false;
+        auto msg=static_cast<MSG *>(message);
+        if(msg->message!=WM_WINDOWPOSCHANGING || !msg->lParam) return false;
+        auto pos=reinterpret_cast<WINDOWPOS *>(msg->lParam);
+        if(pos->flags&(SWP_NOZORDER|SWP_HIDEWINDOW) || pos->hwndInsertAfter==HWND_TOPMOST
+            || pos->hwndInsertAfter==HWND_BOTTOM) return false;
+        auto target=QWidget::find(reinterpret_cast<WId>(pos->hwnd));
+        auto foreground=QWidget::find(reinterpret_cast<WId>(GetForegroundWindow()));
+        if(!activationMember(target) || !activationMember(foreground) || (target->property("unboundKeepAtop").toBool() && !(pos->flags&SWP_NOACTIVATE))
+            || (!layoutMenu(target) && (GetWindowLongPtr(pos->hwnd,GWL_EXSTYLE)&WS_EX_TOPMOST)) || !stackingAllowed()) return false;
+        // Suppress preliminary member/menu raises while pins are visible. The
+        // shared refresh submits the final group order in one batch. Merely
+        // replacing hwndInsertAfter is insufficient: owner/owned reordering
+        // can still expose a peer, even when the proposed insert-after handle
+        // appears below the pins. Preserve activation, sizing and ownership.
+        QSet<HWND> pins;
+        for(auto window:pinnedWindows()) {
+            auto handle=reinterpret_cast<HWND>(window->effectiveWinId());
+            if(handle && IsWindowVisible(handle) && !IsIconic(handle)) pins.insert(handle);
         }
+        if(!pins.isEmpty()) pos->flags|=SWP_NOZORDER;
         return false;
     }
-private:
-    bool member(QWidget *window) const
+    bool raiseGroup(QWidget *selected,const QList<QWidget *> &pins)
     {
-        return m_main && window && window->isWindow()
-            && (window == m_main || dynamic_cast<PaneFloatingWindow *>(window));
-    }
-    void raiseGroup(QWidget *selected)
-    {
-        if (!member(selected) || !selected->isVisible() || selected->isMinimized()
-            || QApplication::activeModalWidget() || QCoreApplication::closingDown()) return;
+        if(QGuiApplication::platformName()!=QLatin1String("windows")) return false;
+        if (!activationMember(selected) || !selected->isVisible() || selected->isMinimized()
+            || QApplication::activeModalWidget() || QCoreApplication::closingDown()) return false;
         const auto active = reinterpret_cast<HWND>(selected->effectiveWinId());
         // A queued activation must not pull Resolve back over another app or
         // its own dialog if focus moved again before this callback executed.
         if (!active || GetForegroundWindow() != active
-            || (GetWindowLongPtr(active, GWL_EXSTYLE) & WS_EX_TOPMOST)) return;
+            || (!layoutMenu(selected) && (GetWindowLongPtr(active, GWL_EXSTYLE) & WS_EX_TOPMOST))) return false;
         QSet<HWND> peers;
         for (auto window : QApplication::topLevelWidgets()) {
             if (window == selected || !member(window) || !window->isVisible() || window->isMinimized()) continue;
@@ -60,27 +70,31 @@ private:
             if (handle && IsWindowVisible(handle) && !IsIconic(handle)
                 && !(GetWindowLongPtr(handle, GWL_EXSTYLE) & WS_EX_TOPMOST)) peers.insert(handle);
         }
-        if (peers.isEmpty()) return;
-        // Preserve the peers' relative order. Place them immediately behind the
-        // selected window, leaving focus and the topmost band untouched.
+        // Submit the final order once; never lower pinned panes behind the
+        // selected ordinary window as an intermediate group-activation step.
         QList<HWND> ordered;
-        for (auto handle = GetTopWindow(nullptr); handle; handle = GetWindow(handle, GW_HWNDNEXT))
-            if (peers.contains(handle)) ordered.append(handle);
-        auto batch = BeginDeferWindowPos(ordered.size());
-        if (!batch) return;
-        m_raising = true;
-        auto after = active;
+        for(auto window:pins) {
+            auto handle=reinterpret_cast<HWND>(window->effectiveWinId());
+            if(handle==active || peers.remove(handle)) ordered.append(handle);
+        }
+        // The menu retains its native popup level and focus; only arrange the
+        // normal-level group underneath it. Never insert peers after a topmost
+        // menu handle, which would promote those peers into the topmost band.
+        if(member(selected) && !ordered.contains(active)) ordered.append(active);
+        for(auto handle=GetTopWindow(nullptr);handle;handle=GetWindow(handle,GW_HWNDNEXT))
+            if(peers.contains(handle)) ordered.append(handle);
+        if(ordered.isEmpty()) return true;
+        auto batch=BeginDeferWindowPos(ordered.size());
+        if(!batch) return false;
+        HWND after=HWND_TOP;
         for (auto handle : ordered) {
             batch = DeferWindowPos(batch, handle, after, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
             if (!batch) break;
             after = handle;
         }
-        if (batch) EndDeferWindowPos(batch);
-        m_raising = false;
+        return batch && EndDeferWindowPos(batch);
     }
-    QPointer<QWidget> m_main, m_selected;
     CinemaViewerVisibility m_cinema;
-    bool m_pending = false, m_raising = false;
 };
 }
