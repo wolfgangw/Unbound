@@ -152,6 +152,17 @@ newer focus choices take priority. Automatic reveals must not activate hosts:
 set `WA_ShowWithoutActivating` before native creation on both backends. Manual
 undocking explicitly activates the new host.
 
+Panes without a usable remembered position open centered in the available work
+area of the display containing their native pane's center (falling back to its
+window's screen). Shared placement includes Edit viewers and accounts for final
+show-time sizing. Existing remembered positions retain priority.
+After showing a host and after saved-geometry restoration, shared recovery checks
+the actual client allocation, including native minimum-size growth, against the
+available work areas. Preserve fully visible spans across adjacent monitors;
+otherwise fit to the work area with greatest overlap. If a native minimum exceeds
+that area, keep it and anchor the top-left controls inside the work area. This
+check runs at opening/restoration, not during user movement or resizing.
+
 `pagefocus.h` remembers the last focused window/control per page for the running
 session. After queued reveals, restore an available target or retain native main
 focus. Ignore navigation/hide-show churn; cancel deferred recall on newer input,
@@ -256,8 +267,12 @@ retains taskbar/Alt+Tab eligibility and grouping identity.
 
 ### Color Timeline
 
-Transfer `UiMiniTimelineWidget` independently of Clips, with a top-left corner
-button and no added header/native docked constraint changes. The observed 76 px
+Transfer `UiMiniTimelineWidget` independently of Clips. Docked Timeline keeps its
+top-left corner button. Floating Timeline gains a 28-logical-pixel shared header
+with its title and the same Unbound button; title/background use `PaneHeaderDrag`.
+`colortimelineheader.h` owns only the extra host row and returns the button before
+docking. Native ruler/track-gutter input remains playhead interaction, with no
+added native docked constraints or header. The observed 76 px
 slot height is configuration-dependent, not a fixed maximum. Floating minimum
 width is 240 logical pixels for labels/clip bars; native height resizing, track
 scrolling and clip selection remain Resolve's. Native resizing/selection are
@@ -267,9 +282,16 @@ validated on Windows.
 
 Floating Clips uses native Lightbox rendering, thumbnail sizing, filtering,
 timecode ruler and overflow scrolling. Minimum host size is 360 by 240 logical
-pixels; Windows reflows on resize release. The button is centered in a reserved
-32 px leading gutter, aligned with the first thumbnail decoration row. Gutter and
-unused native header background drag; never cover clip decoration/native controls.
+pixels; Windows reflows on resize release. The floating button sits at the top-left
+gutter corner, centered horizontally in the reserved 32 px leading gutter with a
+4 px top inset. Docked placement retains its native thumbnail-view alignment.
+Gutter and unused native header background drag; never cover clip decoration/native controls.
+
+Before entering floating Clips' Lightbox mode, initialize the native Timeline in
+normal Color mode and capture its constraints after the queued native layout pass.
+Restore its prior toggle state before Lightbox entry. Hidden Timeline geometry can
+be a collapsed strip and is not a valid native height baseline. Pending setup
+cancels on docking and defers completion while its page is hidden.
 
 The shared adapter replaces empty Lightbox allocation with the main viewer and
 optional Timeline, reserving the left Gallery/LUTs/Media Pool stack and right
@@ -346,6 +368,13 @@ Color tool is selected; plain reparenting does not. While embedded, clear only t
 expanded dialog's explicit minimum size; retain descendant constraints and layout
 size hints so the controls determine the useful minimum width and height. Restore
 the dialog minimum before native return, and relax it again if return is rejected.
+On initial attachment and retained-host recall, `PaletteGeometryRestore` observes
+host layout requests for at most one second. Native layout can raise a minimum
+after the first successful resize, then lower it again. Retain the requested size
+through this transaction and reapply it when native minimums permit. No polling,
+paint delay or minimum override; input within the host, geometry gestures, hiding,
+changed window state, docking or newer recall cancels the observer. Later manual
+mode changes keep their native sizing behavior.
 For floating Warper only, `ActiveStackSize` makes `m_WidgetPanel` use the active
 mode's native size requirements. QStackedLayout otherwise includes hidden modes,
 whose bottom controls can impose a wider minimum on Chroma Warp. Temporarily use
@@ -389,8 +418,11 @@ Sizing's `cbWidgets`, Tracker's `cbBoxTrackStableSelection`, Blur/3D's `cmbSetTo
 and Color Wheels' `cbColorWidgets` selectors use that same child-frame handling.
 Floating Color Wheels ignores the wheel stack's horizontal size hint, whose native
 child minimums follow the last expanded allocation. A stable minimum is derived
-from intrinsic group hints and layout spacing; docking restores the original stack
-policy and minimum. Remaining validation is tracked in
+from the widest mode's intrinsic group hints plus the tightest native mode's
+spacing budget. Bars can retain expanded gaps/margins as well as allocated group
+minimums; those must not inflate the permanent floating minimum. Child constraints
+and native padding remain unchanged; docking restores the original stack policy
+and minimum. Remaining validation is tracked in
 `doc/issues/color-controls.md`. No lower-region reclamation yet.
 
 ### Other pane constraints

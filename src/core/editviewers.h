@@ -14,6 +14,7 @@
 #include "viewergeometryadapter.h"
 #include "panesettings.h"
 #include "panedockingguard.h"
+#include "panegeometryrestore.h"
 #include "auditionactivationbridge.h"
 
 // Whole native viewer widgets retain their layout slots while floating.
@@ -165,7 +166,7 @@ private:
         host->setParent(parent,host->windowFlags());
         Unbound::inheritPaneTaskbarIdentity(host,parent->window());
         host->setObjectName("unboundFloating_"+content->objectName()); host->setWindowTitle(descriptor->label);
-        const auto available=QGuiApplication::primaryScreen()->availableGeometry();
+        const auto available=Unbound::panePlacementWorkArea(parent);
         host->resize(content->size().expandedTo(QSize(640,400)).boundedTo(available.size()*0.7));
         auto hl=new QVBoxLayout(host); hl->setContentsMargins(0,0,0,0); hl->addWidget(content);
         pane.host=host; host->installEventFilter(this);
@@ -173,9 +174,10 @@ private:
             pane.activationBridge=new Unbound::AuditionActivationBridge(m_main,m_page,content,this,host->objectName());
         Unbound::applyPaneDarkCaption(host,parent->window());
         const auto saved=m_settings.geometry(content->objectName());
-        if(saved.isEmpty() || !host->restoreGeometry(saved))
-            host->move(available.center()-QPoint(host->width()/2,host->height()/2));
+        const bool newPlacement=saved.isEmpty() || !host->restoreGeometry(saved);
+        if(newPlacement) Unbound::centerNewPane(host,available);
         content->show(); host->show();
+        if(newPlacement) Unbound::centerNewPane(host,available);
         if(!automatic) host->activateWindow();
         for(auto b:pane.buttons) if(b) b->setFloatingState(true);
         check(m_settings.saveFloating(content->objectName(),true));

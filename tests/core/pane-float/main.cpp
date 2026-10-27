@@ -99,7 +99,11 @@ int main(int argc, char **argv)
             auto slot = new QWidget(parent); slot->setObjectName(names[i]);
             auto layout = new QVBoxLayout(slot);
             auto control = new QPushButton("Live content", slot); layout->addWidget(control);
-            if(names[i]=="timelineFrame") { control->setObjectName("m_pTimeLinePnl"); slot->setFixedHeight(76); }
+            if(names[i]=="timelineFrame") {
+                control->setObjectName("m_pTimeLinePnl"); slot->setFixedHeight(76);
+                // Model the native canvas, not a fixed-height push-button row.
+                control->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Expanding);
+            }
             auto selector = new QPushButton("Localized native label", page);
             selector->setObjectName(toggles[i]); selector->setCheckable(true); selector->setChecked(true);
             paneSlots.append(slot); layouts.append(layout); controls.append(control); selectors.append(selector);
@@ -151,7 +155,21 @@ int main(int argc, char **argv)
             check(!selectors[i]->isChecked() && paneSlots[i]->isHidden() && clicks[i] == 1,
                 "Manual undock did not collapse native slot exactly once");
             if(names[i]=="timelineFrame") {
-                check(button->parentWidget()==controls[i] && button->pos()==QPoint(6,2),"Timeline corner button did not follow content");
+                auto header=host->findChild<QWidget *>("unboundColorTimelineHeader");
+                check(header && button->parentWidget()==header && header->isVisible(),
+                    "Floating Timeline button did not move to its own header");
+                check(header->geometry().bottom()<controls[i]->geometry().top(),
+                    "Floating Timeline header covers native playhead controls");
+                check(header->findChild<QLabel *>()->text()=="Timeline", "Timeline header title missing");
+                for(const QPoint point:{QPoint(100,5),QPoint(5,50)}) {
+                    QMouseEvent press(QEvent::MouseButtonPress,point,controls[i]->mapToGlobal(point),
+                        Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+                    QApplication::sendEvent(controls[i],&press);
+                    QMouseEvent release(QEvent::MouseButtonRelease,point,controls[i]->mapToGlobal(point),
+                        Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+                    QApplication::sendEvent(controls[i],&release);
+                }
+                check(edits[i]==2,"Floating Timeline header intercepted native ruler/gutter input");
                 check(paneSlots[i]->height()==76,"Timeline decoration changed native slot height");
                 const int nativeMinimum=paneSlots[i]->minimumWidth();
                 host->resize(1,400); app.processEvents();
@@ -165,7 +183,7 @@ int main(int argc, char **argv)
             const auto key = i < 8 ? names[i] : "Color/" + names[i];
             Unbound::PaneSettings saved(settingsPath);
             check(saved.floating(key) && saved.hasToggle(key) && !saved.toggle(key), "Reclaimed state not persisted");
-            controls[i]->click(); check(edits[i] == 1, "Reclamation lost native signals");
+            controls[i]->click(); check(edits[i] == (names[i]=="timelineFrame" ? 3 : 1), "Reclamation lost native signals");
             check(decoy->isChecked() && hiddenVariant->isChecked(), "Reclamation clicked an unrelated/hidden toggle");
             if (i == 0) {
                 edit->hide(); app.processEvents();
@@ -178,6 +196,12 @@ int main(int argc, char **argv)
             app.processEvents(); app.processEvents();
             check(selectors[i]->isChecked() && paneSlots[i]->isVisible() && controls[i]->parentWidget() == paneSlots[i]
                 && controls[i]->isVisible() && paneSlots[i]->layout() == layouts[i], "Docking did not show restored content");
+            if(names[i]=="timelineFrame") {
+                check(button->parentWidget()==controls[i] && button->pos()==QPoint(6,2),
+                    "Docking did not restore the Timeline corner button");
+                check(!paneSlots[i]->findChild<QWidget *>("unboundColorTimelineHeader"),
+                    "Floating header leaked into the docked Timeline");
+            }
             check(clicks[i] == 2 && !Unbound::PaneSettings(settingsPath).floating(key)
                 && Unbound::PaneSettings(settingsPath).toggle(key), "Docking intent/toggle not persisted");
         }
@@ -441,6 +465,26 @@ int main(int argc, char **argv)
         return 0;
     }
     {
+        {
+            const QList<QRect> areas{QRect(-800,0,800,600),QRect(0,0,800,600)};
+            check(Unbound::reachablePaneGeometry(QRect(-100,40,400,300),areas)==QRect(-100,40,400,300),
+                "Reachable pane spanning adjacent monitors was changed");
+            check(Unbound::reachablePaneGeometry(QRect(-810,-10,400,300),areas)==QRect(-800,0,400,300),
+                "Partially off-screen pane did not recover its top-left controls");
+            check(Unbound::reachablePaneGeometry(QRect(740,550,400,300),areas)==QRect(400,300,400,300),
+                "Pane at bottom-right was not brought inside the work area");
+            check(Unbound::reachablePaneGeometry(QRect(-50,20,400,300),{QRect(-800,0,700,600),QRect(0,0,800,600)})
+                ==QRect(0,20,400,300),"Monitor gap was treated as usable pane space");
+            QWidget constrained;
+            const auto area=QGuiApplication::primaryScreen()->availableGeometry();
+            constrained.setMinimumWidth(area.width()+100);
+            constrained.setGeometry(area.left()-10,area.top()-10,400,200);
+            Unbound::ensureReachablePaneGeometry(&constrained);
+            check(constrained.x()==area.left() && constrained.y()==area.top()
+                && constrained.width()>=constrained.minimumWidth(),
+                "Oversized native minimum hid top-left controls or was overridden");
+            std::puts("PASS: pane reachability, adjacent monitors, gaps and oversized native minimums");
+        }
         {
             QTemporaryDir refsDir;Unbound::PaneSettings refs(refsDir.filePath("refs.json"));
             const QRect paneRect(48,72,240,480),mainRect(400,0,1000,900);

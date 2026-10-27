@@ -22,6 +22,10 @@
 #include "colorclipsadapter.h"
 #include "colorexpandguard.h"
 #include "colornativepalette.h"
+#include "colortimelineheader.h"
+#include "colorwheelsminimum.h"
+#include "palettegeometryrestore.h"
+#include "panegeometryrestore.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -57,8 +61,10 @@ public:
     std::function<void()> dockingSucceeded;
     void setSavedGeometry(const QByteArray &geometry) { if (!active()) m_savedGeometry = geometry; }
     void applySavedGeometry(const QByteArray &geometry) {
+        ++m_initialGeometryGeneration;
         m_geometryTimer->stop(); m_savedGeometry=geometry;
         if(m_host && !geometry.isEmpty()) static_cast<PaneFloatingWindow *>(m_host.data())->restoreGeometry(geometry);
+        preservePaletteGeometry(geometry);
     }
     void rememberGeometry()
     {
@@ -277,14 +283,7 @@ public:
                 // Resolve grows each wheel group's explicit minimum to its last
                 // allocated width. Use the intrinsic group hints for a stable
                 // floating minimum, rather than feeding that allocation back.
-                int minimum=0;
-                for(auto top:wheels->findChildren<QWidget *>("primaryTopHoldFrame")) {
-                    if(!top->layout()) continue;
-                    int width=top->layout()->minimumSize().width();
-                    for(auto group:top->findChildren<QWidget *>(QString(),Qt::FindDirectChildrenOnly))
-                        width-=qMax(0,group->minimumWidth()-qMax(0,group->minimumSizeHint().width()));
-                    minimum=qMax(minimum,width);
-                }
+                const int minimum=colorWheelsMinimumWidth(wheels);
                 if(minimum>0) {
                     m_wheels=wheels; m_wheelsPolicy=wheels->sizePolicy(); m_wheelsMinimum=wheels->minimumWidth();
                     auto policy=m_wheelsPolicy; policy.setHorizontalPolicy(QSizePolicy::Ignored);
@@ -334,8 +333,10 @@ public:
         // track-label gutter plus a usable clip-bar area in Qt logical pixels.
         // Constrain only our host, before geometry recall; native docking is unchanged.
         if (slot->objectName()==QLatin1String("timelineFrame")
-            && m_root->objectName()==QLatin1String("WStackPage_Color"))
+            && m_root->objectName()==QLatin1String("WStackPage_Color")) {
             host->setMinimumWidth(qMax(host->minimumWidth(),240));
+            m_timelineHeader=new ColorTimelineHeader(host,m_content,label,this);
+        }
         if(clips) {
             host->setMinimumSize(360,240);
             if(!m_clipsAdapter->start(host)) {
@@ -343,13 +344,20 @@ public:
                 return QStringLiteral("The native Lightbox controls are unavailable; Clips remains docked.");
             }
         }
-        if (!m_savedGeometry.isEmpty()) host->restoreGeometry(m_savedGeometry);
+        const auto initialArea=panePlacementWorkArea(slot);
+        const bool newPlacement=m_savedGeometry.isEmpty() || !host->restoreGeometry(m_savedGeometry);
+        if(newPlacement) centerNewPane(host,initialArea);
         applyPaneDarkCaption(host, slot->window());
         if (fadeIn) {
             m_returnFade->setTargetObject(host);
             host->setWindowOpacity(0.0);
         }
         host->show();
+        if(newPlacement) centerNewPane(host,initialArea);
+        // First-time OS placement and show-time minimum sizing need the same
+        // recovery as saved geometry. Never constrain subsequent user dragging.
+        ensureReachablePaneGeometry(host);
+        if(!newPlacement) preservePaletteGeometry(m_savedGeometry);
         if(!fadeIn && activate) host->activateWindow(); // Explicit manual undocking.
         if (preserveNativeLayout && slot->objectName()==QStringLiteral("m_pFrameNodeGraph"))
             m_nodesBounds=new NodesCanvasBounds(m_content,this);
@@ -362,6 +370,7 @@ public:
 
     QString restore()
     {
+        ++m_initialGeometryGeneration;
         m_dockingGuard.cancel();
         if (!active()) return QString();
         if (m_restoring) return QString();
@@ -377,6 +386,7 @@ public:
         static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
         rememberGeometry();
         m_restoring = true;
+        delete m_timelineHeader; m_timelineHeader=nullptr;
         stopAuditionBridge();
         restoreNativeExpand();
         const bool nativePalette=bool(m_nativePalette);
@@ -489,6 +499,19 @@ protected:
     }
 
 private:
+    void preservePaletteGeometry(const QByteArray &requested) {
+        auto host=static_cast<PaneFloatingWindow *>(m_host.data());
+        if(!host || !m_nativePalette || host->isMaximized() || host->isFullScreen()) return;
+        QRect client;
+        if(!readRectangle(qtGeometryJson(requested).value("clientRect"),client)) return;
+        const auto state=host->windowState();
+        const auto generation=++m_initialGeometryGeneration;
+        QPointer<SidebarFloatSession> session(this);
+        new PaletteGeometryRestore(host,client.size(),[session,host,state,generation] {
+            return session && session->m_host==host && generation==session->m_initialGeometryGeneration
+                && host->windowState()==state;
+        },[host,requested] { host->restoreGeometry(requested); });
+    }
     void stopAuditionBridge()
     {
         delete m_auditionHeaderDrag; m_auditionHeaderDrag = nullptr;
@@ -548,6 +571,7 @@ private:
     ColorNativePalette *m_nativePalette=nullptr;
     void clear()
     {
+        delete m_timelineHeader; m_timelineHeader=nullptr;
         delete m_nativePalette; m_nativePalette=nullptr;
         restoreNativeExpand();
         stopAuditionBridge();
@@ -572,6 +596,7 @@ private:
     QSizePolicy m_inspectorTitlePolicy;
     NodesCanvasBounds *m_nodesBounds=nullptr;
     ColorClipsAdapter *m_clipsAdapter=nullptr;
+    ColorTimelineHeader *m_timelineHeader=nullptr;
     QPointer<AuditionActivationBridge> m_auditionBridge;
     PaneHeaderDrag *m_auditionHeaderDrag = nullptr;
     QPointer<QLayout> m_layout;
@@ -594,6 +619,7 @@ private:
     QPropertyAnimation *m_returnFade = nullptr;
     QMetaObject::Connection m_destroyConnection;
     QByteArray m_savedGeometry; // Retained across restore/start for this pane.
+    unsigned m_initialGeometryGeneration=0;
     unsigned m_generation = 0;
     bool m_hiddenByPage = false;
     bool m_restoring = false;

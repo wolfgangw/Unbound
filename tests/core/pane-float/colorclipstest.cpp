@@ -176,6 +176,11 @@ void testColorClips() {
     auto timelineLayout=new QHBoxLayout(&timeline); timelineLayout->setContentsMargins(0,0,0,0);
     auto tracks=new QWidget; timelineLayout->addWidget(tracks);
     QPushButton timelineToggle(&main); timelineToggle.setObjectName("btnColorToggleTimeline"); timelineToggle.setCheckable(true);
+    // A hidden native Timeline starts without its final strip constraints.
+    timeline.setMinimumHeight(0); timeline.setMaximumHeight(QWIDGETSIZE_MAX); timeline.resize(900,30);
+    QObject::connect(&timelineToggle,&QPushButton::toggled,[&](bool on) {
+        if(on) QTimer::singleShot(0,&timeline,[&] { timeline.setFixedHeight(72); });
+    });
     QPushButton mode(&main),controls(&main);
     mode.setObjectName("btnColorToggleLightbox"); controls.setObjectName("btnColorToggleColorControls");
     mode.setCheckable(true); controls.setCheckable(true);
@@ -195,7 +200,7 @@ void testColorClips() {
     require(session.start(&slot,"Clips",&page,false,false,true,false).isEmpty(),"Clips failed to float");
     decoration.setFloating(true); settle();
     auto host=static_cast<Unbound::PaneFloatingWindow *>(session.floatingWindow());
-    require(button->y()==16,"Floating Clips button lost its decoration-row offset");
+    require(button->x()==6 && button->y()==4,"Floating Clips button is not at the top-left gutter corner");
     require(host && content->window()==host && button->window()==host,"Clips gutter did not transfer with native content");
     require(mode.isChecked() && controls.isChecked() && player.isVisible() && region.isHidden(),"Clips native mode/adapter not enabled");
     require(image.isVisible(),"Viewer descendants remained hidden after Lightbox entry");

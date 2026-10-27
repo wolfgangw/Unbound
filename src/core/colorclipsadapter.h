@@ -33,6 +33,9 @@ protected:
 class ColorClipsAdapter final : public QObject {
     QPointer<QWidget> m_page,m_root,m_player,m_region,m_clips,m_timeline,m_divider;
     QPointer<QAbstractButton> m_timelineToggle;
+    bool m_initializing=false;
+    bool m_initializeTimelineToggle=false;
+    unsigned m_startGeneration=0;
     ColorClipsToolbar *m_toolbar=nullptr;
     ColorClipsSidebars m_sidebars;
     QPointer<QWidget> m_host,m_dragTarget,m_repaintWindow;
@@ -234,26 +237,57 @@ public:
         // Capture ordinary page presentation even when undocking from Lightbox.
         // Use native handlers; never infer visibility from text or binary state.
         if(m_mode->isChecked()) m_mode->click();
+        m_initializeTimelineToggle=m_timelineToggle && m_timelineToggle->isEnabled()
+            && !m_timelineToggle->isChecked();
+        if(m_initializeTimelineToggle) m_timelineToggle->click();
+        // Exiting native Lightbox queues normal Timeline constraints. Capturing
+        // its hidden geometry synchronously can retain a collapsed strip. Let
+        // that native pass finish before entering Lightbox again.
+        m_initializing=true;
+        const auto generation=++m_startGeneration;
+        QTimer::singleShot(0,this,[this,generation] {
+            if(!m_enabled || generation!=m_startGeneration) return;
+            completeStart();
+        });
+        m_busy=false;
+        return true;
+    }
+    void completeStart() {
+        if(!m_initializing || !m_enabled) return;
+        if(!valid()) { stop(); return; }
+        if(!m_page->isVisible()) return;
+        m_busy=true;
         if(m_clips) m_clipsHidden=m_clips->isHidden();
         if(m_divider) m_dividerHidden=m_divider->isHidden();
         if(m_timeline) {
-            m_timelineHidden=m_timeline->isHidden(); m_timelineHeight=m_timeline->height();
+            m_timelineHidden=m_initializeTimelineToggle || m_timeline->isHidden();
             m_timelineMinimum=m_timeline->minimumSize(); m_timelineMaximum=m_timeline->maximumSize();
+            m_timelineHeight=qBound(m_timelineMinimum.height(),m_timeline->height(),m_timelineMaximum.height());
         }
+        if(m_initializeTimelineToggle && m_timelineToggle && m_timelineToggle->isChecked()) m_timelineToggle->click();
+        m_initializeTimelineToggle=false;
         m_sidebars.capture(m_page,m_root,this,[this] {schedule();});
         m_toolbar=new ColorClipsToolbar(this);
         if(!m_toolbar->start(m_page)) {delete m_toolbar;m_toolbar=nullptr;}
-        if(!m_mode->isChecked()) m_mode->click();
-        if(!m_controls->isChecked()) m_controls->click();
+        if(!m_suspended && !m_mode->isChecked()) m_mode->click();
+        if(!m_suspended && !m_controls->isChecked()) m_controls->click();
         m_nativeAllocation=m_region->geometry();
         m_appliedRegion=m_nativeAllocation;
-        m_busy=false;
+        m_initializing=false; m_busy=false;
         qApp->installEventFilter(this);
-        apply(); schedule(); return true;
+        apply(); schedule();
     }
     void stop() {
         finishDivider(false);
         if(!m_enabled) return;
+        ++m_startGeneration;
+        if(m_initializing) {
+            if(m_initializeTimelineToggle && m_timelineToggle && m_timelineToggle->isChecked()) m_timelineToggle->click();
+            m_initializeTimelineToggle=false;
+            m_initializing=false; m_enabled=false;
+            m_restorePending=true; restoreMode();
+            return;
+        }
         m_enabled=false;
         qApp->removeEventFilter(this);
         m_busy=true;
@@ -271,6 +305,7 @@ public:
         m_restorePending=true; restoreMode();
     }
     void suspendNativeMode(bool suspend) {
+        if(m_initializing) { m_suspended=suspend; return; }
         // Routine restoration may ask to resume while native gesture layout is
         // still pending. The gesture owns that suspension until it finishes.
         if(m_drag && !suspend) return;
@@ -282,7 +317,7 @@ public:
         if(!suspend) { apply(); schedule(); }
     }
     void apply() {
-        if(!m_enabled || m_suspended || m_busy || !valid() || !m_page->isVisible() || !m_mode->isChecked()) return;
+        if(!m_enabled || m_initializing || m_suspended || m_busy || !valid() || !m_page->isVisible() || !m_mode->isChecked()) return;
         m_busy=true;
         const auto allocation=m_nativeAllocation;
         if(!allocation.isEmpty()) {
@@ -321,7 +356,11 @@ protected:
         if(m_busy) return false;
         if(dividerEvent(object,event)) return true;
         const auto type=event->type();
-        if(object==m_page && type==QEvent::Show) { m_returning=true; schedule(); }
+        if(object==m_page && type==QEvent::Show) {
+            m_returning=true;
+            if(m_initializing) QTimer::singleShot(0,this,[this] { completeStart(); });
+            schedule();
+        }
         if(!m_enabled || m_suspended || !m_page || !m_page->isVisible()) return false;
         bool watched=m_sidebars.watches(object) || object==m_player || object==m_region || object==m_clips || object==m_timeline;
         for(auto w:m_ancestors) if(object==w) watched=true;

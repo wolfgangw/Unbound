@@ -29,6 +29,15 @@ private:
 void testColorControls() {
     using namespace Unbound;
     using LayoutTest::require;
+    {
+        QWidget host;
+        host.setMinimumSize(600,400); host.resize(600,400); host.show();
+        bool restored=false;
+        new PaletteGeometryRestore(&host,QSize(600,300),[] { return true; },[&] { restored=true; });
+        WindowInteractionEvent::notify(&host);
+        host.setMinimumHeight(200); LayoutTest::settle();
+        require(!restored,"Deferred palette recall overrode a user geometry gesture");
+    }
     QWidget page; page.setObjectName("WStackPage_Color"); page.resize(800,500);
     auto outer=new QVBoxLayout(&page);
     auto stack=new QStackedWidget; stack->setObjectName("UiSecWidgetContainer"); outer->addWidget(stack);
@@ -100,6 +109,13 @@ void testColorControls() {
             auto top=new QWidget; top->setObjectName("primaryTopHoldFrame"); wheelLayout->addWidget(top);
             auto groups=new QHBoxLayout(top);
             for(int i=0;i<4;++i) { auto group=new QPushButton("Wheel"); group->setMinimumWidth(250); groups->addWidget(group); }
+            const int compactMinimum=colorWheelsMinimumWidth(wheels);
+            auto bars=new QWidget; bars->setObjectName("primaryTopHoldFrame"); wheelLayout->addWidget(bars);
+            auto barsLayout=new QHBoxLayout(bars);
+            barsLayout->setContentsMargins(30,10,30,10); barsLayout->setSpacing(40);
+            for(int i=0;i<4;++i) { auto group=new QPushButton("Wheel"); group->setMinimumWidth(250); barsLayout->addWidget(group); }
+            require(colorWheelsMinimumWidth(wheels)==compactMinimum,
+                "Expanded Bars padding became a permanent Wheels minimum");
         }
         auto value=new QPushButton("Native tool action"); body->addWidget(value);
         int clicks=0; QObject::connect(value,&QPushButton::clicked,[&]{++clicks;});
@@ -112,9 +128,32 @@ void testColorControls() {
         const auto descriptor=PaneCatalogue::find(control.objectName);
         require(descriptor && descriptor->toggleNames().isEmpty(),"Color tool selector became a visibility toggle");
         SidebarFloatSession session;
+        if(warperModes) {
+            QWidget savedHost;
+            savedHost.setGeometry(100,100,600,300);
+            session.setSavedGeometry(savedHost.saveGeometry());
+            auto controls=warperModes->currentWidget()->layout()->itemAt(0)->widget();
+            controls->setMinimumHeight(400);
+            QTimer::singleShot(0,controls,[controls] { controls->setMinimumHeight(180); });
+        }
         require(session.start(slot,control.label,&page,false,false,descriptor->preserveNativeLayout(),false).isEmpty(),
             "Color control detach failed");
         decoration.setFloating(true); LayoutTest::settle();
+        if(warperModes) require(session.floatingWindow()->height()==300,
+            "Temporary native palette minimum replaced saved startup height");
+        if(warperModes) {
+            const auto saved=session.floatingWindow()->saveGeometry();
+            auto controls=warperModes->currentWidget()->layout()->itemAt(0)->widget();
+            session.applySavedGeometry(saved);
+            // Native recall can first succeed, then temporarily raise a minimum
+            // while the remaining native mode/layout events are delivered.
+            controls->setMinimumHeight(400);
+            QTimer::singleShot(0,controls,[controls] { controls->setMinimumHeight(180); });
+            LayoutTest::settle();
+            require(session.floatingWindow()->height()==300,
+                "Retained palette lost saved height to a later native layout pass");
+            WindowInteractionEvent::notify(session.floatingWindow());
+        }
         if(dialog) require(dialog->registered && dialog->parentWidget()==session.floatingWindow()
             && !dialog->isWindow(),"Expanded palette registration/ownership was lost");
         auto checkPaletteSizing=[&] {

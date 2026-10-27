@@ -418,20 +418,24 @@ private:
     void position()
     {
         if(m_gutterContent && button()) {
-            // Match Timeline's centered 32px gutter. In Lightbox the first
-            // thumbnail decoration sits below the native filtering/size header.
+            // Keep floating Clips at the top-left of its reserved gutter,
+            // independent of the native filtering header and thumbnail rows.
             int top=m_gutterMargins.top();
-            if(auto view=m_gutterContent->findChild<QWidget *>("frameThumbnailView"))
+            if(!m_floating) if(auto view=m_gutterContent->findChild<QWidget *>("frameThumbnailView"))
                 top=view->mapTo(m_gutterContent,QPoint(0,0)).y();
             if(m_gutterDragSurface) {
                 m_gutterDragSurface->setGeometry(m_gutterMargins.left(),0,32,m_gutterContent->height());
                 m_gutterDragSurface->raise();
             }
-            button()->move(m_gutterMargins.left()+(32-button()->width())/2,top+(m_floating?16:4));
+            button()->move(m_gutterMargins.left()+(32-button()->width())/2,top+4);
             button()->raise(); return;
         }
         // Center the 20 px control in Timeline's 32 px track-label gutter.
-        if(m_cornerOverlay && button()) { button()->move(6,2); button()->raise(); return; }
+        if(m_cornerOverlay && button()) {
+            if(button()->parentWidget()->objectName()!=QLatin1String("unboundColorTimelineHeader"))
+                button()->move(6,2);
+            button()->raise(); return;
+        }
         if(m_native || !m_pane || !button()) return;
         button()->move(qMax(m_margins.left(),m_pane->width()-m_margins.right()-22),m_margins.top()+2);
         button()->raise();
