@@ -213,7 +213,7 @@ public:
     void setFloating(bool floating)
     {
         m_floating=floating;
-        if(!floating) refresh();
+        if(!floating || (m_pane && m_pane->objectName()==QLatin1String("scopesWidget"))) refresh();
         for(auto b:m_buttons) if(b) {
             static_cast<UndockButton *>(b.data())->setFloatingState(floating);
             b->show();
@@ -292,7 +292,7 @@ private:
         const auto paneDescriptor=PaneCatalogue::find(m_pane->objectName());
         if(const auto control=PaneCatalogue::colorControl(m_pane->objectName())) {
             auto root=m_floating && button() ? button()->window() : m_pane.data();
-            if(!m_floating && ColorNativePalette::supports(m_pane))
+            if((!m_floating || m_pane->objectName()==QLatin1String("scopesWidget")) && ColorNativePalette::supports(m_pane))
                 if(auto palette=ColorNativePalette::palette(m_pane)) root=palette;
             auto add=[this](QWidget *header,QBoxLayout *row,QAbstractButton *anchor,bool mirror=false) {
                 // Retain installed rows and add only newly created native variants.
@@ -307,6 +307,14 @@ private:
                 } else b->show();
                 m_native=true;
             };
+            if(m_floating && m_pane->objectName()==QLatin1String("scopesWidget") && root->objectName()==QLatin1String("UiWaveformWindow")) {
+                auto anchor=root->findChild<QAbstractButton *>("btnWaveformViewerOptions");
+                auto header=anchor ? anchor->parentWidget() : nullptr;
+                auto row=header ? qobject_cast<QBoxLayout *>(header->layout()) : nullptr;
+                if(row && row->indexOf(anchor)>=0)add(header,row,anchor);
+                if(auto title=root->findChild<QWidget *>("titleFrame"))addHeaderDrag(title);
+                m_refreshing=false;return;
+            }
             for(auto header:root->findChildren<QWidget *>(control->header)) {
                 if(!header->parentWidget() || header->parentWidget()->objectName()!=control->headerOwner) continue;
                 auto row=qobject_cast<QBoxLayout *>(header->layout());

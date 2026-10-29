@@ -11,7 +11,7 @@ namespace Unbound {
 // Suppress only inactive page hints while retaining their content and constraints.
 class ActiveStackSize final : public QObject {
 public:
-    ActiveStackSize(QStackedWidget *stack,QObject *owner) : QObject(owner),m_stack(stack) {
+    ActiveStackSize(QStackedWidget *stack,QObject *owner,bool horizontal=true) : QObject(owner),m_stack(stack),m_horizontal(horizontal) {
         stack->installEventFilter(this);
         connect(stack,&QStackedWidget::currentChanged,this,[this] { refresh(); });
         connect(stack,&QStackedWidget::widgetRemoved,this,[this] { refresh(); });
@@ -55,7 +55,7 @@ private:
             if(entry.widget->sizePolicy()!=entry.applied) entry.original=entry.widget->sizePolicy();
             auto policy=entry.original;
             if(entry.widget!=m_stack->currentWidget()) {
-                policy.setHorizontalPolicy(QSizePolicy::Ignored);
+                if(m_horizontal) policy.setHorizontalPolicy(QSizePolicy::Ignored);
                 policy.setVerticalPolicy(QSizePolicy::Ignored);
             }
             entry.applied=policy;
@@ -75,5 +75,6 @@ private:
     QPointer<QStackedWidget> m_stack;
     QList<Page> m_pages;
     bool m_queued=false;
+    bool m_horizontal=true;
 };
 }

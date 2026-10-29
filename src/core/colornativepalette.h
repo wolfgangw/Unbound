@@ -9,6 +9,7 @@
 #include <functional>
 #include "panecatalogue.h"
 #include "activestacksize.h"
+#include "colornativescopes.h"
 #ifdef UNBOUND_PALETTE_SIZE_DIAGNOSTICS
 #include "palettesizediagnostics.h"
 #endif
@@ -24,10 +25,11 @@ public:
     std::function<void()> dockRequested;
     static bool supports(QWidget *slot) {
         return slot && (slot->objectName()==QLatin1String("curvesTab")
-            || slot->objectName()==QLatin1String("colorMapperTab"));
+            || slot->objectName()==QLatin1String("colorMapperTab") || slot->objectName()==QLatin1String("scopesWidget"));
     }
     static QWidget *palette(QWidget *slot) {
         if(!supports(slot)) return nullptr;
+        if(slot->objectName()==QLatin1String("scopesWidget"))return ColorNativeScopes::content(slot);
         const auto control=PaneCatalogue::colorControl(slot->objectName());
         if(auto content=slot->findChild<QWidget *>(control->headerOwner)) return content;
         // Already expanded natively: its dialog is owned by this tool family.
@@ -40,6 +42,11 @@ public:
         return nullptr;
     }
     QString start(QWidget *slot,QWidget *host,QWidget *page) {
+        if(slot->objectName()==QLatin1String("scopesWidget")) {
+            m_scopes=new ColorNativeScopes(this);
+            m_scopes->dockRequested=[this]{const auto request=dockRequested;if(request)request();};
+            return m_scopes->start(slot,host,page);
+        }
         m_slot=slot; m_palette=palette(slot); m_host=host; m_page=page;
         if(!m_palette) return QStringLiteral("The native Color palette is unavailable; no changes made.");
         auto dialog=m_palette->window();
@@ -66,11 +73,13 @@ public:
         return {};
     }
     bool intact() const {
+        if(m_scopes)return m_scopes->intact();
         return m_host && m_palette && m_slot
             && ((m_dialog && m_dialog->parentWidget()==m_host && m_dialog->isAncestorOf(m_palette))
                 || m_slot->isAncestorOf(m_palette));
     }
     bool stop() {
+        if(m_scopes)return m_scopes->stop();
         if(!intact()) return false;
         m_stopping=true; unwatch();
         delete m_modeSize; m_modeSize=nullptr;
@@ -147,6 +156,7 @@ private:
     QRect m_geometry;
     QSize m_minimum;
     ActiveStackSize *m_modeSize=nullptr;
+    ColorNativeScopes *m_scopes=nullptr;
     bool m_showWithoutActivating=false,m_stopping=false,m_queued=false,m_dockQueued=false;
 };
 }

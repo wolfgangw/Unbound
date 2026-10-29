@@ -9,9 +9,11 @@
 #include <QTimer>
 #include <QScreen>
 #include <QJsonArray>
+#include <QWindowStateChangeEvent>
 #include <functional>
 #include "windowplacement.h"
 #include "panegeometryrestore.h"
+#include "windowinteraction.h"
 namespace Unbound {
 class MainWindowPlacement : public QObject
 {
@@ -33,6 +35,7 @@ public:
         if (m_window) m_window->removeEventFilter(this);
         if (m_stack) disconnect(m_stack,nullptr,this,nullptr);
         m_window=window; m_stack=nullptr; m_page.clear(); m_last.clear();
+        cancelNormalRestore();
         if (!window) return;
         m_stack=window->findChild<QStackedWidget *>(QStringLiteral("widgetStack_Panel"));
         window->installEventFilter(this);
@@ -40,7 +43,7 @@ public:
         if (m_stack) connect(m_stack,&QStackedWidget::currentChanged,this,[this] {
             // Save the last outgoing placement before the incoming page's
             // layout constraints can resize the main window.
-            flush(); scheduleRefresh();
+            cancelNormalRestore(); flush(); scheduleRefresh();
         });
         refresh();
     }
@@ -63,13 +66,14 @@ public:
         if (!m_window || !m_stack || m_applying) return;
         if (!eligible()) {
             // Do not overwrite normal page placements with special-mode sizes.
-            flush(); m_page.clear(); m_last.clear(); return;
+            cancelNormalRestore(); flush(); m_page.clear(); m_last.clear(); return;
         }
         auto page=m_stack->currentWidget();
         const auto name=page ? page->objectName() : QString();
         if (!name.startsWith(QLatin1String("WStackPage_")) || !page->isVisible()) return;
         if (name == m_page) { capture(); return; }
         flush(); m_save.stop(); m_page=name; m_last.clear();
+        cancelNormalRestore();
         const auto saved=m_settings.geometry(key());
         m_applying=true;
         if (!saved.isEmpty()) {
@@ -94,7 +98,16 @@ public:
                 }
             }
         }
-        m_applying=false; capture();
+        m_applying=false;
+        // Native restoration may initially enforce a minimum calculated with
+        // the outgoing maximized frame. Retry the same placement once after
+        // the normal frame exists; never compensate with a pixel offset.
+        if(!saved.isEmpty()) {
+            auto request=QJsonDocument::fromJson(saved).object();
+            if(request.isEmpty())request=qtGeometryJson(saved);
+            if(!request.value("maximized").toBool())queueNormalRestore(saved);
+        }
+        capture();
     }
     void flush()
     {
@@ -107,13 +120,23 @@ public:
         LayoutTraceSpan trace("main_placement_reload");
         // The selected layout has already replaced the saved placement. Drop
         // the outgoing cache before entering the normal page restoration path.
-        m_save.stop(); m_page.clear(); m_last.clear(); refresh();
+        cancelNormalRestore(); m_save.stop(); m_page.clear(); m_last.clear(); refresh();
     }
 protected:
     bool eventFilter(QObject *object,QEvent *event) override
     {
         if (object!=m_window && (event->type()==QEvent::Show || event->type()==QEvent::Hide)) scheduleRefresh();
         if (object == m_window && !m_applying) {
+            if(event->type()==WindowInteractionEvent::eventType()) cancelNormalRestore();
+            else if(event->type()==QEvent::MouseButtonPress || event->type()==QEvent::KeyPress) {
+                ++m_restoreGeneration; m_restoreWork.clear();
+            }
+            if(event->type()==QEvent::WindowStateChange) {
+                const auto old=static_cast<QWindowStateChangeEvent *>(event)->oldState();
+                if(m_window->isMaximized() && eligible()) m_maximizedPlacement=savePlacement();
+                else if((old&Qt::WindowMaximized) && m_window->windowState()==Qt::WindowNoState
+                    && !m_maximizedPlacement.isEmpty()) queueNormalRestore(m_maximizedPlacement);
+            }
             if (event->type()==QEvent::Move || event->type()==QEvent::Resize) capture();
             if (event->type()==QEvent::WindowStateChange || event->type()==QEvent::Show)
                 scheduleRefresh();
@@ -121,6 +144,32 @@ protected:
         return QObject::eventFilter(object,event);
     }
 private:
+    void cancelNormalRestore() {
+        ++m_restoreGeneration; m_maximizedPlacement.clear(); m_restoreWork.clear();
+    }
+    void queueNormalRestore(const QByteArray &saved) {
+        auto document=QJsonDocument::fromJson(saved).object();
+        if(document.value("format").toString()!=QLatin1String("unbound-main-placement-1"))
+            document=qtGeometryJson(saved);
+        if(document.isEmpty())return;
+        if(document.value("maximized").toBool() && document.contains("normalClientRect"))
+            document.insert("clientRect",document.value("normalClientRect"));
+        document.insert("maximized",false);
+        const auto generation=++m_restoreGeneration;
+        const auto page=m_page;
+        m_restoreWork.set("main_normal_placement",m_window);
+        QTimer::singleShot(0,this,[this,document,generation,page] {
+            if(generation!=m_restoreGeneration)return;
+            m_restoreWork.clear();
+            if(!eligible() || m_window->windowState()!=Qt::WindowNoState || page!=m_page
+                || !m_stack || !m_stack->currentWidget() || m_stack->currentWidget()->objectName()!=page)return;
+            m_applying=true;
+            // The native backend owns frame coordinates and minimum handling.
+            // Unsupported/native-desktop mismatches keep the earlier fallback.
+            Platform::restoreWindowPlacement(m_window,document,screenSignature());
+            m_applying=false; capture();
+        });
+    }
     static QJsonArray screenSignature()
     {
         QJsonArray result;
@@ -149,6 +198,10 @@ private:
         if (m_applying || m_page.isEmpty() || !eligible() || !m_stack || !m_stack->currentWidget()
             || m_stack->currentWidget()->objectName()!=m_page) return;
         const auto placement=savePlacement();
+        if(m_window->isMaximized()) {
+            const auto native=QJsonDocument::fromJson(placement).object();
+            if(native.isEmpty() || native.value("maximized").toBool()) m_maximizedPlacement=placement;
+        }
         if (placement != m_last) { m_last=placement; m_save.start(); }
     }
     void scheduleRefresh()
@@ -164,9 +217,12 @@ private:
     QList<QPointer<QWidget>> m_dualScreenMarkers;
     QString m_page;
     QByteArray m_last;
+    QByteArray m_maximizedPlacement;
+    quint64 m_restoreGeneration=0;
     QTimer m_save;
     bool m_applying=false, m_pending=false;
     LayoutTraceWork m_work;
+    LayoutTraceWork m_restoreWork;
 };
 }
 #endif

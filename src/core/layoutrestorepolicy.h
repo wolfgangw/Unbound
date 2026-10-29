@@ -4,7 +4,6 @@
 #include <QWidget>
 #include "colorplaybackpause.h"
 #include "nativetogglestate.h"
-#include "palettegeometryrestore.h"
 
 namespace Unbound {
 // Shared home for native restoration exceptions. Presentation/backends know
@@ -37,16 +36,8 @@ struct LayoutRestorePolicy {
         // Expanded palettes briefly remain top-level before their native
         // registration is retained inside the regular floating host.
         return page==QLatin1String("WStackPage_Color") && dialog
-            && dialog->objectName()==QLatin1String("UiFloatingPaletteWidgetDialog");
-    }
-    static void preserveGeometry(QWidget *host,const QString &page,const QString &pane,
-        QSize requested,std::function<bool()> valid,std::function<void()> restore) {
-        // These palettes can lower their minimum in later native layout passes.
-        // A persistent minimum (e.g. Mixer channel strips) must not be overridden
-        // or treated as a clean, exact restoration of a smaller saved rectangle.
-        if(!host || page!=QLatin1String("WStackPage_Color")
-            || (pane!=QLatin1String("curvesTab") && pane!=QLatin1String("colorMapperTab")))return;
-        new PaletteGeometryRestore(host,requested,std::move(valid),std::move(restore));
+            && (dialog->objectName()==QLatin1String("UiFloatingPaletteWidgetDialog")
+                || dialog->objectName()==QLatin1String("UiWaveformWindow"));
     }
 };
 }

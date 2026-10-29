@@ -4,9 +4,44 @@
 #include "layoutadapter.h"
 #include <QStackedWidget>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <cstdio>
 
 namespace {
+class ScopeResizeDialog : public QDialog {
+public:
+    explicit ScopeResizeDialog(QWidget *parent):QDialog(parent,Qt::Widget) {
+        setParent(parent,Qt::Widget);
+        border=new QWidget(this);border->setObjectName("frameBorder");
+    }
+    QWidget *border;
+    int refreshes=0;
+    bool dragging=false,wide=false;
+protected:
+    void resizeEvent(QResizeEvent *event) override { QDialog::resizeEvent(event);border->setGeometry(rect()); }
+    void mousePressEvent(QMouseEvent *) override { dragging=true; }
+    void mouseMoveEvent(QMouseEvent *) override {
+        if(!dragging)return;
+        ++refreshes;wide=width()>=800;resize(width(),height()+200);setCursor(Qt::SizeFDiagCursor);
+    }
+    void mouseReleaseEvent(QMouseEvent *) override { dragging=false; }
+};
+class InputObserver : public QObject {
+public:
+    int presses=0;
+    bool eventFilter(QObject *,QEvent *event) override {
+        if(event->type()==QEvent::MouseButtonPress)++presses;
+        return false;
+    }
+};
+class ResponsiveMain : public QWidget {
+public:
+    std::function<void()> resizeContent;
+    void resizeEvent(QResizeEvent *event) override {
+        QWidget::resizeEvent(event);
+        if(resizeContent) resizeContent();
+    }
+};
 class NativePaletteDialog : public QDialog {
 public:
     NativePaletteDialog(QWidget *scope,QWidget *slot,QWidget *palette)
@@ -30,10 +65,97 @@ void testColorControls() {
     using namespace Unbound;
     using LayoutTest::require;
     {
+        QWidget host;auto layout=new QVBoxLayout(&host);layout->setContentsMargins(0,0,0,0);
+        ScopeResizeDialog dialog(&host);layout->addWidget(&dialog);host.resize(600,360);host.show();LayoutTest::settle();
+        InputObserver input;qApp->installEventFilter(&input);
+        auto refresh=new ColorScopesLayoutRefresh(&dialog,&host,&host);LayoutTest::settle();
+        require(dialog.refreshes==1 && !dialog.wide && !dialog.dragging && input.presses==0,
+            "Scopes refresh escaped into application input or failed to finish native notification");
+        require(host.size()==QSize(600,360) && dialog.size()==host.size() && !dialog.testAttribute(Qt::WA_SetCursor),
+            "Scopes refresh leaked native aspect-ratio sizing or cursor state");
+        const QPoint corner=dialog.rect().bottomRight()-QPoint(2,2),global=dialog.mapToGlobal(corner);
+        QMouseEvent innerPress(QEvent::MouseButtonPress,corner,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+        QMouseEvent innerMove(QEvent::MouseMove,corner,global,Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
+        QMouseEvent innerRelease(QEvent::MouseButtonRelease,corner,global,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+        QApplication::sendEvent(&dialog,&innerPress);QApplication::sendEvent(&dialog,&innerMove);
+        QApplication::sendEvent(&dialog,&innerRelease);LayoutTest::settle();
+        require(dialog.refreshes==1 && !dialog.dragging && dialog.size()==host.size(),
+            "Embedded native Scopes accepted an independent inner-window resize gesture");
+        for(int width=900;width<910;++width)host.resize(width,400);
+        dialog.setCursor(Qt::SizeFDiagCursor); // Native corner hover before deferred refresh.
+        LayoutTest::settle();
+        require(dialog.refreshes==2 && dialog.wide && dialog.size()==QSize(909,400),
+            "Scopes resize refresh failed to coalesce or preserve the final allocation");
+        require(!dialog.testAttribute(Qt::WA_SetCursor) && dialog.cursor().shape()==Qt::ArrowCursor,
+            "Scopes refresh preserved the temporary corner-resize cursor");
+        dialog.setCursor(Qt::PointingHandCursor);dialog.border->setCursor(Qt::CrossCursor);
+        dialog.setCursor(Qt::SizeFDiagCursor);host.resize(910,400);LayoutTest::settle();
+        require(dialog.cursor().shape()==Qt::PointingHandCursor && dialog.border->cursor().shape()==Qt::CrossCursor,
+            "Scopes cursor cleanup discarded a newer non-resize native cursor");
+        dialog.unsetCursor();dialog.border->unsetCursor();
+        host.resize(650,350);host.hide();LayoutTest::settle();
+        require(dialog.refreshes==3,"Hidden Scopes received a pending native gesture");
+        host.show();LayoutTest::settle();
+        require(dialog.refreshes==4 && !dialog.wide && dialog.size()==QSize(650,350),
+            "Scopes page return did not refresh native view availability");
+        host.resize(700,370);delete refresh;LayoutTest::settle();
+        require(dialog.refreshes==4,"Scopes refresh survived adapter disposal");
+        qApp->removeEventFilter(&input);
+    }
+    {
+        ResponsiveMain main; main.resize(800,500); main.show();
+        QWidget host; auto layout=new QVBoxLayout(&host);layout->setContentsMargins(0,0,0,0);
+        auto controls=new QWidget;controls->setMinimumSize(300,180);layout->addWidget(controls);
+        host.resize(600,300);host.show();LayoutTest::settle();
+        PaneMainResizeGeometry guard(&host,&main,[&](const QByteArray &bytes){host.restoreGeometry(bytes);});
+        main.resizeContent=[&] {controls->setMinimumHeight(main.height()>600?400:180);};
+        main.resize(1000,700);LayoutTest::settle();
+        require(host.height()==400,"Main resize protection overrode a real control minimum");
+        for(int width=1001;width<1020;++width) main.resize(width,700);
+        require(host.findChildren<QObject *>("unboundGeometryTransaction",Qt::FindDirectChildrenOnly).size()==1,
+            "Live main resizing accumulated geometry observers");
+        // Exercise observer expiry in the shared run. The native run exercises
+        // reuse instead; don't repeat a wall-clock wait in its input time budget.
+        if(QGuiApplication::platformName()==QLatin1String("offscreen")) {
+            QEventLoop loop;QTimer::singleShot(1100,&loop,&QEventLoop::quit);loop.exec();
+        }
+        main.resize(800,500);LayoutTest::settle();
+        require(host.size()==QSize(600,300),"Main resize permanently replaced the floating size intention");
+        WindowInteractionEvent::notify(&host);host.resize(650,350);
+        main.resize(1000,700);LayoutTest::settle();main.resize(800,500);LayoutTest::settle();
+        require(host.size()==QSize(650,350),"Main resize undid a newer manual floating resize");
+        host.resize(620,320);guard.reset(host.saveGeometry());
+        main.resize(1000,700);LayoutTest::settle();main.resize(800,500);LayoutTest::settle();
+        require(host.size()==QSize(620,320),"Main resize retained geometry from before explicit recall");
+        // User interaction must also invalidate an already queued correction.
+        main.resize(1000,700);LayoutTest::settle();
+        main.resize(800,500);layout->activate();WindowInteractionEvent::notify(&host);host.resize(640,370);
+        LayoutTest::settle();
+        require(host.size()==QSize(640,370),"Queued main resize correction survived user interaction");
+        host.hide();main.resize(1000,700);LayoutTest::settle();
+        require(guard.intendedGeometry({}).isEmpty(),"Inactive pane acquired an unrelated main resize intention");
+    }
+    {
+        QWidget host; host.setMinimumSize(600,400); host.resize(600,400); host.show();
+        bool stale=false;
+        new PaneGeometryTransaction(&host,QSize(600,300),[] {return true;},[&] {stale=true;});
+        new PaneGeometryTransaction(&host,QSize(600,320),[] {return true;},[&] {host.resize(600,320);});
+        LayoutTest::settle();
+        require(!stale && host.height()==400,"Restoration overrode a genuine native minimum");
+#ifdef UNBOUND_LAYOUT_TRACE
+        for(auto work:LayoutTraceWork::registry())
+            require(work->scope!=&host || !work->pending,"Idle constrained restore blocked transition readiness");
+#endif
+        host.setMinimumHeight(200);
+        QCoreApplication::postEvent(&host,new QEvent(QEvent::LayoutRequest));
+        LayoutTest::settle();
+        require(!stale && host.height()==320,"Superseded geometry request survived its replacement");
+    }
+    {
         QWidget host;
         host.setMinimumSize(600,400); host.resize(600,400); host.show();
         bool restored=false;
-        new PaletteGeometryRestore(&host,QSize(600,300),[] { return true; },[&] { restored=true; });
+        new PaneGeometryTransaction(&host,QSize(600,300),[] { return true; },[&] { restored=true; });
         WindowInteractionEvent::notify(&host);
         host.setMinimumHeight(200); LayoutTest::settle();
         require(!restored,"Deferred palette recall overrode a user geometry gesture");
@@ -43,7 +165,7 @@ void testColorControls() {
         auto layout=new QVBoxLayout(&host); layout->setContentsMargins(0,0,0,0);
         auto controls=new QWidget; controls->setMinimumSize(300,180);layout->addWidget(controls);
         host.resize(600,300);host.show();LayoutTest::settle();
-        new PaletteGeometryRestore(&host,QSize(600,300),[] {return true;},[&] {host.resize(600,300);});
+        new PaneGeometryTransaction(&host,QSize(600,300),[] {return true;},[&] {host.resize(600,300);});
         // Other panes are still initializing. The final native allocation can
         // raise and then lower this palette's minimum after its first second.
         QTimer::singleShot(600,&host,[&] {QCoreApplication::postEvent(&host,new QEvent(QEvent::LayoutRequest));});
@@ -52,12 +174,82 @@ void testColorControls() {
         QEventLoop loop;QTimer::singleShot(1350,&loop,&QEventLoop::quit);loop.exec();
         require(host.size()==QSize(600,300),"Ongoing native layout outlived palette geometry restoration");
     }
+    {
+        QWidget host; auto layout=new QVBoxLayout(&host);
+        auto modes=new QStackedWidget; layout->addWidget(modes);
+        for(auto size:{QSize(600,270),QSize(700,339)}) {
+            auto mode=new QWidget; auto body=new QVBoxLayout(mode);
+            auto child=new QWidget; child->setMinimumSize(size);body->addWidget(child);
+            modes->addWidget(mode);
+        }
+        modes->setCurrentIndex(0);host.show();LayoutTest::settle();
+        const auto original=modes->widget(1)->sizePolicy();
+        const auto before=modes->minimumSizeHint();
+        {
+            ActiveStackSize active(modes,&host,false);LayoutTest::settle();
+            require(modes->minimumSizeHint().width()==before.width(),"Active-height sizing changed useful width budget");
+            require(modes->minimumSizeHint().height()<before.height(),"Hidden mode still imposed minimum height");
+            modes->setCurrentIndex(1);LayoutTest::settle();
+            require(modes->minimumSizeHint().height()==before.height(),"Selected larger mode lost native minimum");
+        }
+        require(modes->widget(1)->sizePolicy()==original,"Mode sizing failed to restore native policy");
+    }
     QWidget page; page.setObjectName("WStackPage_Color"); page.resize(800,500);
     auto outer=new QVBoxLayout(&page);
     auto stack=new QStackedWidget; stack->setObjectName("UiSecWidgetContainer"); outer->addWidget(stack);
     auto other=new QWidget; stack->addWidget(other);
     page.show(); LayoutTest::settle();
+    {
+        auto slot=new QWidget;slot->setObjectName("scopesWidget");stack->addWidget(slot);
+        auto native=new QVBoxLayout(slot);auto item=new QWidget;item->setObjectName("UiWaveformViewerItem");native->addWidget(item);
+        auto itemLayout=new QVBoxLayout(item);auto header=new QWidget;header->setObjectName("headerFrame");itemLayout->addWidget(header);
+        auto row=new QHBoxLayout(header);auto expand=new QPushButton("Expand");expand->setObjectName("btnUndock");row->addWidget(expand);
+        auto options=new QPushButton("Options");options->setObjectName("btnWaveformViewerItemOptions");row->addWidget(options);
+        QDialog dialog(&page);dialog.setObjectName("UiWaveformWindow");dialog.setMinimumSize(900,500);
+        auto layout=new QVBoxLayout(&dialog);auto title=new QWidget;title->setObjectName("titleFrame");layout->addWidget(title);
+        auto titleRow=new QHBoxLayout(title);auto hide=new QPushButton("Close");hide->setObjectName("btnHide");titleRow->addWidget(hide);
+        auto nativeOptions=new QPushButton("Options");nativeOptions->setObjectName("btnWaveformViewerOptions");titleRow->addWidget(nativeOptions);
+        auto renderer=new QWidget;renderer->setMinimumSize(300,200);layout->addWidget(renderer);
+        bool registered=false;
+        QObject::connect(expand,&QPushButton::clicked,&dialog,[&]{registered=true;dialog.show();stack->setCurrentWidget(other);});
+        QObject::connect(hide,&QPushButton::clicked,&dialog,[&]{registered=false;dialog.hide();stack->setCurrentWidget(slot);});
+        stack->setCurrentWidget(slot);LayoutTest::settle();
+        SidebarFloatSession session;
+        PaneDecoration decoration(slot,&page,[&]{session.dock();},{});
+        require(session.start(slot,"Scopes",&page,false,false,true,false).isEmpty(),"Native Scopes embedding failed");
+        decoration.setFloating(true);LayoutTest::settle();
+        auto host=session.floatingWindow();
+        require(registered && dialog.parentWidget()==host && !dialog.isWindow(),"Native Scopes registration or embedded ownership lost");
+        require(item->parentWidget()==slot && native->count()==1,"Docked Scopes content was transferred or replaced");
+        require(!expand->isEnabled(),"Docked Scopes Expand can steal the floating dialog");
+        require(dialog.minimumSize().isEmpty() && host->minimumWidth()>=300,"Native Scopes minimum was not delegated to children");
+        auto buttons=title->findChildren<QToolButton *>("resolvePaneUndockButton");
+        require(buttons.size()==1 && buttons.first()->isChecked(),"Native Scopes header lacks the active Unbound button");
+        stack->setCurrentWidget(other);LayoutTest::settle();
+        require(registered && renderer->isVisible(),"Changing native tool stopped independent Scopes");
+        page.hide();LayoutTest::settle();page.show();LayoutTest::settle();
+        require(session.active() && registered && host->isVisible(),"Page hiding docked native Scopes");
+        hide->click();LayoutTest::settle();
+        require(!session.active() && !registered && dialog.parentWidget()==&page && dialog.minimumSize()==QSize(900,500),"Native Scopes close failed to return ownership and constraints");
+        require(expand->isEnabled(),"Docked Scopes Expand was not restored");
+        decoration.setFloating(false);
+        // Take over a window already opened through Resolve's own action.
+        expand->click();LayoutTest::settle();
+        require(session.start(slot,"Scopes",&page,false,false,true,false).isEmpty(),"Already expanded Scopes could not attach");
+        hide->setEnabled(false);
+        require(!session.dock().isEmpty() && session.active() && registered && native->count()==1,
+            "Unavailable native Scopes return lost the host or changed the docked layout");
+        hide->setEnabled(true);
+        QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);
+        QApplication::sendEvent(&dialog,&escape);LayoutTest::settle();
+        require(!session.active() && !registered,"Repeated Scopes docking left a native renderer registered");
+        require(session.start(slot,"Scopes",&page,false,false,true,false).isEmpty(),"Repeated Scopes attachment failed");
+        dialog.close();LayoutTest::settle();
+        require(!session.active() && !registered,"Native Scopes Close did not dock through the session");
+        stack->removeWidget(slot);slot->hide();slot->deleteLater();
+    }
     for(const auto &control:PaneCatalogue::colorControls()) {
+        if(control.objectName=="scopesWidget")continue; // Separate native dialog lifecycle above.
         auto slot=new QWidget; slot->setObjectName(control.objectName); stack->addWidget(slot);
         auto native=new QVBoxLayout(slot);
         auto content=new QWidget; auto body=new QVBoxLayout(content);
@@ -237,7 +429,7 @@ void testColorControls() {
             require(host->width()<1600,"Color Wheels cannot shrink after expansion");
         }
         QPointer<QPushButton> lateExpand;
-        if(control.objectName=="scopesWidget") {
+        if(control.objectName=="colorMatchTab") {
             auto lateOwner=new QWidget(content); lateOwner->setObjectName(control.headerOwner); body->addWidget(lateOwner);
             auto lateLayout=new QVBoxLayout(lateOwner);
             auto lateHeader=new QWidget; lateHeader->setObjectName(control.header); lateLayout->addWidget(lateHeader);
@@ -245,13 +437,13 @@ void testColorControls() {
             auto menu=new QToolButton; menu->setObjectName(control.anchor); lateRow->addWidget(menu);
             lateExpand=new QPushButton("Expand"); lateExpand->setObjectName("btnUndock"); lateRow->addWidget(lateExpand);
             LayoutTest::settle();
-            require(!lateExpand->isEnabled(),"Late Scopes Expand escaped guard");
+            require(!lateExpand->isEnabled(),"Late header Expand escaped guard");
             lateExpand->setEnabled(true);
-            require(!lateExpand->isEnabled(),"Native Scopes update re-enabled Expand");
+            require(!lateExpand->isEnabled(),"Native update re-enabled late Expand");
             decoration.refreshNativeHeader(); decoration.refreshNativeHeader();
             auto buttons=lateHeader->findChildren<QToolButton *>("resolvePaneUndockButton");
             require(buttons.size()==1 && lateRow->indexOf(buttons.first())==lateRow->indexOf(menu)-1,
-                "Late Scopes header missing or duplicated button");
+                "Late header missing or duplicated button");
         }
         expand->setEnabled(true);
         require(!expand->isEnabled(),"Native update re-enabled floating Expand");
@@ -262,9 +454,11 @@ void testColorControls() {
         value->click(); require(clicks==1,"Native tool connection lost");
         page.hide(); LayoutTest::settle(); require(!session.floatingWindow()->isVisible(),"Tool stayed visible on another page");
         page.show(); LayoutTest::settle(); require(session.floatingWindow()->isVisible(),"Tool failed page return");
-        if(dialog) {
+        {
             auto host=session.floatingWindow();
-            auto controls=warperModes ? warperModes->currentWidget()->layout()->itemAt(0)->widget() : content;
+            // Use transferred content, including tools whose native outer
+            // container intentionally remains docked (Key/Sizing/whole layouts).
+            QWidget *controls=dialog ? (warperModes ? warperModes->currentWidget()->layout()->itemAt(0)->widget() : content) : value;
             const int nativeMinimum=controls->minimumHeight();
             // Page return is not layout recall: preserve the most recent working
             // size, including manual changes never saved to a layout snapshot.
@@ -275,6 +469,8 @@ void testColorControls() {
                 page.hide(); LayoutTest::settle();
                 page.show(); LayoutTest::settle();
                 controls->setMinimumHeight(450); LayoutTest::settle();
+                if(host->height()<=working.height()) std::fprintf(stderr,"Geometry fixture %s: working=%d grown=%d minimum=%d hint=%d\n",
+                    control.objectName.toUtf8().constData(),working.height(),host->height(),host->minimumHeight(),host->minimumSizeHint().height());
                 require(host->height()>working.height(),"Page-return fixture did not grow the native palette");
                 controls->setMinimumHeight(nativeMinimum); LayoutTest::settle();
                 require(host->geometry()==working,"Page return retained a temporary native palette size");
@@ -296,7 +492,7 @@ void testColorControls() {
             require(warperModes->widget(i)->sizePolicy()==warperPolicies[i],"Docking failed to restore Warper mode policies");
         require(!session.active() && slot->layout()==native && content->parentWidget()==slot,
             "Native Color layout was not restored");
-        if(lateExpand) require(lateExpand->isEnabled(),"Late Scopes Expand was not restored on docking");
+        if(lateExpand) require(lateExpand->isEnabled(),"Late Expand was not restored on docking");
         if(wheels) require(wheels->sizePolicy()==originalPolicy && wheels->minimumWidth()==0,"Wheel native sizing policy not restored");
         if(key) require(content->layout()==body,"Retained tool original content layout was not restored");
         require(expand->isEnabled() && stack->currentWidget()==other,"Dock changed native stack selection or failed to restore Expand");

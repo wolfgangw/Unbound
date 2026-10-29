@@ -15,6 +15,8 @@
 #include "panesettings.h"
 #include "panedockingguard.h"
 #include "panegeometryrestore.h"
+#include "panegeometrytransaction.h"
+#include "panemainresizegeometry.h"
 #include "auditionactivationbridge.h"
 #include "layouttracediagnostics.h"
 
@@ -26,11 +28,13 @@ class EditViewers : public QObject
         QPointer<QWidget> content, parent, placeholder;
         QPointer<QBoxLayout> originalLayout;
         QPointer<Unbound::PaneFloatingWindow> host;
+        QPointer<Unbound::PaneMainResizeGeometry> mainResizeGeometry;
         QPointer<Unbound::AuditionActivationBridge> activationBridge;
         QList<QPointer<Unbound::UndockButton>> buttons;
         int stretch=0;
         Qt::Alignment alignment;
         bool hidden=false;
+        QByteArray returningGeometry;
         Unbound::PaneDockingGuard *dockingGuard=nullptr;
     };
 public:
@@ -80,7 +84,11 @@ public:
         for(auto pane:{&m_program,&m_source}) if(pane->host && pane->content) {
             pane->host->setProperty("unboundKeepAtop",m_settings.keepAtop(pane->content->objectName()));
             const auto geometry=m_settings.geometry(pane->content->objectName());
-            if(!geometry.isEmpty()) pane->host->restoreGeometry(geometry);
+            if(!geometry.isEmpty()) {
+                if(pane->mainResizeGeometry) pane->mainResizeGeometry->reset(geometry);
+                pane->host->restoreGeometry(geometry);
+                preserveGeometry(*pane,geometry);
+            }
         }
         m_restoreProgram=m_program.content && m_settings.floating(m_program.content->objectName()) && !m_program.host;
         m_restoreSource=m_source.content && m_settings.floating(m_source.content->objectName()) && !m_source.host;
@@ -96,7 +104,12 @@ protected:
             (event->type()==QEvent::Move || event->type()==QEvent::Resize || event->type()==QEvent::WindowStateChange))
             m_saveTimer.start();
         if(object==m_page && (event->type()==QEvent::Hide || event->type()==QEvent::Show))
-            for(auto pane:{&m_program,&m_source}) if(pane->host) pane->host->setVisible(event->type()==QEvent::Show);
+            for(auto pane:{&m_program,&m_source}) if(pane->host) {
+                if(event->type()==QEvent::Hide) pane->returningGeometry=pane->host->saveGeometry();
+                pane->host->setVisible(event->type()==QEvent::Show);
+                if(event->type()==QEvent::Show) preserveGeometry(*pane,pane->mainResizeGeometry
+                    ?pane->mainResizeGeometry->intendedGeometry(pane->returningGeometry):pane->returningGeometry);
+            }
         if(object==m_program.content && m_program.host && !m_showingProgram) {
             // Single Viewer Mode swaps the native Program/Source widgets,
             // including on Media Pool hover. That mutual exclusion applies to
@@ -182,11 +195,27 @@ private:
         if(newPlacement) Unbound::centerNewPane(host,available);
         content->show(); host->show();
         if(newPlacement) Unbound::centerNewPane(host,available);
+        else preserveGeometry(pane,saved);
+        pane.mainResizeGeometry=new Unbound::PaneMainResizeGeometry(host,m_main,[host](const QByteArray &geometry) {
+            host->restoreGeometry(geometry);
+        });
+        if(!newPlacement) pane.mainResizeGeometry->reset(saved);
         if(!automatic) host->activateWindow();
         for(auto b:pane.buttons) if(b) b->setFloatingState(true);
         check(m_settings.saveFloating(content->objectName(),true));
         remember(pane);
         queueReclaim();
+    }
+    void preserveGeometry(Pane &pane,const QByteArray &geometry)
+    {
+        auto host=pane.host;
+        if(!host || host->isMaximized() || host->isFullScreen()) return;
+        QRect client;
+        if(!Unbound::readRectangle(Unbound::qtGeometryJson(geometry).value("clientRect"),client)) return;
+        const auto state=host->windowState();
+        new Unbound::PaneGeometryTransaction(host,client.size(),[host,state] {
+            return host && host->windowState()==state;
+        },[host,geometry] {if(host) host->restoreGeometry(geometry);});
     }
     void restoreArea()
     {
@@ -205,6 +234,7 @@ private:
         remember(pane);
         restoreArea();
         auto host=pane.host;
+        delete pane.mainResizeGeometry; pane.mainResizeGeometry=nullptr;
         if(pane.content && pane.originalLayout && pane.placeholder) {
             host->layout()->removeWidget(pane.content);
             auto item=pane.originalLayout->replaceWidget(pane.placeholder,pane.content,Qt::FindDirectChildrenOnly);

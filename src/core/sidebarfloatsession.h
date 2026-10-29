@@ -25,8 +25,11 @@
 #include "colornativepalette.h"
 #include "colortimelineheader.h"
 #include "colorwheelsminimum.h"
+#include "activestacksize.h"
 #include "layoutrestorepolicy.h"
 #include "panegeometryrestore.h"
+#include "panegeometrytransaction.h"
+#include "panemainresizegeometry.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -67,6 +70,7 @@ public:
     }
     void applySavedGeometry(const QByteArray &geometry) {
         ++m_initialGeometryGeneration;
+        if(m_mainResizeGeometry) m_mainResizeGeometry->reset(geometry);
         m_geometryTimer->stop(); m_savedGeometry=geometry;
         if(m_host && !geometry.isEmpty()) static_cast<PaneFloatingWindow *>(m_host.data())->restoreGeometry(geometry);
         preserveRestoredGeometry(geometry);
@@ -216,11 +220,13 @@ public:
             const auto error=m_nativePalette->start(slot,host,m_root);
             if(!error.isEmpty()) { delete host; clear(); return error; }
             m_nativePalette->dockRequested=[this] { if(active()) dock(); };
-            auto placeholder=new QLabel(QStringLiteral("%1 is floating.").arg(label),slot);
-            placeholder->setObjectName(QStringLiteral("unboundSidebarPlaceholder"));
-            placeholder->setAlignment(Qt::AlignCenter);
-            m_placeholder=placeholder;
-            layout->addWidget(placeholder); placeholder->show();
+            if(slot->objectName()!=QLatin1String("scopesWidget")) {
+                auto placeholder=new QLabel(QStringLiteral("%1 is floating.").arg(label),slot);
+                placeholder->setObjectName(QStringLiteral("unboundSidebarPlaceholder"));
+                placeholder->setAlignment(Qt::AlignCenter);
+                m_placeholder=placeholder;
+                layout->addWidget(placeholder); placeholder->show();
+            }
         } else if (preserveNativeLayout) {
             // Retain Resolve's native layout during visibility/selector changes.
             // Move only its sole content widget and preserve its layout slot.
@@ -289,6 +295,12 @@ public:
                 host->layout()->activate();
             }
         }
+        // Native mode stacks budget hidden tools too. Their heights must not
+        // constrain a floating control's selected mode. Keep the common width
+        // budget; useful native minimum widths remain stable between modes.
+        if(!m_nativePalette && PaneCatalogue::colorControl(slot->objectName()))
+            for(auto stack:host->findChildren<QStackedWidget *>("m_WidgetPanel"))
+                m_modeSizes.append(new ActiveStackSize(stack,this,false));
         if(slot->objectName()==QLatin1String("colorWheelsTab")) {
             if(auto wheels=host->findChild<QWidget *>("colorWheelsStackedWidget")) {
                 // Resolve grows each wheel group's explicit minimum to its last
@@ -372,6 +384,10 @@ public:
         // recovery as saved geometry. Never constrain subsequent user dragging.
         ensureReachablePaneGeometry(host);
         if(!newPlacement) preserveRestoredGeometry(m_savedGeometry);
+        m_mainResizeGeometry=new PaneMainResizeGeometry(host,m_root->window(),[host](const QByteArray &geometry) {
+            host->restoreGeometry(geometry);
+        });
+        if(!newPlacement) m_mainResizeGeometry->reset(m_savedGeometry);
         if(!fadeIn && activate) host->activateWindow(); // Explicit manual undocking.
         if (preserveNativeLayout && slot->objectName()==QStringLiteral("m_pFrameNodeGraph"))
             m_nodesBounds=new NodesCanvasBounds(m_content,this);
@@ -395,7 +411,7 @@ public:
                 && m_host->layout() == m_hostLayout && m_content->parentWidget() == m_host)
             : (m_slot && m_layoutSlot && m_layout && m_placeholderLayout && m_layoutSlot->layout() == m_placeholderLayout
                 && m_host->layout() == m_layout);
-        if (!layoutIntact || !m_placeholder)
+        if (!layoutIntact || (!m_nativePalette && !m_placeholder))
             return QStringLiteral("Resolve changed this pane's layout. Restart Resolve to reset the experiment.");
         if(m_clipsAdapter)m_clipsAdapter->prepareModeChange();
         static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
@@ -408,10 +424,12 @@ public:
         if(nativePalette) {
             delete m_placeholder.data();
             if(!m_nativePalette->stop()) {
-                auto placeholder=new QLabel(QStringLiteral("%1 is floating.").arg(m_host->windowTitle()),m_slot);
-                placeholder->setObjectName(QStringLiteral("unboundSidebarPlaceholder"));
-                placeholder->setAlignment(Qt::AlignCenter);
-                m_placeholder=placeholder; m_layout->addWidget(placeholder); placeholder->show();
+                if(m_slot->objectName()!=QLatin1String("scopesWidget")) {
+                    auto placeholder=new QLabel(QStringLiteral("%1 is floating.").arg(m_host->windowTitle()),m_slot);
+                    placeholder->setObjectName(QStringLiteral("unboundSidebarPlaceholder"));
+                    placeholder->setAlignment(Qt::AlignCenter);
+                    m_placeholder=placeholder; m_layout->addWidget(placeholder); placeholder->show();
+                }
                 m_expandGuard=new ColorExpandGuard(m_host,this);
                 m_restoring=false;
                 return QStringLiteral("DaVinci Resolve could not return this palette; it remains floating.");
@@ -419,6 +437,7 @@ public:
             delete m_nativePalette; m_nativePalette=nullptr;
         }
         restoreInspectorTitlePolicy();
+        restoreModeSizes();
         restoreWheelsPolicy();
         if (m_root) m_root->removeEventFilter(this);
         disconnect(m_destroyConnection);
@@ -483,7 +502,8 @@ protected:
                     m_pageReturnWork.clear();
                     if (!m_host || !m_root || !m_root->isVisible() || !m_hiddenByPage || m_generation != generation) return;
                     m_hiddenByPage = false;
-                    const auto returningGeometry=m_savedGeometry;
+                    const auto returningGeometry=m_mainResizeGeometry
+                        ?m_mainResizeGeometry->intendedGeometry(m_savedGeometry):m_savedGeometry;
                     if (m_host->layout()) m_host->layout()->activate();
                     applyPaneDarkCaption(m_host, m_root->window());
                     // Returning pages reuse their windows at full opacity.
@@ -531,8 +551,7 @@ private:
         const auto state=host->windowState();
         const auto generation=++m_initialGeometryGeneration;
         QPointer<SidebarFloatSession> session(this);
-        LayoutRestorePolicy::preserveGeometry(host,m_root?m_root->objectName():QString(),
-            m_slot?m_slot->objectName():QString(),client.size(),[session,host,state,generation] {
+        new PaneGeometryTransaction(host,client.size(),[session,host,state,generation] {
             return session && session->m_host==host && generation==session->m_initialGeometryGeneration
                 && host->windowState()==state;
         },[host,requested] { host->restoreGeometry(requested); });
@@ -547,6 +566,8 @@ private:
         m_auditionBridge->deleteLater();
         m_auditionBridge = nullptr;
     }
+    void restoreModeSizes() { qDeleteAll(m_modeSizes); m_modeSizes.clear(); }
+    QList<ActiveStackSize *> m_modeSizes;
     void restoreWheelsPolicy() {
         if(m_wheels) { m_wheels->setSizePolicy(m_wheelsPolicy); m_wheels->setMinimumWidth(m_wheelsMinimum); }
         m_wheels=nullptr;
@@ -597,11 +618,13 @@ private:
     void clear()
     {
         m_pageReturnWork.clear();
+        delete m_mainResizeGeometry; m_mainResizeGeometry=nullptr;
         delete m_timelineHeader; m_timelineHeader=nullptr;
         delete m_nativePalette; m_nativePalette=nullptr;
         restoreNativeExpand();
         stopAuditionBridge();
         restoreInspectorTitlePolicy();
+        restoreModeSizes();
         restoreWheelsPolicy();
         delete m_nodesBounds; m_nodesBounds=nullptr;
         m_geometryTimer->stop();
@@ -618,6 +641,7 @@ private:
         m_layout = nullptr; m_placeholderLayout = nullptr; m_placeholder = nullptr;
     }
     QPointer<QWidget> m_slot, m_layoutSlot, m_root, m_host, m_placeholder;
+    QPointer<PaneMainResizeGeometry> m_mainResizeGeometry;
     QPointer<QLabel> m_inspectorTitle;
     QSizePolicy m_inspectorTitlePolicy;
     NodesCanvasBounds *m_nodesBounds=nullptr;

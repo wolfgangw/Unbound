@@ -12,7 +12,13 @@ void requestActivation(QWidget &window) {
     if(QGuiApplication::platformName()!=QLatin1String("windows")) return;
     const auto handle=reinterpret_cast<HWND>(window.winId());
     const auto thread=GetCurrentThreadId();
-    const auto foreground=GetWindowThreadProcessId(GetForegroundWindow(),nullptr);
+    // Destroying the previous fixture's foreground window can briefly leave
+    // no foreground HWND. Retain the last external input queue for the same
+    // scoped activation handoff; always detach before returning. Test-only.
+    static DWORD previousForegroundThread=0;
+    auto foreground=GetWindowThreadProcessId(GetForegroundWindow(),nullptr);
+    if(foreground && foreground!=thread) previousForegroundThread=foreground;
+    if(!foreground) foreground=previousForegroundThread;
     const bool attached=foreground && foreground!=thread && AttachThreadInput(thread,foreground,TRUE);
     SetForegroundWindow(handle); SetFocus(handle);
     if(attached) AttachThreadInput(thread,foreground,FALSE);

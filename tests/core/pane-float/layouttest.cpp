@@ -2,6 +2,8 @@
 #include "pagelayoutmenu.h"
 #include "panedecoration.h"
 #include "controller.h"
+#include "layouttracediagnostics.h"
+#include <QFile>
 #include <QApplication>
 #include <QMenu>
 #include <QMessageBox>
@@ -299,6 +301,16 @@ int main(int argc,char **argv) {
     auto color=new QWidget(stack); color->setObjectName("WStackPage_Color"); stack->addWidget(color);
     auto colorLayout=new QVBoxLayout(color);
     const auto gallery=panel(color,colorLayout,"m_pWidgetGallery","btnColorToggleGallery","frameTopColorGallery","btnOptions");
+    auto viewerSlot=new QWidget; viewerSlot->setObjectName("m_pFramePlayer"); colorLayout->addWidget(viewerSlot);
+    auto viewerLayout=new QGridLayout(viewerSlot);
+    auto viewerContent=new QWidget; viewerContent->setObjectName("UiMainViewerForm"); viewerLayout->addWidget(viewerContent,0,0);
+    auto viewerColumn=new QVBoxLayout(viewerContent);
+    auto viewerHeader=new QWidget; viewerHeader->setObjectName("framePlayerStatusPrimary"); viewerColumn->addWidget(viewerHeader);
+    auto viewerRow=new QHBoxLayout(viewerHeader);
+    auto viewerActions=new QWidget; viewerActions->setObjectName("framePlayerTitleRight"); viewerRow->addWidget(viewerActions);
+    auto viewerActionRow=new QHBoxLayout(viewerActions);
+    auto viewerOptions=new QToolButton; viewerOptions->setObjectName("btnOptions"); viewerActionRow->addWidget(viewerOptions);
+    viewerColumn->addWidget(new QLabel("Viewer surface"));
     auto audio=new QWidget(stack); audio->setObjectName("WStackPage_Audio"); stack->addWidget(audio);
     auto audioLayout=new QVBoxLayout(audio);
     const auto groups=panel(audio,audioLayout,"frameAudioPanelGroupsContainer","btnAudioPanelGroupsInSSM","frameHeaderTitle","m_BtnMenu");
@@ -307,6 +319,34 @@ int main(int argc,char **argv) {
     require(startController(),"Cannot start layout controller"); settle();
     auto poolButton=pool.pane->findChild<QToolButton *>("resolvePaneUndockButton");
     require(poolButton,"Controller did not decorate Media Pool");
+    // A pane without a native visibility action must not leave a docking
+    // request behind that blocks readiness on every subsequent page return.
+    stack->setCurrentWidget(color); settle();
+    auto viewerButton=viewerContent->findChild<QToolButton *>("resolvePaneUndockButton");
+    require(viewerButton,"Controller did not decorate Color Viewer");
+    click(viewerButton); require(viewerContent->window()!=&main,"Viewer did not float in controller fixture");
+#ifdef UNBOUND_LAYOUT_TRACE
+    QTemporaryDir dockTrace;
+    const auto previousTraceDir=qgetenv("UNBOUND_LAYOUT_TRACE_DIR");
+    qputenv("UNBOUND_LAYOUT_TRACE_DIR",dockTrace.path().toUtf8());
+    LayoutTrace::begin(&main,"WStackPage_Color");
+#endif
+    click(viewerButton);
+    require(viewerContent->parentWidget()==viewerSlot,"Viewer did not return to its native slot");
+    stack->setCurrentWidget(edit); settle(); stack->setCurrentWidget(color); settle();
+#ifdef UNBOUND_LAYOUT_TRACE
+    LayoutTrace::begin(&main,"replacement"); delete LayoutTrace::active();
+    const auto dockTraceFiles=QDir(dockTrace.path()).entryList({"*.json"},QDir::Files);
+    require(!dockTraceFiles.isEmpty(),"Missing controller docking trace");
+    for(const auto &name:dockTraceFiles) {
+        QFile traceFile(dockTrace.filePath(name)); require(traceFile.open(QIODevice::ReadOnly),"Cannot read docking trace");
+        const auto data=QJsonDocument::fromJson(traceFile.readAll()).object();
+        require(data.value("pending_at_end").toInt()==0,"Toggle-less pane docking left controller readiness pending");
+    }
+    if(previousTraceDir.isNull()) qunsetenv("UNBOUND_LAYOUT_TRACE_DIR");
+    else qputenv("UNBOUND_LAYOUT_TRACE_DIR",previousTraceDir);
+#endif
+    stack->setCurrentWidget(edit); settle();
     auto popup=[&]() {
         static int checkNumber=0; ++checkNumber;
         auto menu=main.findChild<PageLayoutMenu *>("unboundLayoutMenu");

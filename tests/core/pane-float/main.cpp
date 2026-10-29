@@ -425,6 +425,15 @@ int main(int argc, char **argv)
             check(main.geometry()==editGeometry,"New page changed main placement without saved settings");
             main.setGeometry(100,110,500,300); app.processEvents();
             const auto colorGeometry=main.geometry();
+            if(QGuiApplication::platformName()==QLatin1String("windows")) {
+                main.showMaximized();app.processEvents();
+                main.showNormal();main.resize(colorGeometry.width(),colorGeometry.height()+9);app.processEvents();
+                check(main.geometry()==colorGeometry,"Normal placement retained a transient maximize/restore size clamp");
+                main.showMaximized();app.processEvents();main.showNormal();
+                Unbound::WindowInteractionEvent::notify(&main);main.setGeometry(colorGeometry.adjusted(10,10,20,20));app.processEvents();
+                check(main.geometry()==colorGeometry.adjusted(10,10,20,20),"Deferred normal placement overrode a newer user gesture");
+                main.setGeometry(colorGeometry);app.processEvents();
+            }
             pages->setCurrentWidget(edit); app.processEvents();
             check(main.geometry()==editGeometry,"Edit main placement not restored");
             pages->setCurrentWidget(color); app.processEvents();
