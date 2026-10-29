@@ -19,6 +19,11 @@ class MenuTransitionTrace final : public QObject,public QAbstractNativeEventFilt
         DWORD pid=0;auto foreground=GetForegroundWindow();GetWindowThreadProcessId(foreground,&pid);
         QJsonObject row{{"ms",double(clock.elapsed())},{"event",kind},{"qt_state",int(qApp->applicationState())},
             {"foreground_own",pid==GetCurrentProcessId()},{"object",object?object->objectName():QString()}};
+        QJsonArray order;
+        for(auto h=GetTopWindow(nullptr);h;h=GetWindow(h,GW_HWNDNEXT))
+            if(IsWindowVisible(h)) if(auto w=QWidget::find(reinterpret_cast<WId>(h)))
+                order.append(w->objectName());
+        row.insert("window_order",order);
         if(menu) {
             row.insert("visible",menu->isVisible());row.insert("hidden",menu->isHidden());
             const auto r=menu->geometry();row.insert("rect",QJsonArray{r.x(),r.y(),r.width(),r.height()});
@@ -47,9 +52,11 @@ class MenuTransitionTrace final : public QObject,public QAbstractNativeEventFilt
         return false;
     }
     bool nativeEventFilter(const QByteArray &,void *message,long *) override {
-        if(!menu || !message)return false;
+        if(!message)return false;
         auto msg=static_cast<MSG *>(message);
-        if(msg->hwnd!=reinterpret_cast<HWND>(menu->effectiveWinId()))return false;
+        auto target=QWidget::find(reinterpret_cast<WId>(msg->hwnd));
+        if(!target || (target!=menu && target->objectName()!="UiMainWindow"
+            && !target->property("unboundFloatingWindow").toBool()))return false;
         if(msg->message==WM_SHOWWINDOW || msg->message==WM_WINDOWPOSCHANGED || msg->message==WM_WINDOWPOSCHANGING || msg->message==WM_ACTIVATE) {
             QJsonObject extra{{"wparam",double(msg->wParam)},{"lparam",double(msg->lParam)}};
             if((msg->message==WM_WINDOWPOSCHANGED || msg->message==WM_WINDOWPOSCHANGING) && msg->lParam) {
@@ -57,7 +64,7 @@ class MenuTransitionTrace final : public QObject,public QAbstractNativeEventFilt
                 GetClassNameW(pos->hwndInsertAfter,cls,256);extra.insert("insert_after_class",QString::fromWCharArray(cls));
                 extra.insert("position_flags",int(pos->flags));
             }
-            record(QString("win_%1").arg(msg->message),menu,extra);
+            record(QString("win_%1").arg(msg->message),target,extra);
         }
         return false;
     }

@@ -17,6 +17,12 @@ class CoverEventTrace final : public QObject {
         wchar_t nativeClass[256]{};GetClassNameW(foreground,nativeClass,256);
         QJsonObject row{{"ms",double(clock.elapsed())},{"event",kind},{"qt_state",int(qApp->applicationState())},
             {"foreground_own",pid==GetCurrentProcessId()},{"foreground_class",QString::fromWCharArray(nativeClass)}};
+        bool coverVisible=false;
+        for(auto h=GetTopWindow(nullptr);h;h=GetWindow(h,GW_HWNDNEXT)) {
+            wchar_t name[256]{};GetClassNameW(h,name,256);
+            if(QString::fromWCharArray(name)=="UnboundLayoutCoverExperiment" && IsWindowVisible(h))coverVisible=true;
+        }
+        row.insert("cover_visible",coverVisible);
         if(w) {
             row.insert("name",w->objectName());row.insert("class",w->metaObject()->className());
             row.insert("window",w->isWindow());row.insert("modal",w->isModal());
@@ -26,6 +32,10 @@ class CoverEventTrace final : public QObject {
     }
     bool eventFilter(QObject *o,QEvent *e) override {
         if(e->type()==QEvent::Show) if(auto d=qobject_cast<QDialog *>(o)) record("dialog_show",d);
+        if(e->type()==QEvent::Show || e->type()==QEvent::Hide)
+            if(auto w=qobject_cast<QWidget *>(o))
+                if(w->objectName().startsWith("WStackPage_") || w->property("unboundFloatingWindow").toBool())
+                    record(e->type()==QEvent::Show?"show":"hide",w);
         return false;
     }
 public:

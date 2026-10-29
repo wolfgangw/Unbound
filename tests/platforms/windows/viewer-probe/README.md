@@ -37,6 +37,14 @@ float and more complex side-panel arrangements still need live validation.
 The current production mechanism is documented in
 `AGENTS.md` (Specialized pane mechanisms).
 
+`main-resize-probe.exe` / `MainResizeGeometry.dll` temporarily attach the shared
+main-window resize geometry observer to existing floating hosts. First launch
+starts; second launch removes it and cancels its outstanding correction callbacks.
+Use only on a build without the integrated observer. Recall a known layout before
+starting, maximize/restore main through normal UI, then compare public host geometry
+with the saved snapshot. It uses public Qt APIs, changes no native minimums, and
+does not write layout snapshots. Stop it after the experiment.
+
 `paint-trace-probe.exe` / `PaintTraceProbe.dll` passively record public Qt
 geometry, layout, paint, main-window update and mouse-button event ordering.
 First launch starts; a second launch stops and writes `paint-trace-TIME.json`
@@ -99,7 +107,7 @@ recurring observer or private Resolve memory access is used. Loaded diagnostic
 DLLs cannot be replaced until Resolve exits; they are not shipped.
 
 `palette-trace-probe.exe` / `PaletteGeometryTrace.dll` record public Qt Resize,
-Show, Hide and LayoutRequest events on Curves and Warper hosts, with immediate
+Show, Hide and LayoutRequest events on Curves, Warper, Color Wheels and Color Match hosts, with immediate
 and queued position, size, visibility, minimum and size-hint measurements. An
 initial snapshot includes all floating hosts. Build with
 `cmake --build build/windows/viewer-probe --config Release --target PaletteGeometryTrace palette-trace-probe`.
@@ -205,15 +213,16 @@ The shared CMake option is `UNBOUND_LAYOUT_TRACE=ON`; it is OFF by default.
 Install only with Resolve closed and validate in a fresh Resolve process.
 
 Every explicit layout recall starts a six-second, GUI-thread observation window.
-With `-LayoutCoverExperiment`, page switches to floating content also start
-one. `page_capture_arrival` marks capture at incoming Show after identifying the
+With `-LayoutCoverExperiment`, page switches with floating content on either page
+also start one. `page_capture_departure` marks capture before outgoing hosts hide;
+otherwise `page_capture_arrival` marks capture at incoming Show after identifying the
 destination's floating content/intent. `page_departure_to_capture` measures the
 gap from outgoing Hide; `page_precapture_paint_deliveries` and
 `page_precapture_update_requests` count
 main-window activity in it, without asserting GPU presentation.
 `page_incoming_show` and `page_current_changed` identify the handoff. The trace's
-page field identifies the destination. Any fully docked destination generates
-neither captures nor new traces, regardless of outgoing floating panes. Compare buttons
+page field identifies the destination. Page switches capture when either page has floating panes. Only fully docked
+to fully docked switches skip capture and transition tracing. Compare buttons
 and native shortcuts, first visits, returning hosts and rapid switching; use the
 same final work/geometry/composition and cancellation checks as layout recall.
 Another recall ends the old trace as superseded. Output is buffered in memory
@@ -273,3 +282,78 @@ whether Windows still has this process foreground and whether the menu or the
 cover owns hit testing at its center. Build targets `MenuTransitionTrace` and
 `menu-transition-probe`; launch hidden and wait. Native ordering is diagnostic
 only; the observer never changes focus, visibility, capture affinity or input.
+Native samples include main and floating hosts and their visible Qt top-level
+order, so an intermediate owner raise can be distinguished from menu repaint.
+
+`dual-screen-probe.exe` / `DualScreenState.dll` take one read-only GUI-thread
+snapshot per launch using public Qt widget metadata. Build targets `DualScreenState`
+and `dual-screen-probe`, then launch the executable hidden and wait. Timestamped
+JSON goes to `%TEMP%/Unbound-dual-screen/`. Compare object identities, parents,
+top-level windows, visibility and geometry across native mode toggles. The tool
+does not change the mode or install an observer. Its 30,000-widget cap can truncate
+large sessions: check `truncated` and never infer absence from an incomplete dump.
+Replacing a loaded diagnostic DLL requires a fresh Resolve process.
+
+`toggle-state-probe.exe` / `ToggleState.dll` snapshot catalogued pane and toggle
+ancestry, window identity, visibility and button state through public Qt APIs.
+Build targets `ToggleState` and `toggle-state-probe`; launch hidden and wait.
+Each launch replaces `%TEMP%/Unbound-toggle-state.json`. No UI state is changed.
+Integrated layout traces additionally name outstanding requests in
+`pending_dock_toggle`, `pending_layout_toggle` and `pending_color_toggle` events.
+
+
+`event-gap-probe.exe` / `EventGapTrace.dll` observe gaps between GUI-thread Qt
+notifications, bounded to 60 seconds. Launch once to start and again to stop;
+output is `%TEMP%/Unbound-event-gaps.json`. A gap after an event does not prove
+that event consumed the interval: native dispatch and nested work can intervene.
+
+`gui-stack-sample.exe <Resolve PID> <output.txt>` is a standalone Windows diagnostic,
+linked with DbgHelp, never shipped or loaded into Resolve. It samples the main
+window thread for 30 seconds at approximately 25 ms intervals, briefly suspending
+it to unwind each stack. Symbol names are resolved after sampling. Export-only
+names can be far from the actual function; inspect the decimal displacement and
+do not interpret distant names as function identities. Sampling perturbs timings.
+Use integrated traces for elapsed times and stacks only to identify likely cost
+centers. Desktop automation/accessibility clients can add substantial native
+accessibility work; compare manual page switches without concurrent UI inspection.
+
+`host-constraints-probe.exe` / `HostConstraints.dll` compare floating hosts'
+QWidget minimums, QWindow minimums and Windows `WM_GETMINMAXINFO` track limits.
+Build both targets and launch hidden; output is
+`%TEMP%/Unbound-host-constraints.json`. This is a one-shot GUI-thread observation;
+it does not resize windows or install hooks. Native track sizes include frame
+extents and must not be compared directly with Qt client sizes.
+
+`main-placement-probe.exe` / `MainPlacementTrace.dll` observe Qt geometry/state
+events and native window-position messages before and after Resolve's handler.
+Build both targets, launch hidden to start and again to stop; a 30-second deadline
+and 5000-row limit bound collection. Output is
+`%TEMP%/Unbound-main-placement-trace.json`. Compare the proposed native rectangle,
+client minimum and frame margins across maximize/restore; observation does not
+change placement or message parameters.
+
+`scopes-state-probe.exe` / `ScopesState.dll` take a one-shot public-Qt snapshot of
+Scopes widgets, ancestry, geometry, widget/override cursor state and meta-object information in
+`%TEMP%/Unbound-scopes-state.json`. Build both targets and launch hidden. The
+read-only snapshot does not establish whether the rendered signal is current;
+verify that visually with native mode/frame changes.
+
+Reversible research prototypes mutate live UI state and must not run alongside
+the corresponding integrated feature. Build their paired targets, launch hidden
+once to enable and again to remove. Replacing a loaded DLL requires a fresh process.
+
+- `scopes-embed-probe.exe` / `ScopesEmbed.dll` embeds an already-open native
+  `UiWaveformWindow` in a temporary host. Removal returns its original parent,
+  flags, geometry and minimum and shows the native window again. Use native Scopes
+  controls to test signal updates; the prototype is not a production docking path.
+- `main-placement-restore-probe.exe` / `MainPlacementRestore.dll` attaches the shared
+  main-placement controller with isolated settings at
+  `%TEMP%/Unbound-main-placement-experiment-<PID>.json`. Removal detaches it;
+  production settings are not rewritten by this diagnostic controller.
+- `main-resize-probe.exe` / `MainResizeGeometry.dll` attaches shared geometry
+  preservation to currently floating hosts. Removal detaches its observers;
+  compare host geometry across native main-window maximize/restore or resizing.
+- `scopes-layout-refresh-probe.exe` / `ScopesLayoutRefresh.dll` attaches the shared
+  Scopes view-count refresh to an already embedded native dialog. Launch again
+  to remove it; it also expires after five minutes. Test resizing and layout recall
+  with the menu open, checking native button availability and exact host geometry.

@@ -35,7 +35,8 @@ public:
     void finish() {done=true;qApp->removeEventFilter(this);file.close();deleteLater();}
     bool eventFilter(QObject *object,QEvent *event) override {
         const auto name=object->objectName();
-        if(name!=QStringLiteral("unboundFloating_colorMapperTab") && name!=QStringLiteral("unboundFloating_curvesTab")) return false;
+        if(name!=QStringLiteral("unboundFloating_colorMapperTab") && name!=QStringLiteral("unboundFloating_curvesTab")
+            && name!=QStringLiteral("unboundFloating_colorWheelsTab") && name!=QStringLiteral("unboundFloating_colorMatchTab")) return false;
         const auto type=event->type();
         if(type!=QEvent::Resize && type!=QEvent::LayoutRequest && type!=QEvent::Show && type!=QEvent::Hide) return false;
         auto widget=qobject_cast<QWidget *>(object); if(!widget) return false;
