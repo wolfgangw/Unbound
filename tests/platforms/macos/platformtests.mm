@@ -109,7 +109,8 @@ static bool runMacLayoutTest(QApplication &app) {
     nativeMouse(NSEventTypeRightMouseUp,origin);
     auto save=menu.findChild<QPushButton *>("unboundLayoutSave");
     check(save && save->text()=="Save as new Edit layout","Shared layout save control missing");
-    check(!menu.findChild<QPushButton *>("unboundLayoutDockAll")->isVisible(),"Dock all visible without floats");
+    check(menu.findChild<QPushButton *>("unboundLayoutDockAll")->isVisible()
+        && !menu.findChild<QPushButton *>("unboundLayoutDockAll")->isEnabled(),"Dock all must stay visible but disabled without floats");
     save->click(); settle();
     check(menu.isVisible() && settings.layouts(page).size()==1,"Saving dismissed layout popout");
     const auto id=settings.activeLayout(page);

@@ -17,6 +17,9 @@
 using namespace Unbound;
 using LayoutTest::require;
 using LayoutTest::settle;
+#if defined(UNBOUND_LAYOUT_COVER_EXPERIMENT) && defined(Q_OS_WIN)
+void testLayoutCoverPresentation();
+#endif
 // Resolve can swallow sendEvent(editor, keyPress) before application/object
 // filters, while shortcut overrides and releases still pass.
 class HostApplication final : public QApplication {
@@ -255,13 +258,25 @@ void testPageFocus();
 void testIndexHeaderDrag();
 void testDockingGuard();
 void testWindowGroup();
+void testLayoutTrace();
+void testHostLifecycle();
+void testLayoutTransition();
+void testColorPlaybackPause();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
-    HostApplication app(argc,argv); if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
+    HostApplication app(argc,argv);
+#if defined(UNBOUND_LAYOUT_COVER_EXPERIMENT) && defined(Q_OS_WIN)
+    if(app.arguments().contains("--layout-cover-only")) { testLayoutCoverPresentation(); return 0; }
+#endif
+    if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
+    if(app.arguments().contains("--transition-only")) { testLayoutTransition(); testColorPlaybackPause(); return 0; }
     if(app.arguments().contains("--color-clips-startup")) { testColorClipsStartup(); return 0; }
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
     if(app.arguments().contains("--window-group-only")) { testWindowGroup(); return 0; }
+    testLayoutTrace();
+    testLayoutTransition();testColorPlaybackPause();
+    testHostLifecycle();
     LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testColorClips(); storage(); layoutIdentity();
     testPageFocus();
     testDockingGuard();
@@ -303,7 +318,8 @@ int main(int argc,char **argv) {
     const auto anchor=poolButton->mapToGlobal(QPoint(0,poolButton->height()));
     require(menu->pos().y()==anchor.y() && !menu->geometry().intersects(QRect(poolButton->mapToGlobal(QPoint()),poolButton->size())),
         "Popup overlaps its button instead of starting directly below it");
-    require(!control(menu,"unboundLayoutDockAll"),"Dock all appears with no floating panels");
+    require(control(menu,"unboundLayoutDockAll") && !control(menu,"unboundLayoutDockAll")->isEnabled(),
+        "Dock all must remain visible but disabled with no floating panels");
     const auto background=menu->grab().toImage().pixelColor(2,menu->height()/2);
     require(background.alpha()==255 && background.rgb()==main.palette().color(QPalette::Window).rgb(),
         "Popout body is transparent or has the wrong theme background");
@@ -315,7 +331,7 @@ int main(int argc,char **argv) {
         !control(menu,"unboundLayoutUpdate"),"Saved layout is not highlighted and clean");
     click(control(menu,"unboundLayoutSave")); popup();
     require(main.findChild<QLabel *>("unboundLayoutStatus")->text().contains("Already saved"),"Duplicate save was not reported");
-    menu->hide(); click(poolButton); settle();
+    menu->dismiss(); click(poolButton); settle();
     require(poolButton->isChecked() && pool.content->window()!=&main,"Pool did not float");
     auto floating=pool.content->window(); floating->setGeometry(120,150,440,320); settle();
     const auto savedGeometry=floating->geometry();
@@ -335,7 +351,7 @@ int main(int argc,char **argv) {
     require(pin->isChecked() && floating->property("unboundKeepAtop").toBool() && control(menu,"unboundLayoutUpdate"),
         "Menu pin did not apply to host and dirty the layout");
     click(control(menu,"unboundLayoutUpdate")); popup();
-    menu->hide(); context(poolButton); menu=popup();
+    menu->dismiss(); context(poolButton); menu=popup();
     pin=menu->findChild<QCheckBox *>("unboundKeepAtop");
     click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
     require(menu->isVisible() && floating->property("unboundKeepAtop").toBool(),
@@ -423,6 +439,8 @@ int main(int argc,char **argv) {
     click(control(menu,"unboundLayoutRecall","Edit-1")); popup();
     layoutHighlights(retainedEdit1,retainedEdit2);
     require(!poolButton->isChecked() && pool.content->window()==&main,"Recall did not dock the changed panel");
+    require(!menu->findChild<QCheckBox *>("unboundKeepAtop")->isEnabled(),
+        "Always on top must remain disabled for a docked pane");
     require(retainedEdit1 && retainedEdit2,"Switching layouts destroyed retained menu rows");
     require(popupEvents.hides==0 && popupEvents.shows==0,"Switching layouts hid/reopened the popup");
     if(main.geometry()!=originalMainGeometry || !pool.toggle->isChecked()) std::fprintf(stderr,
@@ -439,7 +457,7 @@ int main(int argc,char **argv) {
     pool.content->window()->move(350,280); settle();
     click(control(menu,"unboundLayoutSave")); popup();
     require(control(menu,"unboundLayoutRecall","Edit-3"),"Delete-then-save sequence failed without dismissal");
-    menu->hide(); pool.content->window()->move(320,260); settle();
+    menu->dismiss(); pool.content->window()->move(320,260); settle();
     const auto updatedGeometry=pool.content->window()->geometry();
     context(poolButton); menu=popup();
     require(control(menu,"unboundLayoutRecall","Edit-3")->property("activeLayout").toBool() &&
@@ -450,13 +468,14 @@ int main(int argc,char **argv) {
     require(!poolButton->isChecked() && pool.toggle->isChecked() &&
         !control(menu,"unboundLayoutRecall","Edit-3")->property("activeLayout").toBool(),
         "Dock all did not dock/show panels and clear active identity");
-    require(!control(menu,"unboundLayoutDockAll"),"Dock all remained visible after docking every panel");
+    require(control(menu,"unboundLayoutDockAll") && !control(menu,"unboundLayoutDockAll")->isEnabled(),
+        "Dock all must remain visible but disabled after docking every panel");
     click(control(menu,"unboundLayoutRecall","Edit-3")); popup();
     require(poolButton->isChecked() && pool.content->window()->geometry()==updatedGeometry,
         "Update was not recalled or Dock all overwrote the saved layout");
     require(!main.findChild<QLabel *>("unboundLayoutStatus")->text().contains("Recalled"),
         "Recall still shows redundant feedback");
-    menu->hide(); pool.content->window()->move(340,270); settle();
+    menu->dismiss(); pool.content->window()->move(340,270); settle();
     context(poolButton); menu=popup();
     require(control(menu,"unboundLayoutUpdate","Update Edit-3"),"Modified layout was not dirty before switching away");
     click(control(menu,"unboundLayoutRecall","Edit-2")); popup();
@@ -469,14 +488,15 @@ int main(int argc,char **argv) {
         Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
     QApplication::sendEvent(menu,&outsidePress); settle();
     require(!menu->isVisible(),"Outside click did not dismiss the layout popup");
-    menu->hide(); stack->setCurrentWidget(color); settle();
+    menu->dismiss(); stack->setCurrentWidget(color); settle();
     const auto galleryButton=gallery.pane->findChild<QToolButton *>("resolvePaneUndockButton");
     context(galleryButton); menu=popup();
-    require(!control(menu,"unboundLayoutDockAll"),"Another page's floating panel enabled Dock all");
+    require(control(menu,"unboundLayoutDockAll") && !control(menu,"unboundLayoutDockAll")->isEnabled(),
+        "Another page's floating panel enabled Dock all");
     click(control(menu,"unboundLayoutSave")); popup();
     require(control(menu,"unboundLayoutRecall","Color-1") && !control(menu,"unboundLayoutRecall","Edit-2"),
         "Layout popup mixed page configurations");
-    menu->hide(); click(galleryButton); settle();
+    menu->dismiss(); click(galleryButton); settle();
     require(galleryButton->isChecked(),"Color Gallery failed to float for layout test");
     context(galleryButton); menu=popup(); click(control(menu,"unboundLayoutSave")); popup();
     click(control(menu,"unboundLayoutRecall","Color-1")); popup();
@@ -484,12 +504,12 @@ int main(int argc,char **argv) {
     click(control(menu,"unboundLayoutRecall","Color-2")); popup();
     require(galleryButton->isChecked() && !gallery.toggle->isChecked() && gallery.content->isVisible(),
         "Color layout did not restore floating Gallery and native toggle state");
-    menu->hide(); stack->setCurrentWidget(audio); settle();
+    menu->dismiss(); stack->setCurrentWidget(audio); settle();
     const auto groupsButton=groups.pane->findChild<QToolButton *>("resolvePaneUndockButton");
     context(groupsButton); menu=popup();
     click(control(menu,"unboundLayoutSave")); popup();
     require(control(menu,"unboundLayoutRecall","Fairlight-1"),"Fairlight header button did not expose layouts");
-    menu->hide(); click(groupsButton); settle();
+    menu->dismiss(); click(groupsButton); settle();
     require(groupsButton->isChecked(),"Fairlight Groups failed to float for layout test");
     context(groupsButton); menu=popup(); click(control(menu,"unboundLayoutSave")); popup();
     click(control(menu,"unboundLayoutRecall","Fairlight-1")); popup();
@@ -499,7 +519,7 @@ int main(int argc,char **argv) {
         "Fairlight layout did not restore floating Groups and native toggle state");
     click(control(menu,"unboundLayoutDockAll")); popup();
     require(!groupsButton->isChecked() && groups.toggle->isChecked(),"Fairlight Dock all did not restore Groups");
-    menu->hide(); stack->setCurrentWidget(edit); settle();
+    menu->dismiss(); stack->setCurrentWidget(edit); settle();
     require(poolButton->isChecked(),"Fairlight Dock all affected Edit panels");
     context(poolButton); menu=popup();
     const auto outsidePoint=menu->geometry().bottomRight()+QPoint(20,20);
@@ -536,7 +556,22 @@ int main(int argc,char **argv) {
     require(!menu->isVisible(),"Escape did not dismiss the persistent popout");
     context(poolButton); menu=popup();
     QEvent deactivate(QEvent::ApplicationDeactivate); QApplication::sendEvent(qApp,&deactivate); settle();
-    require(!menu->isVisible(),"Application deactivation did not dismiss the persistent popout");
+    require(menu->isVisible(),"Transient Qt deactivation dismissed the popout while our application remains foreground");
+    struct VisibilityEvents final : QObject {
+        int hides=0,shows=0;
+        bool eventFilter(QObject *,QEvent *event) override {
+            hides+=event->type()==QEvent::Hide;shows+=event->type()==QEvent::Show;return false;
+        }
+    } visibility;
+    menu->installEventFilter(&visibility);
+    QWidget *nativeTool=menu;
+    for(int i=0;i<2;++i) {nativeTool->hide();settle();nativeTool->show();settle();}
+    require(menu->isVisible() && visibility.hides==0 && visibility.shows==0,
+        "Native tool visibility sweep flashed the live layout menu");
+    menu->dismiss();
+    nativeTool->show();settle();
+    require(!menu->isVisible(),"Stale native tool restoration reopened a dismissed menu");
+    menu->removeEventFilter(&visibility);
     std::puts("PASS: docked/floating context menus; persistent Save/Recall/Delete; retained hosts; docking, geometry and Edit/Color/Fairlight isolation");
     if(!app.arguments().contains("--preview")) {
         auto waitDock=[] { QEventLoop loop; QTimer::singleShot(180,&loop,&QEventLoop::quit); loop.exec(); };
@@ -561,12 +596,12 @@ int main(int argc,char **argv) {
             "Media Pool menu lacks the remedy for collapsed docking");
         require(!warning->dockingWarningPending() && !warning->dockingWarningAnimating() && !warning->dockingFailure().isEmpty(),
             "Opening the affected menu did not stop the pulse while retaining the warning");
-        menu->hide(); pool.content->window()->close(); waitDock();
+        menu->dismiss(); pool.content->window()->close(); waitDock();
         require(poolButton->isChecked() && warning->dockingWarningPending(),"Failed close did not restart the warning");
         context(poolButton); menu=popup(); click(control(menu,"unboundLayoutDockAll")); waitDock();
         require(poolButton->isChecked() && PaneSettings(directory.filePath("layouts.json")).floating("frameEditPageMediaPool"),
             "Dock all overrode the failed-docking recovery state");
-        menu->hide();
+        menu->dismiss();
         pool.pane->setMaximumWidth(QWIDGETSIZE_MAX); pool.pane->setMinimumWidth(0);
         click(poolButton); waitDock();
         require(!poolButton->isChecked() && pool.content->window()==&main && warning->dockingFailure().isEmpty(),
@@ -577,7 +612,7 @@ int main(int argc,char **argv) {
         PaneSettings savedDocked(directory.filePath("layouts.json"));
         const auto dockedId=savedDocked.activeLayout("WStackPage_Conform");
         const auto dockedSnapshot=savedDocked.layout("WStackPage_Conform",dockedId);
-        menu->hide(); click(poolButton);
+        menu->dismiss(); click(poolButton);
         pool.pane->setFixedWidth(1); pool.toggle->setChecked(true); pool.pane->show();
         context(poolButton); menu=popup();
         click(control(menu,"unboundLayoutRecall",savedDocked.layoutName("WStackPage_Conform",dockedId))); waitDock();
@@ -588,9 +623,9 @@ int main(int argc,char **argv) {
             "Failed layout docking overwrote its archive or misreported the actual floating state");
         require(control(menu,"unboundLayoutUpdate") && control(menu,"unboundLayoutDockAll"),
             "Open menu did not reflect recovered floating state and dirty layout");
-        menu->hide(); pool.pane->setMaximumWidth(QWIDGETSIZE_MAX); pool.pane->setMinimumWidth(0);
+        menu->dismiss(); pool.pane->setMaximumWidth(QWIDGETSIZE_MAX); pool.pane->setMinimumWidth(0);
         click(poolButton); waitDock();
-        menu->hide();
+        menu->dismiss();
         for(auto widget:QApplication::topLevelWidgets()) require(!qobject_cast<QMessageBox *>(widget),"Docking warning opened an intrusive message box");
         std::puts("PASS: failed docking/close/Dock all/layout recall retain geometry and saved floating state; panel-local pulse acknowledgment, remedy and recovery");
     }

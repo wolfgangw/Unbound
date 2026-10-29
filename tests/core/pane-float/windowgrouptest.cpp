@@ -99,7 +99,7 @@ void testWindowGroup() {
         settings.activateLayout(page,id); menu.finishRecall(); settle();
         require(stackedAbove(first,main) && stackedAbove(second,main) && stackedAbove(menu,first),
             "Layout recall under open menu lost pinned priority");
-        menu.hide(); activate(main); settle();
+        menu.dismiss(); activate(main); settle();
         require(stackedAbove(first,second) && stackedAbove(second,main),"Menu changed pinned activation order");
     }
     activate(outsider); settle();

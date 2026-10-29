@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#include "layouttracediagnostics.h"
 #include <QEvent>
 #include <QPointer>
 #include <QWidget>
@@ -37,6 +38,7 @@ class ViewerGeometryAdapter final : public QObject
     QList<Placement> m_splitters;
     QList<Placement> m_sideRegions;
     bool m_enabled=false,m_paused=false,m_applying=false,m_pending=false;
+    Unbound::LayoutTraceWork m_layoutWork;
     bool m_deliveringTimeline=false;
     QSize m_deliveredTimelineSize;
     ViewerResizeGate *m_resizeGate=nullptr;
@@ -50,6 +52,7 @@ class ViewerGeometryAdapter final : public QObject
         }
     }
     void releaseUpdates() {
+        Unbound::LayoutTrace::mark("edit_release_updates");
         if(m_updatesHeld) {
             m_updatesHeld=false;
             if(m_root) m_root->setUpdatesEnabled(true);
@@ -100,8 +103,9 @@ class ViewerGeometryAdapter final : public QObject
     void schedule() {
         if (!m_enabled || m_paused || m_pending) return;
         m_pending=true;
+        m_layoutWork.set("edit_reclamation",m_page);
         QMetaObject::invokeMethod(this,[this] {
-            m_pending=false; apply(); releaseUpdates();
+            m_pending=false;m_layoutWork.clear();apply();releaseUpdates();
         },Qt::QueuedConnection);
     }
     void restore() {

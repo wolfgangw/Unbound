@@ -223,10 +223,31 @@ void testColorClips() {
         require(gutter && gutter->width()==32 && gutter->height()==content->height(),"Clips gutter drag surface has wrong bounds");
         gesture(gutter,true);
     }
+    bool controlsOutsideMode=false,rejectEntry=false;
+    auto controlsOrder=QObject::connect(&controls,&QPushButton::clicked,[&] {
+        if(!mode.isChecked()) controlsOutsideMode=true;
+    });
+    auto rejectMode=QObject::connect(&mode,&QPushButton::clicked,[&] {
+        if(rejectEntry && mode.isChecked()) mode.setChecked(false);
+    });
     session.suspendClipsMode(true); settle();
-    require(session.active() && !mode.isChecked(),"Layout preparation docked Clips");
+    require(session.active() && !mode.isChecked() && !controls.isChecked() && !controlsOutsideMode,
+        "Layout preparation failed to restore controls before leaving Lightbox");
+    rejectEntry=true;
     session.suspendClipsMode(false); settle();
-    require(mode.isChecked() && session.floatingWindow()==host,"Layout recall failed to resume retained Clips");
+    require(!mode.isChecked() && !controls.isChecked() && !controlsOutsideMode,
+        "Rejected native Lightbox entry was followed by an out-of-context controls action");
+    rejectEntry=false;
+    session.suspendClipsMode(true); settle();
+    session.suspendClipsMode(false); settle();
+    require(mode.isChecked() && controls.isChecked() && session.floatingWindow()==host && !controlsOutsideMode,
+        "Layout recall failed to resume retained Clips and its controls");
+    session.suspendClipsMode(true); settle();
+    require(session.dock().isEmpty() && !mode.isChecked() && !controls.isChecked() && !controlsOutsideMode,
+        "Docking suspended Clips attempted controls restoration after leaving Lightbox");
+    QObject::disconnect(controlsOrder);QObject::disconnect(rejectMode);
+    require(session.start(&slot,"Clips",&page,false,false,true,false).isEmpty(),"Clips failed to refloat after suspended docking");
+    settle();host=static_cast<Unbound::PaneFloatingWindow *>(session.floatingWindow());
     // Simulate Resolve assigning its native Lightbox allocation again.
     region.setGeometry(0,0,800,380); player.hide(); region.show(); settle();
     require(player.isVisible() && region.isHidden() && player.geometry()==region.geometry(),"Native relayout displaced adapted viewer");
@@ -251,6 +272,49 @@ void testColorClips() {
     require(session.start(&slot,"Clips",&page,false,false,true,false).isEmpty(),"Repeat Clips float failed");
     decoration.setFloating(true); settle(); mode.click(); settle();
     require(!session.active() && !mode.isChecked() && content->parentWidget()==&slot,"Native Lightbox exit left floating strip");
+    mode.click(); settle();
+    require(session.start(&slot,"Clips",&page,false,false,true,false).isEmpty(),"Cannot float from native Lightbox");
+    settle();session.suspendClipsMode(true);settle();
+    auto rejectReturn=QObject::connect(&mode,&QPushButton::clicked,[&] {
+        if(mode.isChecked()) mode.setChecked(false);
+    });
+    require(session.dock().isEmpty() && !mode.isChecked(),"Rejected native return did not leave Clips docked");
+    session.returnClipsToNormalMode();
+    QObject::disconnect(rejectReturn);
+    page.hide();page.show();settle();
+    require(!mode.isChecked(),"Deferred Lightbox return overrode a newer ordinary layout");
+    // Model the native restriction: changing Lightbox during playback rejects
+    // the transition. Exercise the real adapter, including deferred setup and
+    // retained-host suspension, rather than only the transport helper.
+    QWidget transport(&player);transport.setObjectName("m_pFramePlayer");
+    QPushButton play(&transport),reverse(&transport),stop(&transport);
+    play.setObjectName("btnTransportPlay");reverse.setObjectName("btnTransportReversePlay");
+    stop.setObjectName("btnTransportStop");
+    for(auto b:{&play,&reverse,&stop})b->setCheckable(true);
+    int stops=0,resumes=0,unsafeModeChanges=0;
+    QObject::connect(&stop,&QPushButton::clicked,&transport,[&] {
+        ++stops;stop.setChecked(true);play.setChecked(false);reverse.setChecked(false);
+    });
+    QObject::connect(&play,&QPushButton::clicked,&transport,[&] {
+        ++resumes;play.setChecked(true);stop.setChecked(false);reverse.setChecked(false);
+    });
+    auto rejectPlayingMode=QObject::connect(&mode,&QPushButton::clicked,&transport,[&] {
+        if(play.isChecked() || reverse.isChecked()) {++unsafeModeChanges;mode.setChecked(!mode.isChecked());}
+    });
+    LayoutTest::activate(main);play.click();
+    require(session.start(&slot,"Clips",&page,false,false,true,false).isEmpty(),"Playing Clips float failed");
+    settle();
+    require(mode.isChecked() && play.isChecked() && stops==1 && resumes==2 && !unsafeModeChanges,
+        "Clips entry did not pause through deferred native initialization and resume");
+    require(session.suspendClipsMode(true),"Playing retained Clips suspension failed");settle();
+    require(stop.isChecked() && !mode.isChecked(),"Retained Clips resumed before native mode restoration");
+    require(session.suspendClipsMode(false),"Retained Clips resume failed");settle();
+    require(play.isChecked() && mode.isChecked() && stops==2 && resumes==3 && !unsafeModeChanges,
+        "Retained Clips recall did not share the pause across suspension and restoration");
+    require(session.dock().isEmpty(),"Playing Clips dock failed");settle();
+    require(play.isChecked() && !mode.isChecked() && stops==3 && resumes==4 && !unsafeModeChanges,
+        "Clips docking changed native mode during playback or failed to resume");
+    QObject::disconnect(rejectPlayingMode);stop.click();
     std::puts("PASS: Color Clips gutter, native mode, allocation recovery, retained page host, hidden docking and native exit");
 }
 #include "controller.h"
@@ -370,10 +434,52 @@ void testColorClipsStartup() {
     for(int i=0;i<8;++i) settle();
     require(floating("timelineFrame") && !floating("m_pLightBox") && !mode.isChecked() && player.isVisible(),
         "Timeline-only layout did not restore normal Color presentation");
+    require(menu->recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall Clips with retained Timeline");
+    for(int i=0;i<8;++i) settle();
+    Unbound::PaneSettings recalled;
+    require(!recalled.toggle("Color/timelineFrame"),
+        "Temporary Clips initialization saved Timeline as a user visibility change");
+    require(menu->recall(timelineLayout,applied).isEmpty() && applied,"Cannot return to Timeline-only layout");
+    for(int i=0;i<8;++i) settle();
     mode.click(); settle();
     require(menu->recall(timelineLayout,applied).isEmpty(),"Cannot reselect current ordinary layout");
     for(int i=0;i<8;++i) settle();
     require(!mode.isChecked() && player.isVisible(),"Reselecting ordinary layout retained native Lightbox");
+    // Playback assistance is optional. None of these transport states may
+    // prevent controller recall, Clips entry, retained-host recall or docking.
+    QWidget transport(&player);transport.setObjectName("m_pFramePlayer");
+    QPushButton play(&transport),reverse(&transport),stop(&transport);
+    play.setObjectName("btnTransportPlay");reverse.setObjectName("btnTransportReversePlay");
+    for(auto b:{&play,&reverse,&stop})b->setCheckable(true);
+    int inventedResumes=0;
+    QObject::connect(&play,&QPushButton::clicked,&transport,[&] {++inventedResumes;});
+    QObject::connect(&reverse,&QPushButton::clicked,&transport,[&] {++inventedResumes;});
+    for(int scenario=0;scenario<5;++scenario) {
+        stop.setObjectName(scenario==1?"unavailableStop":"btnTransportStop");
+        stop.setChecked(false);stop.setEnabled(scenario!=3);
+        play.setChecked(scenario>=2);reverse.setChecked(scenario==2);
+        // Case 4 leaves Play checked when Stop is clicked: native Stop is not
+        // acknowledged, even if the button toggles its own checked state.
+        require(menu->recall(clipsLayout,applied).isEmpty() && applied,
+            "Playback workaround refused incoming Clips layout");
+        for(int i=0;i<8;++i)settle();
+        require(floating("m_pLightBox") && mode.isChecked(),"Optional pause prevented Clips entry");
+        auto retainedClips=floating("m_pLightBox");
+        require(menu->recall(nodesClipsLayout,applied).isEmpty() && applied,
+            "Playback workaround refused retained Clips layout");
+        for(int i=0;i<8;++i)settle();
+        require(floating("m_pLightBox")==retainedClips && floating("m_pFrameNodeGraph"),
+            "Optional pause prevented retained Clips recall");
+        require(menu->recall(timelineLayout,applied).isEmpty() && applied,
+            "Playback workaround refused outgoing Clips layout");
+        for(int i=0;i<8;++i)settle();
+        require(!floating("m_pLightBox") && !mode.isChecked(),"Optional pause prevented Clips docking");
+        mode.click();settle();
+        require(menu->recall(timelineLayout,applied).isEmpty(),"Playback workaround refused clean active layout");
+        for(int i=0;i<8;++i)settle();
+        require(!mode.isChecked(),"Optional pause prevented clean active layout restoration");
+        require(inventedResumes==0,"Unknown/idle transport caused an unowned playback restart");
+    }
     delete qApp->findChild<QObject *>("UnboundPaneController");
-    std::puts("PASS: Color Lightbox startup, late Timeline, first Nodes/LUTs recall, return and retained Clips transitions");
+    std::puts("PASS: Color Lightbox startup, late Timeline, Nodes/LUTs recall and optional playback assistance across idle/unknown/rejected transport");
 }

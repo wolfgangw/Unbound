@@ -16,6 +16,7 @@
 #include "panedockingguard.h"
 #include "panegeometryrestore.h"
 #include "auditionactivationbridge.h"
+#include "layouttracediagnostics.h"
 
 // Whole native viewer widgets retain their layout slots while floating.
 // Share the controller's settings instance so saves cannot overwrite each other.
@@ -236,8 +237,10 @@ private:
     void queueReclaim() {
         if (m_stopping || m_reclaimPending) return;
         m_reclaimPending=true;
+        m_reclaimWork.set("edit_viewer_restoration",m_page);
         QMetaObject::invokeMethod(this,[this] {
             m_reclaimPending=false;
+            m_reclaimWork.clear();
             if(m_stopping) return;
             if(m_page && m_page->isVisible()) {
                 if(m_restoreProgram && m_program.content && m_program.content->isVisible()) {
@@ -281,6 +284,7 @@ private:
     QList<Unbound::PaneHeaderDrag *> m_drags;
     ViewerGeometryAdapter *m_geometry=nullptr;
     bool m_reclaimPending=false;
+    Unbound::LayoutTraceWork m_reclaimWork;
     bool m_showingProgram=false;
     std::function<void(QWidget *,const QPoint &)> m_contextMenu;
 };

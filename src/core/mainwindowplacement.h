@@ -2,6 +2,7 @@
 #ifndef UNBOUND_MAINWINDOWPLACEMENT_H
 #define UNBOUND_MAINWINDOWPLACEMENT_H
 #include "panesettings.h"
+#include "layouttracediagnostics.h"
 #include <QApplication>
 #include <QStackedWidget>
 #include <QPointer>
@@ -103,6 +104,7 @@ public:
         if (!message.isEmpty() && error) error(message);
     }
     void reloadCurrent() {
+        LayoutTraceSpan trace("main_placement_reload");
         // The selected layout has already replaced the saved placement. Drop
         // the outgoing cache before entering the normal page restoration path.
         m_save.stop(); m_page.clear(); m_last.clear(); refresh();
@@ -153,7 +155,8 @@ private:
     {
         if (m_pending) return;
         m_pending=true;
-        QTimer::singleShot(0,this,[this] { m_pending=false; refresh(); });
+        m_work.set("main_placement",m_window);
+        QTimer::singleShot(0,this,[this] { m_pending=false;m_work.clear();refresh(); });
     }
     PaneSettings &m_settings;
     QPointer<QWidget> m_window;
@@ -163,6 +166,7 @@ private:
     QByteArray m_last;
     QTimer m_save;
     bool m_applying=false, m_pending=false;
+    LayoutTraceWork m_work;
 };
 }
 #endif

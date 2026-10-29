@@ -14,6 +14,7 @@
 #include <QWidget>
 #include <functional>
 #include "windowintegration.h"
+#include "layouttracediagnostics.h"
 #include "nodescanvasbounds.h"
 #include "auditionactivationbridge.h"
 #include "paneheaderdrag.h"
@@ -24,7 +25,7 @@
 #include "colornativepalette.h"
 #include "colortimelineheader.h"
 #include "colorwheelsminimum.h"
-#include "palettegeometryrestore.h"
+#include "layoutrestorepolicy.h"
 #include "panegeometryrestore.h"
 
 namespace Unbound {
@@ -68,7 +69,7 @@ public:
         ++m_initialGeometryGeneration;
         m_geometryTimer->stop(); m_savedGeometry=geometry;
         if(m_host && !geometry.isEmpty()) static_cast<PaneFloatingWindow *>(m_host.data())->restoreGeometry(geometry);
-        preservePaletteGeometry(geometry);
+        preserveRestoredGeometry(geometry);
     }
     void rememberGeometry()
     {
@@ -85,7 +86,8 @@ public:
     }
     bool active() const { return !m_host.isNull(); }
     QWidget *floatingWindow() const { return m_host.data(); }
-    void suspendClipsMode(bool suspend) { if(m_clipsAdapter) m_clipsAdapter->suspendNativeMode(suspend); }
+    bool suspendClipsMode(bool suspend) { return !m_clipsAdapter || m_clipsAdapter->suspendNativeMode(suspend); }
+    void returnClipsToNormalMode() { if(m_clipsAdapter) m_clipsAdapter->returnToNormalMode(); }
     QString dock()
     {
         if (!active() || m_restoring) return QString();
@@ -149,6 +151,7 @@ public:
 
     QString start(QWidget *slot, const QString &label, QWidget *pageRoot = nullptr, bool reclaimSplitterSpace = false, bool fadeIn = false, bool preserveNativeLayout = false, bool activate = true)
     {
+        LayoutTraceSpan phaseTrace("float_validate",slot ? slot->objectName() : QString());
         m_dockingGuard.cancel();
         if (active()) return QStringLiteral("This pane is already floating.");
         if (!slot || slot->isWindow() || !slot->parentWidget() || !(pageRoot ? pageRoot : slot->parentWidget())->isVisible())
@@ -194,6 +197,7 @@ public:
         m_layoutSlot = layoutSlot;
         m_root = pageRoot ? pageRoot : slot->parentWidget();
         m_layout = layout;
+        phaseTrace.next("float_create_host");
         auto host = new PaneFloatingWindow;
         host->setProperty("unboundKeepAtop",m_keepAtop);
         host->setProperty("unboundPage",PaneCatalogue::pageForRoot(m_root->objectName()));
@@ -206,6 +210,7 @@ public:
         host->setObjectName(QStringLiteral("unboundFloating_") + slot->objectName());
         host->setWindowTitle(label);
         host->resize(slot->size().expandedTo(QSize(360, 300)));
+        phaseTrace.next("float_transfer_content");
         if (nativePalette) {
             m_nativePalette=new ColorNativePalette(this);
             const auto error=m_nativePalette->start(slot,host,m_root);
@@ -258,6 +263,7 @@ public:
         placeholderLayout->addWidget(placeholder);
         placeholder->show();
         }
+        phaseTrace.next("float_adapters_and_constraints");
         if (slot->objectName()==QLatin1String("frameEditPageInspector") || slot->objectName()==QLatin1String("frameInspectorContainer")) {
             auto header=host->findChild<QWidget *>(QStringLiteral("frameEffectsWidgetsTitle"));
             auto title=header ? header->findChild<QLabel *>(QStringLiteral("labelTitle"),Qt::FindDirectChildrenOnly) : nullptr;
@@ -349,6 +355,7 @@ public:
                 return QStringLiteral("The native Lightbox controls are unavailable; Clips remains docked.");
             }
         }
+        phaseTrace.next("float_geometry_and_style");
         const auto initialArea=panePlacementWorkArea(slot);
         const bool newPlacement=m_savedGeometry.isEmpty() || !host->restoreGeometry(m_savedGeometry);
         if(newPlacement) centerNewPane(host,initialArea);
@@ -357,12 +364,14 @@ public:
             m_returnFade->setTargetObject(host);
             host->setWindowOpacity(0.0);
         }
+        phaseTrace.next("float_show");
         host->show();
+        phaseTrace.next("float_after_show");
         if(newPlacement) centerNewPane(host,initialArea);
         // First-time OS placement and show-time minimum sizing need the same
         // recovery as saved geometry. Never constrain subsequent user dragging.
         ensureReachablePaneGeometry(host);
-        if(!newPlacement) preservePaletteGeometry(m_savedGeometry);
+        if(!newPlacement) preserveRestoredGeometry(m_savedGeometry);
         if(!fadeIn && activate) host->activateWindow(); // Explicit manual undocking.
         if (preserveNativeLayout && slot->objectName()==QStringLiteral("m_pFrameNodeGraph"))
             m_nodesBounds=new NodesCanvasBounds(m_content,this);
@@ -388,6 +397,7 @@ public:
                 && m_host->layout() == m_layout);
         if (!layoutIntact || !m_placeholder)
             return QStringLiteral("Resolve changed this pane's layout. Restart Resolve to reset the experiment.");
+        if(m_clipsAdapter)m_clipsAdapter->prepareModeChange();
         static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
         rememberGeometry();
         m_restoring = true;
@@ -456,6 +466,7 @@ protected:
             if (event->type() == QEvent::Hide) {
                 m_hiddenByPage = m_hiddenByPage || m_host->isVisible();
                 if (m_hiddenByPage) {
+                    m_pageReturnWork.clear();
                     static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
                     rememberGeometry();
                     m_returnFade->stop();
@@ -463,12 +474,16 @@ protected:
                     m_host->setWindowOpacity(1.0);
                 }
             } else if (event->type() == QEvent::Show && m_hiddenByPage) {
+                m_pageReturnWork.set("pane_page_return",m_host);
                 const auto generation = m_generation;
                 // Let Resolve finish the page's Show handling before revealing
                 // its floating windows. Do not pump a nested event loop.
                 QTimer::singleShot(0, this, [this, generation]() {
+                    if(m_generation!=generation)return;
+                    m_pageReturnWork.clear();
                     if (!m_host || !m_root || !m_root->isVisible() || !m_hiddenByPage || m_generation != generation) return;
                     m_hiddenByPage = false;
+                    const auto returningGeometry=m_savedGeometry;
                     if (m_host->layout()) m_host->layout()->activate();
                     applyPaneDarkCaption(m_host, m_root->window());
                     // Returning pages reuse their windows at full opacity.
@@ -476,6 +491,10 @@ protected:
                     m_returnFade->stop();
                     m_host->setWindowOpacity(1.0);
                     m_host->show();
+                    // Native palettes can briefly grow their minimum on page
+                    // return just as on recall. Preserve the outgoing working
+                    // size through those layout requests, not a preset snapshot.
+                    preserveRestoredGeometry(returningGeometry);
                     // Reuse the existing widget tree and let Qt coalesce its
                     // pending paints. Forcing a synchronous repaint here makes
                     // every returning pane finish painting before the next can
@@ -504,15 +523,16 @@ protected:
     }
 
 private:
-    void preservePaletteGeometry(const QByteArray &requested) {
+    void preserveRestoredGeometry(const QByteArray &requested) {
         auto host=static_cast<PaneFloatingWindow *>(m_host.data());
-        if(!host || !m_nativePalette || host->isMaximized() || host->isFullScreen()) return;
+        if(!host || host->isMaximized() || host->isFullScreen()) return;
         QRect client;
         if(!readRectangle(qtGeometryJson(requested).value("clientRect"),client)) return;
         const auto state=host->windowState();
         const auto generation=++m_initialGeometryGeneration;
         QPointer<SidebarFloatSession> session(this);
-        new PaletteGeometryRestore(host,client.size(),[session,host,state,generation] {
+        LayoutRestorePolicy::preserveGeometry(host,m_root?m_root->objectName():QString(),
+            m_slot?m_slot->objectName():QString(),client.size(),[session,host,state,generation] {
             return session && session->m_host==host && generation==session->m_initialGeometryGeneration
                 && host->windowState()==state;
         },[host,requested] { host->restoreGeometry(requested); });
@@ -576,6 +596,7 @@ private:
     ColorNativePalette *m_nativePalette=nullptr;
     void clear()
     {
+        m_pageReturnWork.clear();
         delete m_timelineHeader; m_timelineHeader=nullptr;
         delete m_nativePalette; m_nativePalette=nullptr;
         restoreNativeExpand();
@@ -630,6 +651,7 @@ private:
     bool m_hiddenByPage = false;
     bool m_restoring = false;
     PaneDockingGuard m_dockingGuard{this};
+    LayoutTraceWork m_pageReturnWork;
 };
 }
 #endif

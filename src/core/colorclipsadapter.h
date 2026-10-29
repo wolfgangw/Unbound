@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#include "layouttracediagnostics.h"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPointer>
@@ -12,6 +13,8 @@
 #include "colorclipstoolbar.h"
 #include "windowpresentation.h"
 #include "colorclipssidebars.h"
+#include "colorplaybackpause.h"
+#include "layoutrestorepolicy.h"
 
 namespace Unbound {
 // Separate nonactivating native surface: a child of the frozen page cannot
@@ -35,6 +38,7 @@ class ColorClipsAdapter final : public QObject {
     QPointer<QAbstractButton> m_timelineToggle;
     bool m_initializing=false;
     bool m_initializeTimelineToggle=false;
+    LayoutRestorePolicy::ToggleState m_timelineToggleState;
     unsigned m_startGeneration=0;
     ColorClipsToolbar *m_toolbar=nullptr;
     ColorClipsSidebars m_sidebars;
@@ -165,6 +169,11 @@ class ColorClipsAdapter final : public QObject {
     bool m_playerHidden=false,m_regionHidden=false;
     bool m_originalMode=false,m_originalControls=false;
     bool m_enabled=false,m_busy=false,m_pending=false,m_restorePending=false,m_returning=false,m_suspended=false;
+    LayoutTraceWork m_layoutWork,m_initializeWork,m_restoreWork;
+    ColorPlaybackPause::Hold m_playbackHold;
+    void finishPlaybackChange() {
+        if(!m_initializing && !m_suspended && !m_restorePending && !m_drag)m_playbackHold.reset();
+    }
     static QAbstractButton *uniqueButton(QWidget *root,const QString &name) {
         const auto buttons=root->findChildren<QAbstractButton *>(name);
         return buttons.size()==1 ? buttons.first() : nullptr;
@@ -172,8 +181,10 @@ class ColorClipsAdapter final : public QObject {
     void schedule() {
         if(m_pending) return;
         m_pending=true;
+        m_layoutWork.set("clips_layout",m_page);
         QTimer::singleShot(0,this,[this] {
             m_pending=false;
+            m_layoutWork.clear();
             if(m_restorePending) restoreMode();
             else {
                 if(m_enabled && !m_suspended && m_returning && m_page && m_page->isVisible() && m_mode) {
@@ -185,15 +196,34 @@ class ColorClipsAdapter final : public QObject {
             }
         });
     }
+    bool restoreControls() {
+        if(!m_controls || !m_mode) return false;
+        if(m_controls->isChecked()==m_originalControls) return true;
+        // This action belongs to Lightbox. Outside that mode Resolve attempts
+        // an implicit re-entry, which can be rejected during playback and leave
+        // its toolbar inconsistent with the unchecked mode button.
+        if(!m_mode->isChecked()) m_mode->click();
+        if(!m_mode->isChecked()) return false;
+        m_controls->click();
+        return m_controls->isChecked()==m_originalControls;
+    }
     void restoreMode() {
         if(!m_restorePending || !m_page || !m_page->isVisible() || !m_mode || !m_controls) return;
+        if(m_mode->isChecked()!=m_originalMode || m_controls->isChecked()!=m_originalControls)
+            prepareModeChange();
         m_busy=true;
         // Controls must be restored while their native Lightbox is still open.
-        if(m_controls->isChecked()!=m_originalControls) m_controls->click();
+        if(!restoreControls()) {m_busy=false;return;}
         if(m_mode->isChecked()!=m_originalMode) m_mode->click();
-        m_restorePending=false; m_busy=false;
+        m_restorePending=m_mode->isChecked()!=m_originalMode;
+        if(!m_restorePending) m_restoreWork.clear();
+        m_busy=false;
+        finishPlaybackChange();
     }
 public:
+    void prepareModeChange() {
+        m_playbackHold=ColorPlaybackPause::acquire(m_page);
+    }
     std::function<void()> nativeDockRequested;
     ColorClipsAdapter(QWidget *page,QObject *owner) : QObject(owner),m_page(page) {
         if(!page) return;
@@ -230,6 +260,8 @@ public:
         if(m_enabled) return true;
         if(!valid() || !m_page->isVisible() || !m_mode->isEnabled() || !m_controls->isEnabled()) return false;
         if(m_restorePending) restoreMode();
+        if(m_restorePending) return false; // Do not overwrite an unfinished native return.
+        prepareModeChange();
         m_originalMode=m_mode->isChecked(); m_originalControls=m_controls->isChecked();
         m_originalPlayer=m_player->geometry(); m_originalRegion=m_region->geometry();
         m_playerHidden=m_player->isHidden(); m_regionHidden=m_region->isHidden();
@@ -239,11 +271,15 @@ public:
         if(m_mode->isChecked()) m_mode->click();
         m_initializeTimelineToggle=m_timelineToggle && m_timelineToggle->isEnabled()
             && !m_timelineToggle->isChecked();
-        if(m_initializeTimelineToggle) m_timelineToggle->click();
+        if(m_initializeTimelineToggle) {
+            m_timelineToggleState.begin(m_timelineToggle);
+            m_timelineToggle->click();
+        }
         // Exiting native Lightbox queues normal Timeline constraints. Capturing
         // its hidden geometry synchronously can retain a collapsed strip. Let
         // that native pass finish before entering Lightbox again.
         m_initializing=true;
+        m_initializeWork.set("clips_initialization",m_page);
         const auto generation=++m_startGeneration;
         QTimer::singleShot(0,this,[this,generation] {
             if(!m_enabled || generation!=m_startGeneration) return;
@@ -253,6 +289,7 @@ public:
         return true;
     }
     void completeStart() {
+        LayoutTraceSpan trace("clips_complete_start");
         if(!m_initializing || !m_enabled) return;
         if(!valid()) { stop(); return; }
         if(!m_page->isVisible()) return;
@@ -265,30 +302,36 @@ public:
             m_timelineHeight=qBound(m_timelineMinimum.height(),m_timeline->height(),m_timelineMaximum.height());
         }
         if(m_initializeTimelineToggle && m_timelineToggle && m_timelineToggle->isChecked()) m_timelineToggle->click();
+        m_timelineToggleState.end();
         m_initializeTimelineToggle=false;
         m_sidebars.capture(m_page,m_root,this,[this] {schedule();});
         m_toolbar=new ColorClipsToolbar(this);
         if(!m_toolbar->start(m_page)) {delete m_toolbar;m_toolbar=nullptr;}
         if(!m_suspended && !m_mode->isChecked()) m_mode->click();
-        if(!m_suspended && !m_controls->isChecked()) m_controls->click();
+        if(!m_suspended && !m_mode->isChecked())ColorPlaybackPause::cancelActive("clips_entry_rejected");
+        if(!m_suspended && m_mode->isChecked() && !m_controls->isChecked()) m_controls->click();
         m_nativeAllocation=m_region->geometry();
         m_appliedRegion=m_nativeAllocation;
         m_initializing=false; m_busy=false;
+        m_initializeWork.clear();
         qApp->installEventFilter(this);
         apply(); schedule();
+        finishPlaybackChange();
     }
     void stop() {
+        m_initializeWork.clear();m_layoutWork.clear();
         finishDivider(false);
         if(!m_enabled) return;
         ++m_startGeneration;
         if(m_initializing) {
             if(m_initializeTimelineToggle && m_timelineToggle && m_timelineToggle->isChecked()) m_timelineToggle->click();
+            m_timelineToggleState.end();
             m_initializeTimelineToggle=false;
-            m_initializing=false; m_enabled=false;
-            m_restorePending=true; restoreMode();
+            m_initializing=false; m_enabled=false; m_suspended=false;
+            m_restorePending=true; m_restoreWork.set("clips_mode_restore",m_page); restoreMode();
             return;
         }
-        m_enabled=false;
+        m_enabled=false;m_suspended=false;
         qApp->removeEventFilter(this);
         m_busy=true;
         delete m_toolbar; m_toolbar=nullptr;
@@ -302,21 +345,45 @@ public:
         }
         if(m_divider) m_divider->setVisible(!m_dividerHidden);
         m_busy=false;
-        m_restorePending=true; restoreMode();
+        m_restorePending=true; m_restoreWork.set("clips_mode_restore",m_page); restoreMode();
     }
-    void suspendNativeMode(bool suspend) {
-        if(m_initializing) { m_suspended=suspend; return; }
+    bool suspendNativeMode(bool suspend) {
+        if(m_initializing) { m_suspended=suspend; return true; }
         // Routine restoration may ask to resume while native gesture layout is
         // still pending. The gesture owns that suspension until it finishes.
-        if(m_drag && !suspend) return;
+        if(m_drag && !suspend) return true;
         finishDivider(false);
-        if(!m_enabled || !m_mode || !m_page || !m_page->isVisible() || m_suspended==suspend) return;
+        if(!m_enabled || !m_mode || !m_page || !m_page->isVisible() || m_suspended==suspend) return true;
+        prepareModeChange();
         m_suspended=suspend; m_busy=true;
+        // Suspension precedes docking during recall. Restore the outgoing
+        // controls choice now, while its native Lightbox context still exists.
+        if(suspend && !restoreControls()) {
+            m_busy=false;m_suspended=false;
+            ColorPlaybackPause::cancelActive("clips_controls_rejected");m_playbackHold.reset();return false;
+        }
         if(m_mode->isChecked()==suspend) m_mode->click();
+        if(m_mode->isChecked()==suspend) {
+            m_busy=false;m_suspended=!suspend;
+            ColorPlaybackPause::cancelActive("clips_mode_rejected");m_playbackHold.reset();return false;
+        }
+        // A rejected Lightbox entry must not be followed by a controls click.
+        if(!suspend && m_mode->isChecked() && !m_controls->isChecked()) m_controls->click();
         m_busy=false;
         if(!suspend) { apply(); schedule(); }
+        finishPlaybackChange();
+        return true;
+    }
+    void returnToNormalMode() {
+        // An explicit docked layout supersedes a deferred pre-float Lightbox
+        // return. Keep any controls restoration, but never resurrect that mode
+        // on a later page visit.
+        if(m_enabled || !m_restorePending) return;
+        m_originalMode=false;
+        restoreMode();
     }
     void apply() {
+        LayoutTraceSpan trace("clips_geometry_apply");
         if(!m_enabled || m_initializing || m_suspended || m_busy || !valid() || !m_page->isVisible() || !m_mode->isChecked()) return;
         m_busy=true;
         const auto allocation=m_nativeAllocation;

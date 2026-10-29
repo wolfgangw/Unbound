@@ -38,6 +38,20 @@ void testColorControls() {
         host.setMinimumHeight(200); LayoutTest::settle();
         require(!restored,"Deferred palette recall overrode a user geometry gesture");
     }
+    {
+        QWidget host;
+        auto layout=new QVBoxLayout(&host); layout->setContentsMargins(0,0,0,0);
+        auto controls=new QWidget; controls->setMinimumSize(300,180);layout->addWidget(controls);
+        host.resize(600,300);host.show();LayoutTest::settle();
+        new PaletteGeometryRestore(&host,QSize(600,300),[] {return true;},[&] {host.resize(600,300);});
+        // Other panes are still initializing. The final native allocation can
+        // raise and then lower this palette's minimum after its first second.
+        QTimer::singleShot(600,&host,[&] {QCoreApplication::postEvent(&host,new QEvent(QEvent::LayoutRequest));});
+        QTimer::singleShot(1100,controls,[=] {controls->setMinimumHeight(400);});
+        QTimer::singleShot(1150,controls,[=] {controls->setMinimumHeight(180);});
+        QEventLoop loop;QTimer::singleShot(1350,&loop,&QEventLoop::quit);loop.exec();
+        require(host.size()==QSize(600,300),"Ongoing native layout outlived palette geometry restoration");
+    }
     QWidget page; page.setObjectName("WStackPage_Color"); page.resize(800,500);
     auto outer=new QVBoxLayout(&page);
     auto stack=new QStackedWidget; stack->setObjectName("UiSecWidgetContainer"); outer->addWidget(stack);
@@ -248,6 +262,25 @@ void testColorControls() {
         value->click(); require(clicks==1,"Native tool connection lost");
         page.hide(); LayoutTest::settle(); require(!session.floatingWindow()->isVisible(),"Tool stayed visible on another page");
         page.show(); LayoutTest::settle(); require(session.floatingWindow()->isVisible(),"Tool failed page return");
+        if(dialog) {
+            auto host=session.floatingWindow();
+            auto controls=warperModes ? warperModes->currentWidget()->layout()->itemAt(0)->widget() : content;
+            const int nativeMinimum=controls->minimumHeight();
+            // Page return is not layout recall: preserve the most recent working
+            // size, including manual changes never saved to a layout snapshot.
+            for(const int height:{320,344}) {
+                WindowInteractionEvent::notify(host);
+                host->resize(650,height); LayoutTest::settle();
+                const auto working=host->geometry();
+                page.hide(); LayoutTest::settle();
+                page.show(); LayoutTest::settle();
+                controls->setMinimumHeight(450); LayoutTest::settle();
+                require(host->height()>working.height(),"Page-return fixture did not grow the native palette");
+                controls->setMinimumHeight(nativeMinimum); LayoutTest::settle();
+                require(host->geometry()==working,"Page return retained a temporary native palette size");
+            }
+            WindowInteractionEvent::notify(host);
+        }
         if(dialog) {
             dialog->rejectClose=true;
             require(!session.dock().isEmpty() && session.active() && dialog->registered

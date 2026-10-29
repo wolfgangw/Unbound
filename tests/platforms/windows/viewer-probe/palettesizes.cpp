@@ -10,8 +10,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI UnboundStart(void *) {
             if(widget->objectName()==QStringLiteral("timelineFrame") && widget->parentWidget())
                 Unbound::recordPaletteSizes(widget->parentWidget(),QStringLiteral("colorTimelineRegion"));
         for(auto host:QApplication::topLevelWidgets())
-            for(const auto pane:{"colorWheelsTab","colorMapperTab","curvesTab"})
-                if(host->objectName()==QStringLiteral("unboundFloating_")+QLatin1String(pane))
-                    Unbound::recordPaletteSizes(host,QLatin1String(pane));
+            if(host->objectName().startsWith("unboundFloating_"))
+                Unbound::recordPaletteSizes(host,host->objectName().mid(16));
     },Qt::QueuedConnection)?1:0;
 }

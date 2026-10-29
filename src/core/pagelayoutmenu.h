@@ -25,6 +25,8 @@
 #include <QTouchEvent>
 #include <QNativeGestureEvent>
 #include <QDropEvent>
+#include <QResizeEvent>
+#include <QCloseEvent>
 #include <functional>
 #include "panesettings.h"
 #include "windowinteraction.h"
@@ -255,8 +257,21 @@ public:
             target.setX(qBound(area.left(),target.x(),qMax(area.left(),area.right()-width()+1)));
             target.setY(qBound(area.top(),target.y(),qMax(area.top(),area.bottom()-height()+1)));
         }
+        m_open=true;
         move(target); show(); raise();
         setFocus(Qt::PopupFocusReason);
+    }
+    void dismiss() {
+        m_open=false;
+        QFrame::setVisible(false);
+    }
+    void setVisible(bool visible) override {
+        // Resolve temporarily hides/shows tool windows during native palette
+        // activation. Keep this popout's visibility intent separate from that
+        // sweep: rejecting the request here avoids even one unpainted frame.
+        // Dismissal is explicit; a subsequent native show cannot reopen it.
+        if(visible!=m_open && !QCoreApplication::closingDown()) return;
+        QFrame::setVisible(visible);
     }
     void finishRecall() {
         if(!m_recalling) return;
@@ -264,6 +279,22 @@ public:
         afterAction({});
     }
 protected:
+    void closeEvent(QCloseEvent *event) override {
+        dismiss(); event->accept();
+    }
+    void resizeEvent(QResizeEvent *event) override {
+        QFrame::resizeEvent(event);
+        // Status/Dock all rows can change the size after a recall. Keep the
+        // live menu reachable without hiding it or following the moved pane.
+        if(!isVisible())return;
+        auto screen=QGuiApplication::screenAt(pos());
+        if(!screen)screen=this->screen();
+        if(!screen)return;
+        const auto area=screen->availableGeometry();
+        const QPoint target(qBound(area.left(),x(),qMax(area.left(),area.right()-width()+1)),
+            qBound(area.top(),y(),qMax(area.top(),area.bottom()-height()+1)));
+        if(target!=pos())move(target);
+    }
     void paintEvent(QPaintEvent *) override {
         // Paint the translucent tool surface explicitly; QFrame's default
         // NoFrame style need not paint a stylesheet background on Windows.
@@ -272,7 +303,7 @@ protected:
         painter.drawRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5),4,4);
     }
     void showEvent(QShowEvent *event) override {
-        m_nativeMenuTracking=observeNativeMenuTracking([this] { hide(); });
+        m_nativeMenuTracking=observeNativeMenuTracking([this] { dismiss(); });
         qApp->installEventFilter(this); QFrame::showEvent(event);
     }
     void hideEvent(QHideEvent *event) override {
@@ -284,8 +315,11 @@ protected:
         QFrame::hideEvent(event);
     }
     bool eventFilter(QObject *object,QEvent *event) override {
+        if(object==parentWidget() && (event->type()==QEvent::Hide ||
+            (event->type()==QEvent::WindowStateChange && parentWidget()->isMinimized())))
+            dismiss();
         if(isVisible() && event->type()==WindowInteractionEvent::eventType() && object!=this)
-            hide();
+            dismiss();
         // Both native and Qt focus already belong to the editor. Resolve can
         // nevertheless intercept key presses before widget filters, including
         // keys forwarded via sendEvent. Deliver this popout's rename input to
@@ -300,8 +334,8 @@ protected:
             }
         }
         if(isVisible() && (outsideInteraction(object,event) ||
-            event->type()==QEvent::ApplicationDeactivate ||
-            (event->type()==QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key()==Qt::Key_Escape && m_editing.isEmpty()))) hide();
+            (event->type()==QEvent::ApplicationDeactivate && !nativeApplicationActive()) ||
+            (event->type()==QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key()==Qt::Key_Escape && m_editing.isEmpty()))) dismiss();
         return QFrame::eventFilter(object,event);
     }
 private:
@@ -461,7 +495,9 @@ private:
         m_atop->setVisible(!m_paneKey.isEmpty()); m_atopSeparator->setVisible(!m_paneKey.isEmpty());
         m_atop->setEnabled(m_paneFloating && m_paneFloating());
         m_atop->setChecked(m_settings.keepAtop(m_paneKey));
-        m_dock->setEnabled(floating); m_dock->setVisible(floating);
+        // Keep the row allocated through the zero-host interval between
+        // outgoing docking and incoming floating during layout restoration.
+        m_dock->setEnabled(floating);
         const auto entries=m_settings.layouts(m_page);
         QSet<QString> ids;
         for(const auto &value:entries) ids.insert(value.toObject().value("id").toString());
@@ -510,6 +546,6 @@ private:
     QString m_message,m_editing;
     Qt::MouseButtons m_openingButtons=Qt::NoButton;
     QRect m_openingArea;
-    bool m_recalling=false,m_refreshQueued=false;
+    bool m_recalling=false,m_refreshQueued=false,m_open=false;
 };
 }

@@ -18,6 +18,9 @@
 #include "pagefocus.h"
 #include "gridreferenceevent.h"
 #include "panegridreferences.h"
+#include "layouttransition.h"
+#include "layoutrestorepolicy.h"
+#include "pagetransition.h"
 
 namespace {
 namespace Catalogue = Unbound::PaneCatalogue;
@@ -55,6 +58,15 @@ public:
         setObjectName(QStringLiteral("UnboundPaneController"));
         m_mainPlacement.error = [this](const QString &message) { settingsError(message); };
         m_names = Catalogue::sidebarNames();
+        m_pageTransition.hasFloating=[this](const QString &page) {
+            if(page=="WStackPage_Conform" && m_viewers && m_viewers->hasFloating())return true;
+            for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it)
+                if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && it.value()->active())return true;
+            for(const auto &pane:Catalogue::panes())
+                if(Catalogue::page(pane.page).objectName==page && m_settings.floating(pane.settingsKey()))return true;
+            return false;
+        };
+        m_pageTransition.arrived=[this] {scheduleDiscovery();};
         connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { delete this; }, Qt::DirectConnection);
         qApp->installEventFilter(this);
         // One initial inventory. Later work is restricted to newly added
@@ -73,6 +85,7 @@ public:
         m_mainSnap.setWindow(nullptr);
         m_windowGroup.setWindow(nullptr);
         m_pageFocus.attach(nullptr);
+        m_pageTransition.attach(nullptr);
         qDeleteAll(m_decorations);
         qDeleteAll(m_sessions);
     }
@@ -147,14 +160,15 @@ private:
                 settingsError(m_settings.saveFloating(key,session && session->active()));
             auto pane=m_candidates.value(it.key());
             if(pane) if(auto toggle=nativeToggle(pane,it.key()))
-                settingsError(m_settings.saveToggle(key,toggle->isChecked()));
+                settingsError(m_settings.saveToggle(key,Unbound::LayoutRestorePolicy::ToggleState::checked(toggle)));
         }
         return m_lastSettingsError;
     }
     QWidget *floatingHost(const QString &name) const {
+        if(auto session=m_sessions.value(name)) return session->floatingWindow();
         for(auto window:QApplication::topLevelWidgets())
             if(window->property("unboundFloatingWindow").toBool()
-                && window->objectName()=="unboundFloating_"+name) return window;
+                && window->layout() && window->objectName()=="unboundFloating_"+name) return window;
         return nullptr;
     }
     void openLayouts(const QString &page,QWidget *button,const QPoint &position,const QString &name={}) {
@@ -232,12 +246,12 @@ private:
     }
     void normalColorLayout(const QString &page,const QJsonObject &panes)
     {
-        if(page!=QLatin1String("WStackPage_Color")
-            || panes.value("m_pLightBox").toObject().value("floating").toBool()) return;
+        if(!Unbound::LayoutRestorePolicy::normalColorMode(page,panes)) return;
         // Lightbox is an implementation detail of floating Clips. Explicitly
         // recalling an ordinary Color layout must not inherit that outgoing
         // session's pre-float mode (manual docking still restores it).
         m_deferredLightbox=nullptr;
+        if(auto clips=m_sessions.value("m_pLightBox")) clips->returnClipsToNormalMode();
         if(!m_window) return;
         const auto buttons=m_window->findChildren<QAbstractButton *>("btnColorToggleLightbox");
         if(buttons.size()==1 && buttons.first()->isEnabled() && buttons.first()->isChecked())
@@ -252,20 +266,34 @@ private:
         for(const auto &name:m_initializingNative)
             if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)
                 return QStringLiteral("Panels are still initializing. Please try again.");
+        Unbound::LayoutTrace::begin(m_window,page);
+        Unbound::LayoutTraceSpan recallTrace("recall_sync");
         const auto captured=capturePage(page);
         if(!captured.isEmpty()) return captured;
         if(m_settings.activeLayout(page)==layoutId && !m_settings.layoutDirty(page,layoutId)) {
+            const auto incoming=configuration.value("panes").toObject();
+            auto pause=Unbound::LayoutRestorePolicy::pauseForRecall(m_window,page,incoming,false,true);
             normalColorLayout(page,configuration.value("panes").toObject());
+            Unbound::LayoutTrace::mark("clean_recall");tracePending();
             return {};
         }
+        Unbound::LayoutTransitionRecall transition(m_window,page,[page](const QString &reason) {
+            Unbound::LayoutRestorePolicy::presentationEnded(page,reason);
+        },m_layoutMenu);
+        Unbound::LayoutRestorePolicy::PlaybackRecall playbackRecall(m_colorPlayback);
+        const auto outgoingClips=m_sessions.value("m_pLightBox");
+        m_colorPlayback=Unbound::LayoutRestorePolicy::pauseForRecall(m_window,page,
+            configuration.value("panes").toObject(),outgoingClips && outgoingClips->active());
         applied=true;
-        if(page=="WStackPage_Color") if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(true);
+        if(page=="WStackPage_Color") if(auto clips=m_sessions.value("m_pLightBox"))
+            clips->suspendClipsMode(true);
         const auto panes=configuration.value("panes").toObject();
         // Dock only differences, before activating the saved settings: outgoing
         // geometry/dock callbacks must not overwrite the incoming configuration.
         for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
             if(!panes.value(it.key()).toObject().value("floating").toBool()) {
+                Unbound::LayoutTraceSpan dockTrace("dock",it.key());
                 const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
             }
         }
@@ -289,6 +317,8 @@ private:
         m_mainPlacement.reloadCurrent();
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->restoreLayout();
         scheduleDiscovery();
+        transition.complete();
+        playbackRecall.complete();
         return {};
     }
     void restoreLayoutToggles() {
@@ -316,14 +346,17 @@ private:
             m_pendingLayoutToggles.remove(name);
         }
         m_restoringToggles=false;
+        Unbound::LayoutTrace::mark("menu_finish_recall");
         if(m_layoutMenu && m_layoutMenu->page()==page) m_layoutMenu->finishRecall();
     }
     void scheduleDiscovery()
     {
         if (m_discoveryQueued || QCoreApplication::closingDown()) return;
         m_discoveryQueued=true;
+        m_discoveryWork.set("discovery",m_window);
         QTimer::singleShot(0,this,[this] {
             m_discoveryQueued=false;
+            m_discoveryWork.clear();
             const auto pending=m_pendingBranches;
             m_pendingBranches.clear();
             for (const auto &object : pending) {
@@ -344,12 +377,14 @@ private:
     }
     void indexBranch(QWidget *root)
     {
+        Unbound::LayoutTraceSpan trace("index_branch",root?root->objectName():QString());
         if (root->objectName()==QLatin1String("UiMainWindow") && m_window!=root) {
             m_window=root;
             m_mainSnap.setWindow(root);
             m_windowGroup.setWindow(root);
             m_mainPlacement.attach(root);
             m_pageFocus.attach(root);
+            m_pageTransition.attach(root);
         }
         if (!m_window || (root!=m_window && !m_window->isAncestorOf(root))) return;
         indexWidget(root);
@@ -361,6 +396,7 @@ private:
         m_mainPlacement.observeWidget(widget);
         if (widget->objectName()==QLatin1String("widgetStack_Panel")) {
             m_mainPlacement.attach(m_window); m_pageFocus.attach(m_window);
+            m_pageTransition.attach(m_window);
         }
         const auto name=widget->objectName();
         if (!Catalogue::pageForRoot(name).isEmpty() && !m_pages.contains(widget)) {
@@ -379,7 +415,10 @@ private:
             if (!matchesNativeToggle(it.key(),name)) continue;
             m_toggles[it.key()].append(button);
             m_watchedToggles.insert(button);
-            connect(button,&QAbstractButton::clicked,this,[this] { queueRememberUserToggles(); scheduleDiscovery(); });
+            connect(button,&QAbstractButton::clicked,this,[this,button] {
+                if(!Unbound::LayoutRestorePolicy::ToggleState::temporary(button)) queueRememberUserToggles();
+                scheduleDiscovery();
+            });
             connect(button,&QObject::destroyed,this,[this,button] { m_watchedToggles.remove(button); scheduleDiscovery(); });
             if (auto session=m_sessions.value(it.key()))
                 if (session->active() && preservesNativeLayout(it.key())) session->observeNativeToggle(button);
@@ -410,7 +449,7 @@ private:
             auto pane=decoration ? decoration->pane() : nullptr;
             if (!pane || !panePage(pane) || !panePage(pane)->isVisible()) continue;
             if (auto toggle=nativeToggle(pane,it.key()))
-                settingsError(m_settings.saveToggle(settingsKey(it.key()),toggle->isChecked()));
+                settingsError(m_settings.saveToggle(settingsKey(it.key()),Unbound::LayoutRestorePolicy::ToggleState::checked(toggle)));
         }
     }
     void queueRememberUserToggles()
@@ -455,6 +494,7 @@ private:
             if (m_activationRequested.contains(name)) return false;
             m_activationRequested.insert(name);
             m_initializingNative.insert(name);
+            Unbound::LayoutTrace::mark("native_initialization_requested",name);
             requested = true;
             m_restoringToggles = true;
             toggle->click();
@@ -462,6 +502,7 @@ private:
             // Other widget events may already have queued discovery ahead of
             // Resolve's toggle handler. Do not detach until that handler ran.
             QTimer::singleShot(0,this,[this,name] {
+                Unbound::LayoutTrace::mark("native_initialization_callback",name);
                 m_initializingNative.remove(name);
                 scheduleDiscovery();
             });
@@ -631,8 +672,22 @@ private:
             mode->click();
         }
     }
+    void tracePending() {
+#ifdef UNBOUND_LAYOUT_TRACE
+        if(!Unbound::LayoutTrace::active()) return;
+        int toggles=0,floating=0,initializing=0;
+        const auto page=currentPage();
+        for(const auto &name:m_initializingNative) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) ++initializing;
+        for(const auto &name:(m_pendingLayoutToggles | m_pendingColorToggles | m_pendingDockToggles)) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) ++toggles;
+        for(auto it=m_names.cbegin();it!=m_names.cend();++it)
+            if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && m_settings.floating(settingsKey(it.key()))
+                && !m_restoreAttempted.contains(it.key())) ++floating;
+        Unbound::LayoutTrace::pending(m_discoveryQueued?1:0,initializing,toggles,floating);
+#endif
+    }
     void discover()
     {
+        Unbound::LayoutTraceSpan discoveryTrace("discovery_pass");
         for (auto it = m_decorations.begin(); it != m_decorations.end();) {
             if (!it.value()->pane()) {
                 m_activationRequested.remove(it.key());
@@ -687,7 +742,7 @@ private:
                 && !prepareNativePane(pane, name, requested)) {
                 // Shared sidebar selectors are mutually exclusive. Let one
                 // native activation finish and detach it before selecting next.
-                if (requested && descriptor.serializeInitialization()) return;
+                if (requested && descriptor.serializeInitialization()) { tracePending(); return; }
                 continue;
             }
             // Fairlight controls belong beside native header actions, never in
@@ -699,6 +754,7 @@ private:
                 restoreDeferredLightbox();
             }
             m_restoreAttempted.insert(name); // No repeated errors for incompatible panes.
+            Unbound::LayoutTraceSpan undockTrace("undock",name);
             undock(name, true);
         }
         restoreColorToggles();
@@ -706,9 +762,12 @@ private:
         if(!pendingColorPanes()) {
             restoreDeferredLightbox();
             if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(false);
+            m_colorPlayback.reset();
         }
+        tracePending();
     }
     QPointer<QAbstractButton> m_deferredLightbox;
+    Unbound::LayoutRestorePolicy::PlaybackHold m_colorPlayback;
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
     QPointer<Unbound::PageLayoutMenu> m_layoutMenu;
@@ -717,11 +776,13 @@ private:
     QMap<QString,QList<QPointer<QAbstractButton>>> m_toggles;
     QMap<QObject *,QPointer<QObject>> m_pendingBranches;
     bool m_discoveryQueued=false;
+    Unbound::LayoutTraceWork m_discoveryWork;
     Unbound::PaneSettings m_settings;
     Unbound::MainWindowPlacement m_mainPlacement{m_settings};
     Unbound::MainWindowSnap m_mainSnap;
     Unbound::WindowGroupActivation m_windowGroup;
     Unbound::PageFocus m_pageFocus;
+    Unbound::PageTransition m_pageTransition;
     bool m_settingsErrorShown = false;
     QString m_lastSettingsError;
     bool m_restoringToggles = false;
