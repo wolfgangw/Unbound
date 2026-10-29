@@ -102,6 +102,25 @@ void testWindowGroup() {
     require(stackedAbove(second,first) && ownsKeyboardFocus(main),"Pinned order or selected focus was lost");
     activate(first); activate(main); settle();
     {
+        QWidget auxiliary;
+        auxiliary.setGeometry(100,100,400,300);
+        // Native page names belong to children of an unnamed shared window.
+        for(const auto &descriptor:PaneCatalogue::pages()) if(descriptor.supported) {
+            auto page=new QWidget(&auxiliary); page->setObjectName(descriptor.auxiliaryWindow);
+            group.observeNativePage(page);
+            auxiliary.show(); activate(first); activate(main); settle();
+            verifyActivationBelowPins(auxiliary,{&first,&second});
+            require(stackedAbove(first,auxiliary) && stackedAbove(second,auxiliary)
+                && ownsKeyboardFocus(auxiliary),"Auxiliary activation lost pin priority or native focus");
+            verifyActivationBelowPins(main,{&first,&second});
+            require(stackedAbove(first,auxiliary) && stackedAbove(second,main),
+                "Main activation lost pin priority over the secondary screen");
+            auxiliary.hide(); settle();
+            require(first.isVisible() && second.isVisible(),"Leaving Dual Screen hid pinned hosts");
+            delete page;
+        }
+    }
+    {
         PageLayoutMenu menu(settings,page,&main);
         verifyStackingDuring(second,{&first},[&] {
             verifyStackingDuring(main,{&first,&second},[&] { menu.popup(main.mapToGlobal(QPoint(30,30))); });

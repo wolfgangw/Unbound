@@ -262,6 +262,7 @@ void testDockingGuard();
 void testWindowGroup();
 void testLayoutTrace();
 void testHostLifecycle();
+void testAuxiliaryPageContext();
 void testLayoutTransition();
 void testColorPlaybackPause();
 int main(int argc,char **argv) {
@@ -276,6 +277,7 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--color-clips-startup")) { testColorClipsStartup(); return 0; }
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
     if(app.arguments().contains("--window-group-only")) { testWindowGroup(); return 0; }
+    if(app.arguments().contains("--auxiliary-page-context")) { testAuxiliaryPageContext(); return 0; }
     testLayoutTrace();
     testLayoutTransition();testColorPlaybackPause();
     testHostLifecycle();

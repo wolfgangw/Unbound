@@ -21,6 +21,7 @@
 #include "layouttransition.h"
 #include "layoutrestorepolicy.h"
 #include "pagetransition.h"
+#include "panepagecontext.h"
 
 namespace {
 namespace Catalogue = Unbound::PaneCatalogue;
@@ -35,20 +36,6 @@ bool matchesNativeToggle(const QString &name,const QString &buttonName) {
 QString settingsKey(const QString &name) {
     const auto pane=Catalogue::find(name);
     return pane ? pane->settingsKey() : QString();
-}
-QWidget *panePage(QWidget *pane) {
-    const auto entry=Catalogue::find(pane->objectName());
-    if(!entry) return nullptr;
-    if(const auto control=Catalogue::colorControl(pane->objectName())) {
-        bool found=false;
-        for(auto p=pane->parentWidget();p;p=p->parentWidget())
-            if(p->objectName()==control->scope) { found=true; break; }
-        if(!found) return nullptr;
-    }
-    const auto &rootName=Catalogue::page(entry->page).paneRoot;
-    for(auto p=pane->parentWidget();p;p=p->parentWidget())
-        if(p->objectName()==rootName) return p;
-    return nullptr;
 }
 class Controller : public QObject
 {
@@ -73,6 +60,11 @@ public:
         // branches and the small set of supported panes/selectors we retain.
         for (auto window : QApplication::topLevelWidgets())
             if (window->objectName() == QLatin1String("UiMainWindow")) indexBranch(window);
+        for(auto window:QApplication::topLevelWidgets())
+            for(const auto &page:Catalogue::pages()) if(!page.auxiliaryWindow.isEmpty()) {
+                if(window->objectName()==page.auxiliaryWindow)indexBranch(window);
+                else if(auto auxiliary=window->findChild<QWidget *>(page.auxiliaryWindow))indexBranch(auxiliary);
+            }
         discover();
     }
     ~Controller() override
@@ -112,9 +104,11 @@ protected:
             if (auto widget=qobject_cast<QWidget *>(object)) {
                 const auto name=widget->objectName();
                 if (name==QLatin1String("UiMainWindow") && widget!=m_window) queueBranch(widget);
+                else if (const auto auxiliary=Unbound::auxiliaryPanePage(widget);
+                    auxiliary && name==auxiliary->auxiliaryWindow) queueBranch(widget);
                 else if (!Catalogue::pageForRoot(name).isEmpty())
                     { if (!m_pages.contains(widget)) queueBranch(widget); else scheduleDiscovery(); }
-                else if (m_names.contains(name)) { indexWidget(widget); scheduleDiscovery(); }
+                else if (m_names.contains(name) || name=="frameEditPageVideoPlayers") { indexWidget(widget); scheduleDiscovery(); }
                 else if (m_watchedToggles.contains(qobject_cast<QAbstractButton *>(widget))) scheduleDiscovery();
             }
             break;
@@ -131,6 +125,7 @@ protected:
         return false;
     }
 private:
+    QWidget *panePage(QWidget *pane) const {return Unbound::panePageContext(pane,m_window);}
     QString currentPage() const {
         if(!m_window) return {};
         if(auto stack=m_window->findChild<QStackedWidget *>("widgetStack_Panel"))
@@ -386,19 +381,21 @@ private:
             m_pageFocus.attach(root);
             m_pageTransition.attach(root);
         }
-        if (!m_window || (root!=m_window && !m_window->isAncestorOf(root))) return;
+        if (!m_window || (root!=m_window && !m_window->isAncestorOf(root) && !Unbound::auxiliaryPanePage(root))) return;
         indexWidget(root);
         for (auto widget:root->findChildren<QWidget *>()) indexWidget(widget);
     }
     void indexWidget(QWidget *widget)
     {
-        if (!m_window || (widget!=m_window && !m_window->isAncestorOf(widget))) return;
+        if (!m_window || (widget!=m_window && !m_window->isAncestorOf(widget) && !Unbound::auxiliaryPanePage(widget))) return;
         m_mainPlacement.observeWidget(widget);
+        m_windowGroup.observeNativePage(widget);
         if (widget->objectName()==QLatin1String("widgetStack_Panel")) {
             m_mainPlacement.attach(m_window); m_pageFocus.attach(m_window);
             m_pageTransition.attach(m_window);
         }
         const auto name=widget->objectName();
+        if(name=="frameEditPageVideoPlayers") m_editPlayers=widget;
         if (!Catalogue::pageForRoot(name).isEmpty() && !m_pages.contains(widget)) {
             m_pages.insert(widget);
             connect(widget,&QObject::destroyed,this,[this,widget] { m_pages.remove(widget); });
@@ -726,7 +723,7 @@ private:
         if (QCoreApplication::closingDown() || QApplication::activeModalWidget()) return;
         if (!m_viewers && m_window) {
             auto page=m_window->findChild<QWidget *>("WStackPage_Conform");
-            auto players=page && page->isVisible() ? page->findChild<QWidget *>("frameEditPageVideoPlayers") : nullptr;
+            auto players=page && page->isVisible() ? m_editPlayers.data() : nullptr;
             auto program=players ? players->findChild<QWidget *>("widgetEditTimelinePlayer") : nullptr;
             auto source=players ? players->findChild<QWidget *>("stackedEditSourceOfflinePlayers") : nullptr;
             if (program && source) {
@@ -783,6 +780,7 @@ private:
     Unbound::LayoutRestorePolicy::PlaybackHold m_colorPlayback;
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
+    QPointer<QWidget> m_editPlayers;
     QPointer<Unbound::PageLayoutMenu> m_layoutMenu;
     QSet<QWidget *> m_pages;
     QMap<QString,QPointer<QWidget>> m_candidates;

@@ -19,6 +19,7 @@
 #include "panemainresizegeometry.h"
 #include "auditionactivationbridge.h"
 #include "layouttracediagnostics.h"
+#include "panepagecontext.h"
 
 // Whole native viewer widgets retain their layout slots while floating.
 // Share the controller's settings instance so saves cannot overwrite each other.
@@ -49,6 +50,8 @@ public:
         m_source.dockingGuard=new Unbound::PaneDockingGuard(this);
         m_page=players;
         while (m_page && m_page->objectName()!="WStackPage_Conform") m_page=m_page->parentWidget();
+        if(!m_page && Unbound::auxiliaryPanePage(players)==&Unbound::PaneCatalogue::page(Unbound::PaneCatalogue::Page::Edit))
+            m_page=main->findChild<QWidget *>("WStackPage_Conform");
         if (m_page) m_page->installEventFilter(this);
         source->installEventFilter(this);
         program->installEventFilter(this);

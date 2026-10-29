@@ -340,6 +340,25 @@ int main(int argc,char **argv)
     require(program->window()==&main && source->window()==&main && warning->dockingFailure().isEmpty(),
         "Viewer docking recovery retained a stale warning");
     delete experiment; app.processEvents();
+    // Starting while the native players belong to the second screen must
+    // still bind floating visibility to the persistent Edit page.
+    QWidget auxiliary; auxiliary.setObjectName("UiEditPanelAux"); auxiliary.resize(900,500);
+    players->setParent(&auxiliary); players->show(); source->show(); program->show();
+    auxiliary.show(); app.processEvents();
+    experiment=new EditViewers(&main,players,program,source,settings);
+    experiment->toggleProgram(); experiment->toggleSource(); app.processEvents();
+    auto auxProgramHost=program->window(),auxSourceHost=source->window();
+    require(auxProgramHost!=&auxiliary && auxSourceHost!=&auxiliary,"Auxiliary viewers did not float");
+    players->setParent(root); players->show(); auxiliary.hide(); app.processEvents();
+    require(auxProgramHost->isVisible() && auxSourceHost->isVisible(),"Screen-mode change hid floating viewers");
+    page->hide(); app.processEvents();
+    require(!auxProgramHost->isVisible() && !auxSourceHost->isVisible(),"Auxiliary viewers ignored page departure");
+    page->show(); app.processEvents(); app.processEvents();
+    require(auxProgramHost->isVisible() && auxSourceHost->isVisible(),"Auxiliary viewers failed page return");
+    nativeRegions(); experiment->dockBoth(); waitDock();
+    require(program->window()==&main && source->window()==&main,"Auxiliary viewer docking lost native ownership");
+    delete experiment; app.processEvents();
+    qInfo("PASS: viewers initialized on the auxiliary screen survive mode changes and follow logical page visibility");
     qInfo("PASS: independent viewer geometry on dock/re-undock and disk reload; startup floating restoration; shutdown intent; explicit docking");
     qInfo("PASS: viewer whole-widget detachment, source alternatives, page visibility, native order/stretch, close docking and repeated cleanup");
     qInfo("PASS: docking after Cinema main-window hide/show restores native viewer, timeline and side-region geometry without resizing");

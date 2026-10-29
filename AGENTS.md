@@ -136,6 +136,19 @@ Do not cache empty hosts or their compositors to accelerate later undocking:
 Unbound's low memory impact takes priority over that latency saving. Retention
 across page switches applies only to panes that remain floating.
 
+`panepagecontext.h` resolves a pane's logical page independently of its dock slot's
+screen. Catalogued auxiliary windows (`UiEditPanelAux`, `UiColorPanelAux` and
+`UiAudioPanelAux`) use the
+main window's page root for floating visibility, geometry observation and page
+identity. Native Single/Dual Screen moves therefore retain the same host/content;
+closing the auxiliary container is not page departure. Discovery includes these
+named auxiliary branches at startup and on construction/show events. No screen-mode
+polling, forced host reveals or separate Dual Screen layout state is introduced.
+This applies to all catalogued panes, including scoped Color controls. Edit viewer
+discovery also retains the players container outside main's tree, and viewer
+visibility follows the persistent Edit page when initialized in its auxiliary window.
+Fresh-process native validation remains in `doc/issues/dual-screen-floating-panels.md`.
+
 ### Docking safeguard
 
 After native layout settles, a bounded shared check verifies visible allocation,
@@ -163,6 +176,12 @@ undocking explicitly activates the new host.
 `panewindowgroup.h` owns application-local pinning and grouped minimization.
 The per-pane `keepAtop` preference orders visible pinned hosts above ordinary
 Resolve windows only while a member or its Unbound layout menu owns activation.
+The group includes the top-level windows containing catalogued native auxiliary
+pages on Edit, Color and Fairlight. Controller discovery registers those page
+widgets; group membership resolves their current window, including Resolve's
+unnamed shared secondary wrapper. Both platform backends use this shared membership
+for ordering. Native secondary-window minimization remains Resolve-owned; Unbound
+only conceals/restores its own hosts when main is minimized.
 The main-owned layout menu retains its popup level and focus above the pinned
 group; opening it, clean recall and renaming must not lift main above pinned panes
 or change their relative order. General Always-on-top use is user-validated on

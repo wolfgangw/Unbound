@@ -83,6 +83,7 @@ try {
     Invoke-Checked (Join-Path $build 'Release\UnboundCinemaTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
+    Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
     $test = Join-Path $testBuild 'Release\pane-float-smoke.exe'
     Invoke-Checked (Join-Path $testBuild 'Release\audition-activation-test.exe') @()
     Invoke-Checked $test @()
@@ -108,6 +109,7 @@ try {
         }
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--index-header-drag')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
         Invoke-UnboundNativeTest $test @('--audition-taskbar-native')
         Invoke-UnboundNativeTest $test @('--main-placement-test')

@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <functional>
+#include "panecatalogue.h"
 namespace Unbound {
 // Shared application-local stacking. Native adapters only reorder normal-level
 // windows without activation; no desktop-wide topmost flag is required.
@@ -16,13 +17,28 @@ public:
         std::function<void(QWidget *)> conceal,std::function<void(QWidget *)> reveal)
         : m_group(std::move(group)),m_conceal(std::move(conceal)),m_reveal(std::move(reveal)) { qApp->installEventFilter(this); }
     ~PaneWindowGroup() override { if(qApp) qApp->removeEventFilter(this); }
-    void setWindow(QWidget *window) { m_main=window; }
+    void setWindow(QWidget *window) {
+        if(m_main!=window) m_auxiliaryPages.clear();
+        m_main=window;
+    }
+    void observeNativePage(QWidget *widget) {
+        if(!widget || !m_main) return;
+        for(const auto &page:PaneCatalogue::pages())
+            if(!page.auxiliaryWindow.isEmpty() && widget->objectName()==page.auxiliaryWindow) {
+                if(!m_auxiliaryPages.contains(widget)) m_auxiliaryPages.append(widget);
+                return;
+            }
+    }
 protected:
     QPointer<QWidget> m_main;
     bool m_raising=false;
     bool member(QWidget *window) const {
-        return window && window->isWindow() && m_main
-            && (window==m_main || window->property("unboundFloatingWindow").toBool());
+        if(!window || !window->isWindow() || !m_main) return false;
+        if(window==m_main || window->property("unboundFloatingWindow").toBool()) return true;
+        // Resolve's named auxiliary pages share an unnamed top-level wrapper.
+        // Retain page identities, so reparenting never leaves a stale HWND peer.
+        for(const auto &page:m_auxiliaryPages) if(page && page->window()==window) return true;
+        return false;
     }
     bool layoutMenu(QWidget *window) const {
         return window && window->isWindow() && m_main
@@ -59,7 +75,8 @@ private:
         m_raising=true;
         if(m_main->isMinimized()) {
             for(auto window:QApplication::topLevelWidgets())
-                if(member(window) && window!=m_main && window->isVisible() && !window->isMinimized()) {
+                if(member(window) && window->property("unboundFloatingWindow").toBool()
+                    && window->isVisible() && !window->isMinimized()) {
                     if(!m_groupHidden.contains(window)) {
                         m_groupHidden.append(window); m_conceal(window);
                     }
@@ -108,6 +125,7 @@ protected:
         return pins;
     }
 private:
+    QList<QPointer<QWidget>> m_auxiliaryPages;
     QList<QPointer<QWidget>> m_groupHidden;
     QList<QPointer<QWidget>> m_order;
     std::function<bool(QWidget *,const QList<QWidget *> &)> m_group;

@@ -27,6 +27,11 @@ layout snapshot per launch, written as viewers-PID-TIMESTAMP.json beside the DLL
 There is no recurring discovery. Captures may contain private project/clip names.
 Open native menus before assessing their actions' enabled state in a snapshot.
 
+`page-context-probe.exe` / `PageContextState.dll` capture one read-only inventory
+of catalogued panes, page/auxiliary windows, ancestry, visibility and screen-mode
+actions in `%TEMP%/Unbound-page-context/`. Use snapshots before/after native screen
+mode changes to distinguish logical page departure from dock-slot reparenting.
+
 `viewer-experiment.exe` / `ViewerExperiment.dll` are a standalone launcher for the
 same integrated viewer code, without controls. They now use real settings. Do not
 load this helper alongside Unbound, which already owns the viewer buttons.

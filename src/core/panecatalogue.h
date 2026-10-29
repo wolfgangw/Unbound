@@ -18,12 +18,13 @@ struct PageDescriptor {
     QString togglePrefix;
     QStringList toggleSuffixes;
     bool supported;
+    QString auxiliaryWindow;
 };
 inline const QVector<PageDescriptor> &pages() {
     static const QVector<PageDescriptor> entries={
-        {Page::Edit,"WStackPage_Conform","Edit","edit","frameEditPageWidgetsContainer","","btnEditToggle",{"InSSM","InDSM","InEFTM"},true},
-        {Page::Color,"WStackPage_Color","Color","color","WStackPage_Color","Color/","",{"","InDSM"},true},
-        {Page::Fairlight,"WStackPage_Audio","Fairlight","fairlight","WStackPage_Audio","Audio/","btnAudioPanel",{"InSSM","InDSM"},true},
+        {Page::Edit,"WStackPage_Conform","Edit","edit","frameEditPageWidgetsContainer","","btnEditToggle",{"InSSM","InDSM","InEFTM"},true,"UiEditPanelAux"},
+        {Page::Color,"WStackPage_Color","Color","color","WStackPage_Color","Color/","",{"","InDSM"},true,"UiColorPanelAux"},
+        {Page::Fairlight,"WStackPage_Audio","Fairlight","fairlight","WStackPage_Audio","Audio/","btnAudioPanel",{"InSSM","InDSM"},true,"UiAudioPanelAux"},
         {Page::Media,"WStackPage_Browse","Media","media","WStackPage_Browse","Media/","",{},false},
         {Page::Cut,"WStackPage_Cut","Cut","cut","WStackPage_Cut","Cut/","",{},false},
         {Page::Fusion,"WStackPage_Fusion","Fusion","fusion","WStackPage_Fusion","Fusion/","",{},false},

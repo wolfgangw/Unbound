@@ -2,25 +2,34 @@
 
 ## Floating-panel disappearance
 
-An unresolved Windows report describes Media Pool and Index becoming inaccessible
-after undocking in Dual Screen and returning to Single Screen. Returning to Dual
-Screen reveals them; docking and undocking in Single Screen clears the condition.
-The report concerns Unbound 0.2.0 and Resolve 20.3.1. The page, Full Screen Timeline
-state and display arrangement are unknown; native reproduction is still needed.
+Native Windows reproduction confirms that Edit Media Pool's dock slot moves
+between the main page and `frameEditAuxWidgetsContainer` under `UiEditPanelAux`.
+Floating from the auxiliary container bound visibility to that container; disabling
+Dual Screen hid the host while preserving its content and floating state.
 
-`SidebarFloatSession` retains its original page container for Hide/Show tracking.
-It does not rebind when the native slot changes containers. Fixtures confirm that
-moving an Edit Media Pool/Index slot into another visible container and hiding the
-old container leaves its active host hidden. Moving the original container intact
-between top-level windows does not reproduce this failure. This establishes a
-lifecycle weakness, not the cause of the native report.
+The shared logical-page association is implemented in `panepagecontext.h` and
+documented in [AGENTS.md](../../AGENTS.md). Edit Media Pool surviving Dual Screen
+exit is user-validated on Windows. Remaining native validation:
 
-Capture slot/container ancestry across a failing native switch. Distinguish hidden
-hosts from off-screen placement, hidden content and slot destruction/replacement.
-If container replacement is confirmed, rebind visibility tracking while preserving
-host, content, geometry and settings. Actual page departure must still hide hosts;
-do not add polling or unconditional reveals. Fairlight Media Pool's audition
-ownership requires separate validation.
+- Start directly in Dual Screen; float panes on Edit, Color and Fairlight, then
+  disable it. Include Media Pool/Index, Color Gallery/LUTs and Fairlight Mixer.
+- Repeat both directions, including page departure/return, docking and Dock all.
+- Preserve geometry, focus, native content and saved layouts across these moves.
+- Check Full Screen Timeline, actual multiple monitors and macOS.
+- Exercise both Edit viewers, native Color palettes/Scopes and Clips/Lightbox;
+  native mode-specific initialization/allocation is separate from page association.
+- Check Fairlight Media Pool's audition ownership and keyboard routing.
+- Validate Always on top against activation of both native screens, menu use,
+  application switching and minimization. Shared group membership includes the
+  discovered auxiliary wrapper; native cross-platform validation remains pending.
+
+Read-only native snapshots identify all three supported auxiliary windows.
+Fixtures cover page association for every catalogue entry, host visibility and
+reversible docking on all supported pages, auxiliary startup discovery and Edit
+viewers initialized outside main's tree. These do not replace native validation.
+
+Full Dual Screen layout integration and separate mode-specific layouts remain
+outside the scope of this compatibility fix.
 
 ## Native Color Clips / Lightbox constraints
 

@@ -392,7 +392,7 @@ bool WindowGroupActivation::raiseGroup(QWidget *selected,const QList<QWidget *> 
     QList<NSWindow *> peers;
     for (NSWindow *window in NSApp.orderedWindows)
         for (auto widget : QApplication::topLevelWidgets())
-            if (widget!=selected && (widget==m_main || widget->property("unboundFloatingWindow").toBool())
+            if (widget!=selected && member(widget)
                 && widget->isVisible() && !widget->isMinimized() && nativeWindow(widget)==window) peers.append(window);
     QList<NSWindow *> ordered;
     for(auto widget:pins) if(auto window=nativeWindow(widget)) {
