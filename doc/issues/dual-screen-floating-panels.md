@@ -1,53 +1,41 @@
-# Floating panels after leaving Dual Screen mode
+﻿# Dual Screen: remaining work
 
-## Report and confirmation status
+## Floating-panel disappearance
 
-Andy reports this with Unbound 0.2.0, Windows 11 and DaVinci Resolve 20.3.1:
-Media Pool and Index become inaccessible when first
-undocked in Dual Screen mode and then switching to Single Screen. The native
-slot still says the panel is floating. Returning to Dual Screen brings it back;
-docking there and undocking again in Single Screen avoids the problem afterward.
+An unresolved Windows report describes Media Pool and Index becoming inaccessible
+after undocking in Dual Screen and returning to Single Screen. Returning to Dual
+Screen reveals them; docking and undocking in Single Screen clears the condition.
+The report concerns Unbound 0.2.0 and Resolve 20.3.1. The page, Full Screen Timeline
+state and display arrangement are unknown; native reproduction is still needed.
 
-The behavior has not been reproduced in Resolve on the development system.
-The page, Full Screen Timeline state and display arrangement have not yet been
-established. Both the reported version and the current implementation retain a
-page-container pointer without rebinding when a slot changes containers. This is
-a candidate explanation, not confirmation of the reporter's cause.
+`SidebarFloatSession` retains its original page container for Hide/Show tracking.
+It does not rebind when the native slot changes containers. Fixtures confirm that
+moving an Edit Media Pool/Index slot into another visible container and hiding the
+old container leaves its active host hidden. Moving the original container intact
+between top-level windows does not reproduce this failure. This establishes a
+lifecycle weakness, not the cause of the native report.
 
-## Confirmed lifecycle weakness
+Capture slot/container ancestry across a failing native switch. Distinguish hidden
+hosts from off-screen placement, hidden content and slot destruction/replacement.
+If container replacement is confirmed, rebind visibility tracking while preserving
+host, content, geometry and settings. Actual page departure must still hide hosts;
+do not add polling or unconditional reveals. Fairlight Media Pool's audition
+ownership requires separate validation.
 
-`SidebarFloatSession::start()` retains a page-container pointer in `m_root`.
-Its Hide event hides the floating host; a subsequent Show reveals that host.
-The session does not update this pointer if the native slot moves to another
-page container. The controller observes supported-pane ParentChange events but
-does not rebind an active session's page context.
+## Native Color Clips / Lightbox constraints
 
-An isolated Qt fixture using the production Windows backend and
-`SidebarFloatSession` establishes these distinct cases for Edit Media Pool and
-Edit Index:
+Windows testing with both Resolve windows on one physical display establishes:
 
-| Transition | Result |
-| --- | --- |
-| Move the original page container from a secondary window to the main window, then hide the secondary window | Floating panel stays visible |
-| Move the native slot into a different visible page container, then hide the old container | Session stays active; host is hidden; placeholder remains |
-| Show the former container again | Floating panel returns |
-| Dock and undock using the new container | Hiding the former container no longer hides the panel |
+- Turning primary Clips off exposes secondary Lightbox; Gallery and Keyframes
+  can coexist with it.
+- Turning Clips on removes Lightbox. If it was the sole secondary content,
+  Resolve shows Gallery, Keyframes and Scopes instead.
+- Hiding sole Gallery or Keyframes with Clips on reveals the other. The secondary
+  window therefore retains content even when the user disables its last panel.
+- The same `thumbnailView` (`UiVSRWidgetContainerImp`) and `splitterThumbnail`
+  move between the primary strip and secondary Lightbox. Visibility toggles cannot
+  display that widget in both places simultaneously.
 
-These Edit floating hosts have neither a Qt parent nor a native HWND owner.
-Automatic hiding of windows owned by the secondary window therefore does not
-explain the fixture failure. Fairlight Media Pool has different ownership for
-audition behavior and must be considered separately if the report concerns it.
-
-## Evidence needed before choosing a production fix
-
-Capture native slot and page-container identities/ancestry before and after a
-failing mode switch. Also distinguish a hidden host from a visible off-screen
-host, hidden transferred content, or destruction/replacement of the slot.
-If the slot changes page containers, the fix should rebind visibility tracking
-to its current container after the native transition, preserving the existing
-host, content, geometry and saved state. It must still hide on actual page
-changes and must not add polling or unconditional host-show behavior.
-
-The fixture reproduces one way to obtain the reported symptoms. It does not
-establish that Resolve takes that path during the reported Dual Screen switch.
-No production workaround has been applied.
+Independent Clips/Lightbox duplication is deferred: no supported independent view
+and data interface is established. Selected clip and playhead survived tested
+toggles. Actual two-monitor placement and other platforms remain unvalidated.

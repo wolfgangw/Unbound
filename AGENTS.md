@@ -124,8 +124,11 @@ for Groups), never in a fallback strip. Other panes may use the compact fallback
 Hosts retain native resize borders, shell identity and window commands; Windows
 hosts have no title bar. Nonmodal gestures and deferred content layout preserve
 playback responsiveness. Manual undocking disables the native toggle to reclaim
-space; docking enables it, deferred until page return when inactive. Native toggles
-remain usable; automatic restoration honors saved choices after initialization.
+space; docking enables it, deferred until page return when inactive. Docking actions
+are queued only for panes with a catalogued visibility action or tool selector.
+Returning a pane without either action completes docking without a toggle request;
+such panes must not leave layout/page transition readiness permanently pending.
+Native toggles remain usable; automatic restoration honors saved choices after initialization.
 Retain hosts/content across page switches and reveal immediately; initial startup
 restoration has a separate short fade.
 After successful docking, destroy the empty host through deferred Qt deletion.
@@ -172,6 +175,10 @@ Windows constrains preliminary ordinary/menu raises and nonactivating pinned-pee
 raises in `WM_WINDOWPOSCHANGING` with `SWP_NOZORDER` while pins are visible, then
 applies the complete normal-window order in one `DeferWindowPos` batch. Genuine
 pinned-window activation remains native and updates shared MRU order. Changing
+the main window's order without activation while an Unbound menu is visible is also
+suppressed when a floating pane or that menu owns foreground, including with no
+pinned panes. This prevents the menu's owner raise from briefly covering its
+invoking pane; genuine main activation remains native. Changing
 only `hwndInsertAfter`, or trusting its proposed position, can still expose peers
 through native owner/owned ordering. Never insert normal hosts after the menu's
 topmost handle or reorder the menu itself in that batch. Preserve native activation,
@@ -204,6 +211,38 @@ session. After queued reveals, restore an available target or retain native main
 focus. Ignore navigation/hide-show churn; cancel deferred recall on newer input,
 app deactivation or superseding page changes. Dialogs retain priority. Focus memory
 is neither settings nor layout data.
+
+### Floating geometry restoration
+
+`PaneGeometryTransaction` retains requested sizes for all standard pane hosts and
+Edit viewers through initial saved placement, layout recall and page return.
+Native content can temporarily raise minimum sizes during queued layout work;
+Qt grows the host but does not shrink it when those minimums fall again. Reapply
+saved placement when current native minimum/maximum constraints permit it, without
+changing those constraints. Page return uses the outgoing working geometry,
+including unsaved manual sizing, rather than the layout snapshot.
+
+Observe host layout requests until one second of inactivity, with a three-second
+absolute cap. New requests supersede old ones; host input, geometry gestures,
+hiding, changed window state and docking cancel restoration. Only queued correction
+work contributes to transition readiness, never idle observation of an unsatisfied
+constraint. Persistent native constraints and monitor recovery can legitimately
+prevent an exact match and leave a layout dirty. No polling or fixed size offsets.
+
+`PaneMainResizeGeometry` preserves a floating host's intended placement across
+main-window resizes. Resolve's responsive layout changes descendant header,
+spacing and control minimums even while those descendants float; Qt can grow their
+hosts without shrinking them when the minimums fall. Main Resize events start
+the same bounded geometry transaction, retaining the pre-growth intention across
+later main resizes and page returns. Explicit recalls replace that intention;
+host input, native move/resize gestures and window-state changes discard it.
+Native minimums remain authoritative. The dormant observer does no polling or
+correction work between main resizes, and the intention is session-only. Both
+standard panes and Edit viewers use this shared mechanism on both platforms.
+Windows Color validation confirms exact saved pane positions and sizes after
+startup, main maximize/restore and an Edit/Color page round trip. Larger native
+minimums remain effective while main is maximized. Broader mode/layout combinations
+and macOS validation remain in `doc/issues/color-controls.md`.
 
 ### Snapping
 
@@ -424,7 +463,7 @@ scope, header owner and selector. Scope disambiguates repeated names such as
 `sizingTab`. Retain stack entries and indices; transfer their contents with
 `SidebarFloatSession`. Camera Raw and HDR transfer the whole multi-entry layout;
 other tools preserve the native layout and move its single content widget, except
-Curves/Color Warper (native expansion below) and Key/Sizing. For Key and Sizing,
+Curves/Color Warper/Scopes (native expansion below) and Key/Sizing. For Key and Sizing,
 retain `keyWidget` (`UiSecKeyWidgetImp`) and `sizingWidget`
 as the first widgets in their respective `keyTab`/`sizingTab` native layouts;
 transfer each tool object's own layout contents instead. Resolve's
@@ -441,21 +480,7 @@ Color tool is selected; plain reparenting does not. While embedded, clear only t
 expanded dialog's explicit minimum size; retain descendant constraints and layout
 size hints so the controls determine the useful minimum width and height. Restore
 the dialog minimum before native return, and relax it again if return is rejected.
-On initial attachment, retained-host recall and page return, `PaletteGeometryRestore`
-observes host layout requests until one second of layout inactivity, with a
-three-second absolute cap. The inactivity window restarts only on host layout
-requests: creating one palette can precede the final native allocation of a
-multi-pane restore by more than a second. An idle observer does not delay the
-transition cover. Page return retains the last
-working geometry captured on departure, including unsaved manual sizing; it does
-not reapply a layout snapshot. Native layout can raise a minimum
-after the first successful resize, then lower it again. Retain the requested size
-through this transaction and reapply it when native minimums permit. No polling,
-paint delay or minimum override; input within the host, geometry gestures, hiding,
-changed window state, docking or newer recall cancels the observer. Later manual
-mode changes keep their native sizing behavior. Fresh-process Windows startup
-restoration is validated with Curves and Warper together: late native minimum
-changes settle back to the requested working geometry without changing layouts.
+
 For floating Warper only, `ActiveStackSize` makes `m_WidgetPanel` use the active
 mode's native size requirements. QStackedLayout otherwise includes hidden modes,
 whose bottom controls can impose a wider minimum on Chroma Warp. Temporarily use
@@ -466,6 +491,12 @@ coalesced child/layout events handle mode changes and late pages. Refresh layout
 minimums through the host after policy changes; native layout grows for larger
 modes, while shrinking remains the user's choice. Do not stretch the square
 graphic, change the selected mode, or alter other Color controls.
+Standard floating lower Color controls also use `ActiveStackSize` for native
+`m_WidgetPanel` mode stacks, suppressing only inactive modes' vertical hints.
+Retain the native horizontal budget across all modes; active content minimums
+remain authoritative. Restore policies before docking. This avoids hidden
+Qualifier modes imposing their taller height on HSL; compact HSL sizing is
+user-validated on Windows.
 Compact palette resizing and simultaneous updates are user-validated on Windows.
 Curves' native histogram source remains the user's choice: Input shows the signal
 entering the node; Output reflects adjustments within that node. Do not force
@@ -482,6 +513,45 @@ retain a usable floating host. Page visibility, geometry, layouts, header draggi
 and snapping reuse the standard session. No private offsets, update polling or
 transport interception. Key's matte updates work through its existing retained
 container and do not require native expansion.
+
+Floating Scopes uses `ColorNativeScopes` through the same native-palette session.
+Its independent renderer belongs to Resolve's `UiWaveformWindow`, separate from
+the single docked scope whose updates depend on the lower-right tool selection.
+Open the native dialog through `btnUndock`, or adopt it if already open, and embed
+the whole dialog in the standard host. Keep the docked scope in its original slot;
+no placeholder or content transfer belongs there. Retain native single/dual/quad
+view controls, settings and renderer registration. Clear only the dialog's explicit
+window minimum; descendant constraints still determine useful sizes. The native
+multi-scope mode can require more space than an older single-scope saved layout.
+Insert the Unbound button before the native dialog options action and make unused
+title background draggable. Native Close/Escape/Hide requests use deferred session
+docking; page hiding retains the session. Docking restores parent, window flags,
+geometry and minimum, then invokes the public `btnHide` action. No forced main
+Scopes selection, frame copying, transport interception or update polling is used
+to keep floating signal updates alive. Windows startup, page return, native
+Close/Escape and independent updates with Info/Keyframes selected are validated.
+Guard the retained docked Scopes subtree's Expand actions as well as the floating
+dialog's controls; restore the original enabled states on docking.
+
+`ColorScopesLayoutRefresh` refreshes the native view-count button availability
+after coalesced size/show events. Resolve updates these buttons in its custom
+border gesture rather than ordinary Qt resize delivery. Deliver a zero-distance
+press/move/release directly through the dialog's public `QObject::event` virtual,
+then restore its exact allocation and last non-resize cursor before returning to
+the event loop. Track native non-resize cursor changes while attached; never
+retain a temporary corner/edge cursor sampled after the user's gesture.
+This retains native availability rules without imposing the native window's
+aspect ratio. Direct widget delivery keeps synthetic input out of application
+menu dismissal, focus and geometry-restore filters. Defer during real mouse input
+until release; cancel on hiding and remove before docking. No idle timer, private
+slot, address or size threshold is used. Windows resize, view availability and
+open-menu recall are validated. While embedded, consume mouse gestures reaching
+the native dialog itself so its original window move/resize handlers cannot resize
+content independently of the host. Descendant controls and scope plots retain
+their input, including native wheel panning, which can expose black space beyond
+the plotted range. The refresh's direct widget dispatch bypasses this gesture
+guard. Cursor cleanup and inner-border suppression are user-validated on Windows;
+macOS validation remains in `doc/issues/color-controls.md`.
 
 Insert buttons in existing header rows, before recognized options where present;
 use the existing `PaneHeaderDrag` and floating hosts. Tool selectors are not
@@ -637,15 +707,17 @@ validation are in `doc/issues/layout-transition-readiness.md`.
 
 The same opt-in build includes `pagetransition.h` for native page switches.
 It observes the named page stack without intercepting page shortcuts or changing
-selection. Only the destination's floating content/intent enables presentation,
-at its Show boundary before pane-session object filters restore hosts. Returning
-to a fully docked destination allocates no cover or readiness trace and schedules
-no extra transition restoration work, even when outgoing panes floated. Outgoing
-Hide starts only numeric timing observation; duplicate notifications are coalesced.
+selection. Cover when either page has floating content/intent. An outgoing page
+with floaters captures at its Hide boundary before pane-session object filters
+hide hosts; otherwise an incoming floating page captures at its Show boundary
+before hosts return. Carry the departure cover into the destination without
+recapture. Duplicate Hide notifications are coalesced. Two fully docked pages
+allocate no cover or readiness trace. A docked destination uses its own readiness
+evidence and does not wait for outgoing hosts or other pages' restoration work.
 Readiness includes incoming queued host reveals, geometry corrections and main
 placement; departure from that destination cancels the transition.
 Public event timing is provisional evidence: the instrumented build counts main
-paint/update delivery between departure and arrival capture, which does not prove
+paint/update delivery before arrival capture when needed, which does not prove
 absence of earlier native/GPU presentation. Keep the live capture-point validation
 in the open investigation. Page switches acquire no Color playback lease and add
 no native layout mutations. The common cancellation/deadline rules still apply.
@@ -702,6 +774,15 @@ Windows `mainWindow` contains `normalRect` in native placement coordinates,
 `workArea`, `scaleFactor`) and `qtFallback` (pane-style readable geometry).
 An unchanged monitor setup uses `normalRect`; changed displays use the fallback.
 These coordinates differ from Qt client coordinates; keep the distinction explicit.
+`MainWindowPlacement` retains the native normal placement while maximized and
+reapplies the requested normal placement once, deferred until the state change
+has established the normal frame. Windows can initially enforce a client minimum
+using the outgoing maximized frame margins, incorrectly growing an otherwise valid
+normal rectangle. The shared settlement also follows saved normal-page restoration
+and delegates frame handling to the platform adapter. New page/recall, special
+window states, input or a geometry gesture cancels pending correction. Preserve
+native minimums and the exact saved rectangle; never subtract a fixed offset or
+ignore a small discrepancy in dirty detection.
 macOS `mainWindow` uses the pane-style readable fields with top-left logical screen
 coordinates. The Cocoa adapter converts NSWindow content/frame rectangles and
 zoom state; fullscreen/Spaces transitions do not replace saved normal placement.

@@ -5,17 +5,14 @@ The implemented presentation, restoration and cancellation contracts are in
 an opt-in internal feature; macOS retains ordinary presentation without capture
 or permission requests. Visual continuity takes priority over latency.
 
-Validated on Windows: users report smooth layout/page transitions; returning to
-fully docked Edit bypasses capture and readiness waits. Fresh-process Curves and
-Warper geometry restoration is verified. These results do not establish universal
-native-renderer readiness.
-
 ## Validation gaps
 
 - Floating-to-floating page switches, active playback, floating Edit viewers,
   unavailable Source, Fairlight audition players and first visits to unsupported
   pages. Check focus, transport routing and timecode continuity.
-- Arrival capture must conceal outgoing host removal and incoming restoration
+- Verify departure capture preserves outgoing hosts, including a lone Media Pool,
+  and promptly releases on fully docked destinations without a restoration delay.
+  Departure/arrival capture must conceal host removal and incoming restoration
   across displays and DPI changes. Zero Qt paint events before capture do not
   prove that native/GPU surfaces have not presented.
 - Rapid recalls, dialogs, application departure, pinned peers and menus near
@@ -39,6 +36,17 @@ native-renderer readiness.
   retained allocation from playback assistance.
 - Check unexplained layout dirtiness after page round trips against actual saved
   geometry; respect persistent native minimums and immutable layout snapshots.
+  Broaden main-placement settlement coverage to user resize cancellation and
+  changed DPI.
+
+## Page-switch latency
+
+Color All Out to fully docked Edit remains slower than expected, including without
+desktop inspection. Long gaps occur with no pending pane restoration or toggle
+requests. Main-window size changes, native accessibility processing and GL
+presentation are candidate costs; their relative contributions remain unproven.
+No low-impact fix is established. Preserve native accessibility and queued main
+placement; queued-work markers do not measure callback CPU time.
 
 ## Deferred work
 

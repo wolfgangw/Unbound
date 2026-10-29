@@ -10,7 +10,7 @@ Open work:
 - Validate floating viewer together with floating Clips, including Lightbox
   transitions and docking either component in either order.
 - Define and implement space reclamation. Color has no viewer visibility toggle;
-  this initial build retains the native allocation and floating placeholder.
+  the current implementation retains the native allocation and floating placeholder.
   Decide how remaining upper side panels and lower color controls should share
   the released region without imposing a new page layout engine.
 - Validate macOS image surfaces and behavior in a fresh native session.

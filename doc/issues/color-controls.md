@@ -8,10 +8,14 @@ startup restoration are documented in [AGENTS.md](../../AGENTS.md).
 - Broaden Windows coverage for Warper modes, clip/node changes and page/layout
   combinations. Larger modes must retain native minimums and allow later manual
   shrinking when the active mode permits it.
+- Broaden main-window resize preservation checks to explicit recalls, manual
+  floating resizes and other pages; basic Color startup, maximize/restore and page
+  return are validated. Qualifier HSL compact sizing is user-validated; check larger
+  modes as well.
 - Validate 3D with stereoscopic material, including native controls and dragging.
 - Check alternate native expansion/return routes and replacement-tool selection.
-- Compare Scopes' initially empty plot after mode changes with native docked
-  behavior; new frame/clip data currently supplies the floating plot.
+- Validate native multi-scope ownership, independent updates, sizing, view-count
+  controls and docking on macOS. Windows behavior is documented in AGENTS.md.
 
 Lower-region reclamation and replacement-tool selection remain unsettled.
 Viewer reclamation is tracked in [color-viewer.md](color-viewer.md). Fixtures cover
