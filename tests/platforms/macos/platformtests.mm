@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 #include "windowpresentation.h"
 #include "resizeinput.h"
+#include "windowcontrolclearance.h"
 #include "panegridguide.h"
 #include "fixtures.h"
 #include "windowinteraction.h"
@@ -433,6 +434,51 @@ static bool runMacMainSnapTest(QApplication &app) {
     puts("PASS: Cocoa and queued host Qt release snapping, early/settled release, repeated gaps, new gestures and unrelated input/placement isolation");
     return true;
 }
+static bool runMacControlClearanceTest(QApplication &app) {
+    if(!app.arguments().contains("--mac-control-clearance-test"))return false;
+    QWidget main;main.setGeometry(200,200,800,400);main.show();
+    auto settle=[] {QEventLoop loop;QTimer::singleShot(40,&loop,&QEventLoop::quit);loop.exec();};
+    settle();
+    auto native=reinterpret_cast<NSView *>(main.winId()).window;
+    native.styleMask|=NSWindowStyleMaskFullSizeContentView;
+    native.titlebarAppearsTransparent=YES;native.titleVisibility=NSWindowTitleHidden;
+    settle();
+    QWidget row(&main);row.setGeometry(0,0,800,36);
+    auto layout=new QHBoxLayout(&row);const QMargins original(12,3,12,3);layout->setContentsMargins(original);
+    layout->addWidget(new QLabel("Gallery"));row.show();settle();
+    auto clearance=Unbound::reserveWindowControlClearance(&row);settle();
+    const auto reserved=layout->contentsMargins();
+    check(reserved.left()>original.left() && reserved.top()==3 && reserved.right()==12 && reserved.bottom()==3,
+        "Integrated toolbar did not reserve native traffic lights exclusively on its left");
+    const CGFloat desktopTop=NSMaxY(NSScreen.screens.firstObject.frame);
+    for(auto type:{NSWindowCloseButton,NSWindowMiniaturizeButton,NSWindowZoomButton}) {
+        auto button=[native standardWindowButton:type];
+        const auto rect=[native convertRectToScreen:[button convertRect:button.bounds toView:nil]];
+        check(row.mapToGlobal(QPoint(reserved.left(),0)).x()>=NSMaxX(rect)+original.left(),
+            "Toolbar controls intersect native traffic-light bounds");
+        check(desktopTop-NSMaxY(rect)<row.mapToGlobal(QPoint(0,row.height())).y(),"Fixture does not overlap title controls");
+    }
+    main.move(300,300);settle();check(layout->contentsMargins()==reserved,"Window movement accumulated traffic-light clearance");
+    row.move(0,80);settle();check(layout->contentsMargins()==original,"Lower toolbar retained unnecessary title clearance");
+    row.move(0,0);settle();check(layout->contentsMargins()==reserved,"Returning toolbar lost native clearance");
+    row.move(150,0);settle();check(layout->contentsMargins()==original,"Already-offset toolbar gained redundant clearance");
+    row.move(0,0);settle();
+    clearance.reset();settle();check(layout->contentsMargins()==original,"Stopping clearance did not restore original margins");
+    QWidget plain;plain.setGeometry(200,200,800,400);plain.show();settle();
+    QWidget plainRow(&plain);plainRow.setGeometry(0,0,800,36);auto plainLayout=new QHBoxLayout(&plainRow);
+    plainLayout->setContentsMargins(original);plainRow.show();settle();
+    auto ordinary=Unbound::reserveWindowControlClearance(&plainRow);settle();
+    check(plainLayout->contentsMargins()==original,"Ordinary titled window gained redundant traffic-light clearance");
+    clearance=Unbound::reserveWindowControlClearance(&row);settle();
+    row.setParent(&plain);row.move(0,0);row.show();settle();
+    check(layout->contentsMargins()==original,"Reparented toolbar retained former window clearance");
+    row.setParent(&main);row.move(0,0);row.show();settle();
+    check(layout->contentsMargins()==reserved,"Reparented toolbar did not adopt current window controls");
+    auto temporary=new QWidget(&main);temporary->setLayout(new QHBoxLayout);temporary->show();
+    auto pending=Unbound::reserveWindowControlClearance(temporary);delete temporary;settle();pending.reset();
+    puts("PASS: measured Cocoa traffic-light clearance, non-overlapping rows, native title separation, movement, restoration and pending teardown");
+    return true;
+}
 static bool runMacMenuTrackingTest(QApplication &app) {
     if(!app.arguments().contains("--mac-menu-tracking-test"))return false;
     QTemporaryDir directory;
@@ -759,6 +805,7 @@ bool runPlatformWindowTests(QApplication &app) {
     if(runMacPresentationTest(app))return true;
     if(runMacResizeInputTest(app))return true;
     if(runMacMenuTrackingTest(app))return true;
+    if(runMacControlClearanceTest(app))return true;
     if(runMacPlacementTest(app)) return true;
     if(runMacMainSnapTest(app)) {
         if(app.arguments().contains("--mac-main-drag-test")) runMacMainResizeTest(app);

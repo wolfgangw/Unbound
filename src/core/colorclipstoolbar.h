@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QEvent>
 #include <QVector>
+#include "windowcontrolclearance.h"
 
 // The existing native Color controls occupy an additional row while Clips floats.
 // Preserve ownership and layout positions so docking is reversible.
@@ -14,6 +15,7 @@ class ColorClipsToolbar : public QObject {
     struct Item { QPointer<QWidget> widget,parent; QPointer<QBoxLayout> layout; int index,stretch; Qt::Alignment alignment; bool hidden; };
     QVector<Item> items;
     QPointer<QFrame> row;
+    std::unique_ptr<QObject> clearance;
     bool pending=false,stopping=false;
 public:
     explicit ColorClipsToolbar(QObject *owner):QObject(owner) {}
@@ -44,10 +46,12 @@ public:
         }
         vertical->insertWidget(vertical->indexOf(bar),row); row->show();
         vertical->invalidate();vertical->activate();
+        clearance=reserveWindowControlClearance(row);
         return true;
     }
     void restore() {
         if(stopping) return; stopping=true;
+        clearance.reset();
         for(const auto &item:items) if(item.widget && item.parent && item.layout) {
             item.widget->removeEventFilter(this);
             if(row && row->layout()) row->layout()->removeWidget(item.widget);

@@ -957,6 +957,14 @@ after Cinema exit so content appears without requiring a main-window resize.
 
 ### Cocoa windowing
 
+The additional Color toolbar row reserves space for native traffic-light buttons
+when they overlap its allocation. The Cocoa adapter measures visible standard
+window-button bounds in logical screen coordinates and adjusts only the row’s
+left margin, retaining its original padding. Scoped layout/geometry/window-state
+events refresh clearance; non-overlapping rows and Windows keep original spacing.
+Docking removes the adapter and restores the original margins. No saved geometry
+or native title-bar appearance changes.
+
 While the layout popout is visible, Cocoa observes native application-menu tracking
 and invokes shared popout dismissal immediately. Remove the observer on hide or
 destruction; native menu updates and unrelated editing context menus do not dismiss
