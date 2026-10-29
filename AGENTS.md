@@ -69,6 +69,7 @@ Settings filenames, overrides, schema, migration and atomic saves stay shared.
 | `colorclipsadapter.h`, `colorclipssidebars.h`, `colorclipstoolbar.h` | Lightbox mode, Color allocation/dividers and reversible toolbar transfer |
 | `panesettings.h`, `geometryjson.h`, `mainwindowplacement.h` | JSON persistence, geometry conversion, per-page placement and monitor checks |
 | `pagelayoutmenu.h`, `pagefocus.h` | Layout UI and session-only page focus |
+| `layoutrestorepolicy.h` | Shared page/pane exceptions for layout restoration; native state, geometry settlement and presentation integration |
 | `panesnap.h`, `panewindowappearance.h`, `panegeometryrestore.h` | Shared snapping policy, host colors and reachable captionless geometry |
 | Native `panefloatingwindow.h`, `panetaskbar.h`, `mainwindowsnap.h`, `windowplacement.*` | Host shell identity, OS gestures/contact bounds and native main placement |
 
@@ -127,6 +128,10 @@ space; docking enables it, deferred until page return when inactive. Native togg
 remain usable; automatic restoration honors saved choices after initialization.
 Retain hosts/content across page switches and reveal immediately; initial startup
 restoration has a separate short fade.
+After successful docking, destroy the empty host through deferred Qt deletion.
+Do not cache empty hosts or their compositors to accelerate later undocking:
+Unbound's low memory impact takes priority over that latency saving. Retention
+across page switches applies only to panes that remain floating.
 
 ### Docking safeguard
 
@@ -323,6 +328,11 @@ normal Color mode and capture its constraints after the queued native layout pas
 Restore its prior toggle state before Lightbox entry. Hidden Timeline geometry can
 be a collapsed strip and is not a valid native height baseline. Pending setup
 cancels on docking and defers completion while its page is hidden.
+`NativeToggleState` preserves the user's checked state across this deferred
+initialization. Settings capture reads that intent and ignores temporary clicks;
+ordinary signals and native handlers still run. Release the guard after restoring
+the toggle, including cancellation. A transient initialization state must never
+dirty a layout or replace its remembered visibility choice.
 
 The shared adapter replaces empty Lightbox allocation with the main viewer and
 optional Timeline, reserving the left Gallery/LUTs/Media Pool stack and right
@@ -341,6 +351,38 @@ when inactive. Native Lightbox exit docks Clips. Explicit recall of a Color layo
 without floating Clips instead returns to normal Color mode, even for a clean
 active layout. Do not restore outgoing Lightbox-on after that recall. Hosts retain
 normal page visibility and geometry persistence; mode choices add no settings field.
+
+`colorplaybackpause.h` provides optional, bounded transport assistance around
+required Color Lightbox changes: Clips entry/return and retained-Clips suspension
+through layout initialization. Nested leases share one stop; already-stopped
+playback and clean floating-Clips recall need none. Discover standard transport
+buttons in the docked or floating Color viewer by object name. Both direction
+buttons unchecked means idle, even when Stop is also unchecked after startup;
+do not issue transport commands or retain a resume lease for that state. For
+active playback, click native Stop and require Stop checked plus both direction
+buttons cleared before retaining automatic resume intent. Unknown, incomplete,
+disabled or unacknowledged transport skips the workaround and continues normal
+layout work. Playback assistance must never refuse recall, undocking or docking;
+it returns only an optional lease, not permission to proceed. Diagnostic trace
+markers record unavailable assistance without a user-facing error.
+Release the final lease after deferred mode work; two queued continuations let
+native handlers unwind before resuming only the playback this transaction stopped.
+This is not a global renderer-ready signal. New input/transport commands,
+page/project departure, application deactivation, dialogs, failure, shutdown and
+a three-second deadline cancel automatic resume. No seeking, loop changes,
+shortcut forwarding, private offsets or polling.
+
+Read shuttle speed from the public QLabel `labelPlaySpeed`; explicitly hidden
+text is stale and means normal speed. Resume with the original direction button,
+then invoke the corresponding native QAction `controlPlayForward` or
+`controlPlayReverse` for a bounded count of power-of-two speed steps. Label updates
+are asynchronous: never feed its immediate post-command text back into that loop.
+Unrecognized/unavailable speeds or actions fall back to 1x in the same direction.
+These are public Qt operations on discovered native controls, not a documented
+Resolve scripting transport API. Standalone live probes validate ordinary and
+2x/4x shuttle restoration on Windows; integrated fresh-process validation and
+macOS validation remain outstanding. Readiness limits remain in
+`doc/issues/layout-transition-readiness.md`.
 
 #### Color sidebar divider gestures
 
@@ -399,13 +441,21 @@ Color tool is selected; plain reparenting does not. While embedded, clear only t
 expanded dialog's explicit minimum size; retain descendant constraints and layout
 size hints so the controls determine the useful minimum width and height. Restore
 the dialog minimum before native return, and relax it again if return is rejected.
-On initial attachment and retained-host recall, `PaletteGeometryRestore` observes
-host layout requests for at most one second. Native layout can raise a minimum
+On initial attachment, retained-host recall and page return, `PaletteGeometryRestore`
+observes host layout requests until one second of layout inactivity, with a
+three-second absolute cap. The inactivity window restarts only on host layout
+requests: creating one palette can precede the final native allocation of a
+multi-pane restore by more than a second. An idle observer does not delay the
+transition cover. Page return retains the last
+working geometry captured on departure, including unsaved manual sizing; it does
+not reapply a layout snapshot. Native layout can raise a minimum
 after the first successful resize, then lower it again. Retain the requested size
 through this transaction and reapply it when native minimums permit. No polling,
 paint delay or minimum override; input within the host, geometry gestures, hiding,
 changed window state, docking or newer recall cancels the observer. Later manual
-mode changes keep their native sizing behavior.
+mode changes keep their native sizing behavior. Fresh-process Windows startup
+restoration is validated with Curves and Warper together: late native minimum
+changes settle back to the requested working geometry without changing layouts.
 For floating Warper only, `ActiveStackSize` makes `m_WidgetPanel` use the active
 mode's native size requirements. QStackedLayout otherwise includes hidden modes,
 whose bottom controls can impose a wider minimum on Chroma Warp. Temporarily use
@@ -485,15 +535,27 @@ dirty recall restores saved state. Rename preserves identity and dirty state.
 
 Dock all affects only the current page: dock hosts, cancel pending floating intent,
 clear active layout identity, preserve saved layouts/main placement/other pages.
-Hide and disable it unless an actual current-page host exists, including viewers;
-saved pending intent alone does not qualify.
+Keep its row visible and disable it unless an actual current-page host exists,
+including viewers; saved pending intent alone does not qualify. The temporary
+zero-host interval during recall changes enablement only, never the menu's row
+positions or height.
 
 Use a main-owned Qt tool QFrame outside Qt's transient popup stack so native docking
 cannot dismiss/reopen it. Anchor below the invoking button, clamped to the work
 area. Retain rows keyed by UUID, update styles in place and coalesce refreshes.
 Save/recall/update/delete stay open. Outside interaction (including scrolling,
-keyboard input and dragging), Escape and application deactivation dismiss;
-hover alone does not. The application filter exists only while visible.
+keyboard input and dragging), Escape and actual native application departure dismiss;
+hover alone does not. Transient Qt ApplicationDeactivate events during native
+reparenting do not dismiss it while the OS still considers Resolve active. A
+menu-lifetime native observer handles real departure even when Qt activation
+notifications are delayed. Windows uses foreground-window events; Cocoa uses
+application-resignation notifications alongside native menu tracking. Growing
+status rows are clamped back into the work area without hiding/reopening the menu. The application filter exists only while visible.
+The menu owns explicit open/dismiss intent through the public QWidget visibility
+override. Native tool-window hide/show sweeps cannot flash it during palette
+activation or reopen it after dismissal. Outside input, Escape, actual application
+departure, close and owner hiding/minimization use explicit dismissal; destruction
+retains ordinary Qt ownership. This does not filter other windows' activation events.
 Backends emit `WindowInteractionEvent` before user move/resize starts, including
 native-child edges; programmatic recall geometry does not emit it.
 
@@ -512,6 +574,81 @@ While the editor owns focus, hand off only this popout's key/shortcut events dir
 to its Qt event handler: sendEvent would re-enter Resolve's swallowing route.
 Unmodified Left/Right collapse selection to start/end; modified keys stay native.
 Do not synthesize clicks or change global shortcuts; clear callbacks on teardown.
+
+### Layout transition presentation
+
+`layoutrestorepolicy.h` is the shared entry point for page/pane restoration
+exceptions. It selects the existing Color playback assistance, ordinary Color
+mode, expected native palette dialogs and bounded geometry-settlement behavior,
+and exposes temporary native-toggle intent to adapters and settings capture.
+The underlying helpers retain native ownership and public Qt interactions; the
+policy contains no platform APIs. Add diagnosed exceptions here, not in capture
+backends or per-page menu copies. A persistent native minimum remains a real
+restoration constraint: do not override it, mask the resulting layout difference,
+or silently rewrite an older saved layout.
+
+`layouttransition.h` owns the shared `LayoutTransition` lifecycle: begin,
+readiness/invalidation, reveal and cancellation. The platform contract
+`layouttransitionpresentation.h` supplies optional capture/presentation, retained
+buffer accounting and actual application-departure notification. A failed or
+unavailable backend leaves normal layout work running without a visual wait.
+Backends must release temporary resources on completion/cancellation and never
+request capture permissions. Windows implements the current desktop snapshot
+cover. macOS explicitly uses `NoLayoutTransitionPresentation` for this optional
+feature; existing pane/layout behavior is unchanged. Alternative presentation
+mechanisms can implement the same contract without changing shared pane policy.
+
+The Windows internal `-LayoutCoverExperiment` captures all displays through
+public GDI before showing nonactivating covers. External video appears briefly
+frozen while playback continues. No images are saved. Raw bitmap storage is capped
+at 128 MiB; native compositor memory is additional. Completion/cancellation frees
+the captures, and docking releases empty hosts rather than caching compositors.
+Reveal uses a 120 ms fade. Input outside the live menu, real dialogs, application
+departure and superseding transitions cancel protection. A three-second GUI-thread
+deadline releases it on failure but cannot preempt a blocked GUI thread.
+
+Readiness combines tracked restoration work, 50 ms structural quiet and final
+coalesced updates, with at most three update attempts. Public GL composition must
+match the window's current geometry revision; raster acknowledgement follows
+UpdateRequest delivery. Windows flushes DWM before fading. This is bounded
+presentation evidence, not proof that every native renderer has finished. Paint
+activity alone does not prevent reveal; idle observers do not impose a wait.
+
+Callers may supply existing popup-level interactive windows. They remain live
+above the presentation, and their input does not cancel it; hiding/destroying one
+cancels its transition. The layout menu uses this path. Windows temporarily
+excludes those windows from capture with public SetWindowDisplayAffinity, restores
+each previous affinity immediately after capture on every path, and inserts covers
+below the existing popups without activation. No hide/capture/reopen cycle or
+frozen menu copy is used. Capture exclusion requires Windows 10 version 2004 or
+newer; unavailable exclusion skips visual protection, never layout work. Normal
+menu painting/input and shared sizing continue during the transition; synchronous
+GUI-thread layout work remains synchronous.
+
+The opt-in `LayoutTransitionRecall` adapter supplies experimental readiness for
+layout recall on every supported page, using shared work/geometry/composition
+evidence. Edit viewer restoration registers its queued work; unavailable Source
+intent does not hold a transition open until the viewer becomes available.
+Keep page-specific native workarounds in their adapters; the Color playback lease
+is confined to Color recalls. Keep the readiness adapter
+separate from the reusable presentation lifecycle; its signals are not a general
+native-rendering completion guarantee. The open experiment and remaining
+validation are in `doc/issues/layout-transition-readiness.md`.
+
+The same opt-in build includes `pagetransition.h` for native page switches.
+It observes the named page stack without intercepting page shortcuts or changing
+selection. Only the destination's floating content/intent enables presentation,
+at its Show boundary before pane-session object filters restore hosts. Returning
+to a fully docked destination allocates no cover or readiness trace and schedules
+no extra transition restoration work, even when outgoing panes floated. Outgoing
+Hide starts only numeric timing observation; duplicate notifications are coalesced.
+Readiness includes incoming queued host reveals, geometry corrections and main
+placement; departure from that destination cancels the transition.
+Public event timing is provisional evidence: the instrumented build counts main
+paint/update delivery between departure and arrival capture, which does not prove
+absence of earlier native/GPU presentation. Keep the live capture-point validation
+in the open investigation. Page switches acquire no Color playback lease and add
+no native layout mutations. The common cancellation/deadline rules still apply.
 
 ## Settings reference
 
@@ -577,7 +714,8 @@ Direct JSON equality suppresses duplicate new layouts; no hashes are stored.
 Explicit updates may overwrite an existing layout regardless of duplication.
 
 Recall captures pending geometry/toggles before comparing snapshots, docks only
-state differences before selecting incoming state, and reuses retained hosts.
+state differences before selecting incoming state, and retains hosts for panes
+that stay floating in both layouts.
 Native toggle restoration runs off-first then on after float initialization.
 Main placement discards its outgoing cache and uses the normal restoration path.
 Source viewer intent waits for native availability. No internal divider positions
@@ -755,3 +893,17 @@ Resolve session without Unbound for native captures and verify `truncated: false
 Edit root is `WStackPage_Conform`, Color `WStackPage_Color`, Fairlight
 `WStackPage_Audio`. The repository is otherwise self-contained apart from the
 installed toolchain and Resolve.
+
+Integrated recall diagnostics are opt-in through `UNBOUND_LAYOUT_TRACE` (Windows
+internal build switch `-LayoutTrace`). `layouttracediagnostics.h` observes on the GUI
+thread for six seconds per explicit recall, buffering bounded phase milestones
+separately from numeric structural/paint/public-GL-swap aggregates. Hot event paths
+do not build JSON; bursts cannot evict phase timings or terminal status. Trace-only mode does not
+consume input, suppress painting or delay recall; a quiet candidate is diagnostic
+evidence, never a presentation-ready guarantee. Diagnostic work markers separate
+queued corrections/checks from idle observer lifetimes; window geometry revisions
+qualify public GL composition evidence. Raster/native surfaces remain unproven.
+The separate opt-in Windows layout cover prototype and its readiness limits remain
+an open investigation in `doc/issues/layout-transition-readiness.md`.
+Build/use and trace summarization
+are documented in `tests/platforms/windows/viewer-probe/README.md`.
