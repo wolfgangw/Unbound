@@ -57,13 +57,21 @@ protected:
         if(!page || stack->indexOf(page)<0 || !main->isVisible() || main->isMinimized()
             || !stack->isVisible())return false;
         if(type==QEvent::Hide && page==current && page==stack->currentWidget()) {
-            // Duplicate Hide notifications belong to the same handoff. Only
-            // start the observation interval here: the destination decides
-            // whether presentation is needed, once its Show arrives.
+            // Application filters run before pane-session Hide handlers. Capture
+            // outgoing floaters now, while their native windows still exist.
+            // Duplicate Hide notifications must not cancel or recapture this cover.
             if(departed)return false;
             cancel("next_page_switch");
             departed=true;attempted=false;
             preCapturePaints=preCaptureUpdates=0;departure.start();
+            if(hasFloating && hasFloating(page->objectName())) {
+                attempted=true;
+                LayoutTrace::begin(main,page->objectName());
+                LayoutTrace::mark("page_capture_departure",page->objectName());
+                // Do not bind the outgoing page: its Hide is this handoff,
+                // not cancellation. Readiness starts only on arrival.
+                transition=LayoutTransition::begin(main,QString(),presentation());
+            }
         } else if(type==QEvent::Show && page==stack->currentWidget())incoming(page);
         return false;
     }
@@ -95,8 +103,16 @@ private:
         }
         if(!page || (page==current && !departed))return;
         // Application filters precede the page's pane-session Show handlers.
-        // Cover only a destination with floating content to restore, regardless
-        // of the outgoing layout. Docked destinations retain native presentation.
+        // An outgoing cover survives arrival unchanged. Otherwise capture only
+        // when the incoming page has floaters; docked-to-docked stays native.
+        if(attempted && transition && transition->running()) {
+            LayoutTrace::begin(main,page->objectName());
+            LayoutTrace::mark("page_covered_departure_to_arrival",{},departure.nsecsElapsed()/1000);
+            transition->destination(page);
+            const auto alive=transition;
+            LayoutTrace::presentationProbe([alive] {if(alive)alive->ready();},
+                [alive] {if(alive)alive->invalidate();});
+        }
         if(!attempted && hasFloating && hasFloating(page->objectName()))start(page);
         current=page;departed=false;
         if(transition && transition->running()) {

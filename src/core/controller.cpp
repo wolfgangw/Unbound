@@ -521,6 +521,13 @@ private:
     void showDockedPanes()
     {
         for (const auto &name : m_pendingDockToggles.values()) {
+            const auto descriptor=Catalogue::find(name);
+            if(!descriptor || (descriptor->toggleNames().isEmpty() && !Catalogue::colorControl(name))) {
+                // Returning content is sufficient for panes without a native
+                // visibility action. Never wait for a toggle that cannot exist.
+                m_pendingDockToggles.remove(name);
+                continue;
+            }
             auto decoration = m_decorations.value(name);
             auto pane = decoration ? decoration->pane() : nullptr;
             auto root = pane ? panePage(pane) : nullptr;
@@ -557,7 +564,9 @@ private:
                 settingsError(m_settings.saveFloating(settingsKey(name), false));
                 // Also suppress retries if saving the user's choice failed.
                 m_restoreAttempted.insert(name);
-                m_pendingDockToggles.insert(name);
+                const auto descriptor=Catalogue::find(name);
+                if(descriptor && (!descriptor->toggleNames().isEmpty() || Catalogue::colorControl(name)))
+                    m_pendingDockToggles.insert(name);
                 if (auto decoration=m_decorations.value(name)) decoration->setFloating(false);
                 showDockedPanes();
             };
@@ -678,7 +687,11 @@ private:
         int toggles=0,floating=0,initializing=0;
         const auto page=currentPage();
         for(const auto &name:m_initializingNative) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) ++initializing;
-        for(const auto &name:(m_pendingLayoutToggles | m_pendingColorToggles | m_pendingDockToggles)) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) ++toggles;
+        for(const auto &name:(m_pendingLayoutToggles | m_pendingColorToggles | m_pendingDockToggles)) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) {
+            ++toggles;
+            Unbound::LayoutTrace::mark(m_pendingDockToggles.contains(name)?"pending_dock_toggle":
+                m_pendingLayoutToggles.contains(name)?"pending_layout_toggle":"pending_color_toggle",name);
+        }
         for(auto it=m_names.cbegin();it!=m_names.cend();++it)
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && m_settings.floating(settingsKey(it.key()))
                 && !m_restoreAttempted.contains(it.key())) ++floating;

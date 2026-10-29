@@ -63,33 +63,33 @@ void testLayoutTransition() {
         QEvent duplicateHide(QEvent::Hide);
         QApplication::sendEvent(&color,&duplicateHide);
         QApplication::sendEvent(&color,&duplicateHide);
-        require(state->begins==1 && state->cancels==1,"Departure started capture before destination was known");
+        require(state->begins==2 && state->cancels==1 && boundary.hideBegins==2,
+            "Departure did not capture before pane Hide handlers, or duplicate Hide replaced it");
         const int beforeDockedArrivals=arrivals;
-        const auto beforeDockedTrace=Unbound::LayoutTrace::active();
         stack.setCurrentWidget(&edit);
-        require(state->begins==1 && boundary.hideBegins==1 && arrivals==beforeDockedArrivals
-            && Unbound::LayoutTrace::active()==beforeDockedTrace,
-            "Floating-to-docked switch started capture, readiness tracing or restoration work");
-        wait();wait();require(state->reveals==1,"Docked destination started a fade");
+        require(state->begins==2 && boundary.hideBegins==2 && arrivals==beforeDockedArrivals+1,
+            "Docked destination replaced the outgoing cover or missed readiness");
+        wait();wait();require(state->reveals==2 && state->cancels==2,
+            "Docked destination did not promptly reveal and release the outgoing cover");
         stack.setCurrentWidget(&color);stack.setCurrentWidget(&audio);
-        wait();wait();require(state->begins==2 && state->reveals==1 && state->cancels==2,
-            "Rapid switch to docked page retained or revealed the outgoing cover");
+        wait();wait();require(state->begins==4 && state->reveals==3 && state->cancels==4,
+            "Rapid switch to docked page failed to replace/release its cover");
         audioFloating=true;
         stack.setCurrentWidget(&color);stack.setCurrentWidget(&audio);
-        wait();wait();require(state->begins==4 && state->reveals==2 && state->cancels==4,
+        wait();wait();require(state->begins==6 && state->reveals==4 && state->cancels==6,
             "Floating-to-floating switch retained or revealed a superseded cover");
         stack.setCurrentWidget(&color);
         QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);QApplication::sendEvent(&color,&escape);
-        wait();require(state->reveals==2 && state->cancels==5,"User input failed to cancel page cover");
-        root.hide();settle();require(state->begins==5,"Hiding main was mistaken for a page switch");
+        wait();require(state->reveals==4 && state->cancels==7,"User input failed to cancel page cover");
+        root.hide();settle();require(state->begins==7,"Hiding main was mistaken for a page switch");
         stack.setCurrentWidget(&audio);stack.setCurrentWidget(&color);settle();
-        require(state->begins==5,"Hidden page selection started a cover");
-        root.show();settle();require(state->begins==5,"Restoring main started a page-switch cover");
+        require(state->begins==7,"Hidden page selection started a cover");
+        root.show();settle();require(state->begins==7,"Restoring main started a page-switch cover");
         stack.hide();stack.setCurrentWidget(&audio);stack.setCurrentWidget(&color);settle();
-        require(state->begins==5,"Hidden page stack started a cover");
+        require(state->begins==7,"Hidden page stack started a cover");
         color.removeEventFilter(&boundary);
         delete Unbound::LayoutTrace::active();
-        std::puts("PASS: destination-only page capture, docked destination bypass, deferred return, rapid switch and cancellation");
+        std::puts("PASS: departure/arrival page capture, docked-to-docked bypass, deferred return, rapid switch and cancellation");
     }
     // Exercise the actual recall adapter, not only its presentation lifecycle.
     // Catalogue coverage prevents a page-specific experiment gate returning.

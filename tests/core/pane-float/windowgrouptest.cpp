@@ -75,6 +75,21 @@ void testWindowGroup() {
         window->setGeometry(100,100,400,300); window->show();
     }
     minimized.showMinimized();
+    // Menu ownership must not expose main through an ordinary overlapping
+    // floater, even before the queued group-order refresh has run.
+    activate(first); settle();
+    {
+        PageLayoutMenu menu(settings,page,&main);
+        verifyStackingDuring(main,{&first},[&] { menu.popup(first.mapToGlobal(QPoint(30,30))); });
+        require(stackedAbove(first,main) && stackedAbove(menu,first),
+            "Opening layout menu covered an ordinary floating pane with main");
+#ifdef Q_OS_WIN
+        // Reproduce the nonactivating owner raise seen during Resolve's show.
+        verifyStackingDuring(main,{&first},[&] { main.raise(); });
+#endif
+        menu.dismiss(); activate(main); settle();
+        require(ownsKeyboardFocus(main),"Menu owner guard prevented genuine main activation");
+    }
     first.setProperty("unboundKeepAtop",true); second.setProperty("unboundKeepAtop",true);
     activate(main); settle();
     require(stackedAbove(first,main) && stackedAbove(second,main),"Pinned panes do not cover ordinary main");

@@ -26,7 +26,7 @@ class LayoutTransition final : public QObject {
     bool done=false;
     static QPointer<LayoutTransition> &active() {static QPointer<LayoutTransition> value;return value;}
     LayoutTransition(QWidget *window,const QString &pageName):QObject(qApp),main(window) {
-        page=window->findChild<QWidget *>(pageName);
+        if(!pageName.isEmpty())page=window->findChild<QWidget *>(pageName);
         deadline.setSingleShot(true);
         connect(&deadline,&QTimer::timeout,this,[this] {cancel("timeout_not_ready");});
         connect(window,&QObject::destroyed,this,[this] {cancel("main_destroyed");});
@@ -48,6 +48,9 @@ class LayoutTransition final : public QObject {
 public:
     std::function<void(const QString &)> ended;
     bool running() const {return !done;}
+    // A page handoff captures on departure before its destination is known.
+    // Bind cancellation/dialog scope once the incoming page is identified.
+    void destination(QWidget *widget) {page=widget;}
     void ready() {
         if(done || !cover)return;
         LayoutTrace::mark("cover_reveal_candidate");

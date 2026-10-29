@@ -40,6 +40,17 @@ private:
         auto foreground=QWidget::find(reinterpret_cast<WId>(GetForegroundWindow()));
         if(!activationMember(target) || !activationMember(foreground) || (target->property("unboundKeepAtop").toBool() && !(pos->flags&SWP_NOACTIVATE))
             || (!layoutMenu(target) && (GetWindowLongPtr(pos->hwnd,GWL_EXSTYLE)&WS_EX_TOPMOST)) || !stackingAllowed()) return false;
+        // Showing the main-owned tool menu can raise its owner before the
+        // floating invoking window is restored. Preserve ordinary peers too:
+        // a menu is not a request to bring main forward. QWidget visibility
+        // is already set during show(), before the native owner raise occurs.
+        if(target==m_main && (pos->flags&SWP_NOACTIVATE) && foreground!=m_main) {
+            for(auto window:QApplication::topLevelWidgets())
+                if(layoutMenu(window) && window->isVisible()) {
+                    pos->flags|=SWP_NOZORDER;
+                    return false;
+                }
+        }
         // Suppress preliminary member/menu raises while pins are visible. The
         // shared refresh submits the final group order in one batch. Merely
         // replacing hwndInsertAfter is insufficient: owner/owned reordering
