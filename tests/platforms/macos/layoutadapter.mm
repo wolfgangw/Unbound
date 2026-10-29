@@ -9,13 +9,21 @@ namespace LayoutTest {
 void initialize() { qputenv("QT_STYLE_OVERRIDE","Fusion"); }
 bool nativeVisible(QWidget &window) { return reinterpret_cast<NSView *>(window.winId()).window.visible; }
 bool stackedAbove(QWidget &upper,QWidget &lower) {
-    auto a=reinterpret_cast<NSView *>(upper.winId()).window;
-    auto b=reinterpret_cast<NSView *>(lower.winId()).window;
-    for(NSWindow *window in NSApp.orderedWindows) {
-        if(window==a) return true;
-        if(window==b) return false;
+    const auto a=reinterpret_cast<NSView *>(upper.winId()).window.windowNumber;
+    const auto b=reinterpret_cast<NSView *>(lower.winId()).window.windowNumber;
+    // NSApplication.orderedWindows excludes NSPanel, including our tool popout.
+    // Compare actual WindowServer order, reading only the two fixture IDs.
+    auto windows=CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly,kCGNullWindowID);
+    if(!windows)return false;
+    int upperIndex=-1,lowerIndex=-1,index=0;
+    for(NSDictionary *entry in (NSArray *)windows) {
+        const auto number=[entry[(id)kCGWindowNumber] integerValue];
+        if(number==a)upperIndex=index;
+        if(number==b)lowerIndex=index;
+        ++index;
     }
-    return false;
+    CFRelease(windows);
+    return upperIndex>=0 && lowerIndex>=0 && upperIndex<lowerIndex;
 }
 void requestActivation(QWidget &window) {
     auto native=reinterpret_cast<NSView *>(window.winId()).window;
@@ -38,6 +46,18 @@ void verifyStackingDuring(QWidget &window,const QList<QWidget *> &pins,const std
 }
 void verifyActivationBelowPins(QWidget &window,const QList<QWidget *> &pins) {
     activate(window);
+    // Native activation and the WindowServer's published stacking order settle
+    // separately. Observe the result without replaying activation or ordering.
+    QElapsedTimer deadline;deadline.start();
+    while(deadline.elapsed()<1000) {
+        bool ordered=true;
+        for(auto pin:pins)ordered=ordered && stackedAbove(*pin,window);
+        if(ordered)break;
+        settle();
+    }
+    for(auto pin:pins)if(!stackedAbove(*pin,window))
+        std::fprintf(stderr,"Stacking target=%s pin=%s nativeFocus=%d appActive=%d\n",
+            qPrintable(window.objectName()),qPrintable(pin->objectName()),ownsKeyboardFocus(window),int(NSApp.active));
     for(auto pin:pins) require(stackedAbove(*pin,window),"Activated window crossed pinned panes");
     require(ownsKeyboardFocus(window),"Stack constraint interfered with activation");
 }
