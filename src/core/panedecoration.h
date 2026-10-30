@@ -3,7 +3,6 @@
 #define UNBOUND_PANEDECORATION_H
 #include "panecatalogue.h"
 #include "colornativepalette.h"
-#include "layouttracediagnostics.h"
 #include <QWidget>
 #include <QToolButton>
 #include <QAbstractButton>
@@ -304,7 +303,7 @@ private:
     void refresh()
     {
         if(m_refreshing || !m_pane || (m_floating && !PaneCatalogue::colorControl(m_pane->objectName()))) return;
-        LayoutTraceSpan trace("header_refresh",m_pane->objectName());
+
         m_refreshing=true;
         bool any=false; for(auto b:m_buttons) if(b) any=true;
         if(m_native && any && !PaneCatalogue::colorControl(m_pane->objectName())) {m_refreshing=false; return;}

@@ -3,13 +3,9 @@ param(
     [int]$BuildNumber = 0,
     [switch]$InternalBuild,
     [switch]$PaletteSizeDiagnostics,
-    [switch]$LayoutTrace,
-    [switch]$LayoutCoverExperiment,
     [string]$QtPath = "$env:USERPROFILE\Qt\5.15.2\msvc2019_64"
 )
 $ErrorActionPreference = 'Stop'
-if ($LayoutTrace -and !$InternalBuild) { throw 'Layout tracing requires an internal build.' }
-if ($LayoutCoverExperiment -and !$InternalBuild) { throw 'The layout cover experiment requires an internal build.' }
 if ($PaletteSizeDiagnostics -and !$InternalBuild) { throw 'Palette size diagnostics require an internal build.' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-StrictMode -Version Latest
@@ -50,9 +46,7 @@ try {
     Invoke-Checked 'cmake' @('-S', $repoRoot, '-B', $build,
         '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath",
         "-DUNBOUND_VERSION=$version", "-DUNBOUND_BUILD=$BuildNumber", "-DUNBOUND_BUILD_ID=$buildId",
-        "-DUNBOUND_PALETTE_SIZE_DIAGNOSTICS=$($PaletteSizeDiagnostics.IsPresent)",
-        "-DUNBOUND_LAYOUT_TRACE=$($LayoutTrace.IsPresent)",
-        "-DUNBOUND_LAYOUT_COVER_EXPERIMENT=$($LayoutCoverExperiment.IsPresent)")
+        "-DUNBOUND_PALETTE_SIZE_DIAGNOSTICS=$($PaletteSizeDiagnostics.IsPresent)")
     Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--', '/m:1', '/nr:false')
     & (Join-Path $repoRoot 'tests\platforms\windows\version\main.ps1')
     $loader = Join-Path $build 'Release\UnboundLuaLoader.dll'
@@ -105,9 +99,7 @@ try {
     Invoke-Checked $test @('--discovery-test', $dll)
     $env:QT_QPA_PLATFORM = 'windows'
     try {
-        if ($LayoutCoverExperiment) {
-            Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-cover-only')
-        }
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-cover-only')
         # Keep each native process inside the watchdog as fixture coverage grows.
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--components-only')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-menu-only')

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include "paletterestorationdiagnostics.h"
 #include <QPointer>
 #include <QApplication>
@@ -22,7 +22,7 @@ public:
         for(auto child:host->findChildren<QObject *>("unboundGeometryTransaction",Qt::FindDirectChildrenOnly))
             if(child!=this) static_cast<PaneGeometryTransaction *>(child)->finish("superseded");
         setObjectName("unboundGeometryTransaction");
-        LayoutTrace::mark("palette_observer_begin",host->objectName());
+
 #ifdef UNBOUND_PALETTE_SIZE_DIAGNOSTICS
         m_diagnostics=new PaletteRestorationDiagnostics(host,requested);
 #endif
@@ -63,7 +63,7 @@ private:
     void finish(const char *reason) {
         if(m_done) return;
         diagnostic(reason);
-        LayoutTrace::mark("palette_observer_end",m_host?m_host->objectName():QString());
+
         m_done=true;
         m_quiet.stop();
         m_work.clear();
@@ -73,7 +73,7 @@ private:
     void queue() {
         if(m_done || m_queued) return;
         m_queued=true;
-        m_work.set("palette_geometry",m_host);
+        m_work.set(m_host);
         QTimer::singleShot(0,this,[this] {
             m_queued=false;
             if(m_done) return;
@@ -82,7 +82,7 @@ private:
             const auto minimum=m_host->minimumSize().expandedTo(m_host->minimumSizeHint());
             if(minimum.width()>m_requested.width() || minimum.height()>m_requested.height()) {diagnostic("minimum_blocks_restore");return;}
             if(m_requested.width()>m_host->maximumWidth() || m_requested.height()>m_host->maximumHeight()) return;
-            if(m_host->size()!=m_requested) {diagnostic("reapply");LayoutTrace::mark("palette_size_reapply",m_host->objectName());m_restore();}
+            if(m_host->size()!=m_requested) {diagnostic("reapply");m_restore();}
             if(m_host && m_host->size()==m_requested) m_work.clear();
         });
     }
@@ -91,7 +91,7 @@ private:
     std::function<bool()> m_valid;
     std::function<void()> m_restore;
     bool m_done=false,m_queued=false;
-    LayoutTraceWork m_work;
+    LayoutPendingWork m_work;
     QTimer m_quiet{this};
 #ifdef UNBOUND_PALETTE_SIZE_DIAGNOSTICS
     QPointer<PaletteRestorationDiagnostics> m_diagnostics;

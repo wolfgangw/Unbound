@@ -4,14 +4,9 @@ option(UNBOUND_PALETTE_SIZE_DIAGNOSTICS "Record public Qt palette size measureme
 if(UNBOUND_PALETTE_SIZE_DIAGNOSTICS)
     target_compile_definitions(UnboundCoreHeaders INTERFACE UNBOUND_PALETTE_SIZE_DIAGNOSTICS)
 endif()
-option(UNBOUND_LAYOUT_TRACE "Bounded layout recall tracing (internal investigation only)" OFF)
-option(UNBOUND_LAYOUT_COVER_EXPERIMENT "Layout transition experiment (Windows capture; no presentation on macOS)" OFF)
-if(UNBOUND_LAYOUT_COVER_EXPERIMENT)
-    set(UNBOUND_LAYOUT_TRACE ON)
-    target_compile_definitions(UnboundCoreHeaders INTERFACE UNBOUND_LAYOUT_COVER_EXPERIMENT)
-endif()
-if(UNBOUND_LAYOUT_TRACE)
-    target_compile_definitions(UnboundCoreHeaders INTERFACE UNBOUND_LAYOUT_TRACE)
+# Windows ships capture-backed transitions; macOS keeps native presentation.
+if(WIN32)
+    target_compile_definitions(UnboundCoreHeaders INTERFACE UNBOUND_LAYOUT_TRANSITIONS)
 endif()
 target_include_directories(UnboundCoreHeaders INTERFACE
     "${CMAKE_CURRENT_LIST_DIR}" "${CMAKE_CURRENT_LIST_DIR}/../platform")

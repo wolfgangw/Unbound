@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include <QPointer>
 #include <QEvent>
 #include <QTimer>
@@ -25,8 +25,8 @@ public:
     }
     void watch(QWidget *content,QWidget *page,std::function<void(bool)> finished) {
         cancel(); m_content=content; m_page=page; m_finished=std::move(finished);
-        LayoutTrace::mark("docking_check_scheduled",content?content->objectName():QString());
-        m_work.set("docking_check",page);
+
+        m_work.set(page);
         if(m_page) { m_page->installEventFilter(this); if(m_page->isVisible()) m_timer.start(); }
     }
     static bool collapsed(QWidget *content,QWidget *page) {
@@ -43,7 +43,7 @@ protected:
     bool eventFilter(QObject *object,QEvent *event) override {
         if(object==m_page) {
             if(event->type()==QEvent::Hide) {m_timer.stop();m_work.clear();}
-            else if(event->type()==QEvent::Show) {m_work.set("docking_check",m_page);m_timer.start();}
+            else if(event->type()==QEvent::Show) {m_work.set(m_page);m_timer.start();}
         }
         return false;
     }
@@ -52,13 +52,13 @@ private:
         if(!m_page || !m_content) { cancel(); return; }
         if(!m_page->isVisible()) return;
         const bool failed=collapsed(m_content,m_page);
-        LayoutTrace::mark(failed?"docking_check_failed":"docking_check_passed",m_content->objectName());
+
         auto finished=std::move(m_finished); cancel();
         if(finished) finished(failed);
     }
     QPointer<QWidget> m_content,m_page;
     QTimer m_timer;
-    LayoutTraceWork m_work;
+    LayoutPendingWork m_work;
     std::function<void(bool)> m_finished;
 };
 inline QString dockingFailureMessage(const QString &pane) {

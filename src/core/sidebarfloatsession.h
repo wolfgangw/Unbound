@@ -15,7 +15,7 @@
 #include <functional>
 #include <memory>
 #include "windowintegration.h"
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include "nodescanvasbounds.h"
 #include "auditionactivationbridge.h"
 #include "paneheaderdrag.h"
@@ -158,7 +158,6 @@ public:
 
     QString start(QWidget *slot, const QString &label, QWidget *pageRoot = nullptr, bool reclaimSplitterSpace = false, bool fadeIn = false, bool preserveNativeLayout = false, bool activate = true)
     {
-        LayoutTraceSpan phaseTrace("float_validate",slot ? slot->objectName() : QString());
         m_dockingGuard.cancel();
         if (active()) return QStringLiteral("This pane is already floating.");
         if (!slot || slot->isWindow() || !slot->parentWidget() || !(pageRoot ? pageRoot : slot->parentWidget())->isVisible())
@@ -204,7 +203,7 @@ public:
         m_layoutSlot = layoutSlot;
         m_root = pageRoot ? pageRoot : slot->parentWidget();
         m_layout = layout;
-        phaseTrace.next("float_create_host");
+
         auto host = new PaneFloatingWindow;
         host->setProperty("unboundKeepAtop",m_keepAtop);
         host->setProperty("unboundPage",PaneCatalogue::pageForRoot(m_root->objectName()));
@@ -217,7 +216,7 @@ public:
         host->setObjectName(QStringLiteral("unboundFloating_") + slot->objectName());
         host->setWindowTitle(label);
         host->resize(slot->size().expandedTo(QSize(360, 300)));
-        phaseTrace.next("float_transfer_content");
+
         if (nativePalette) {
             m_nativePalette=new ColorNativePalette(this);
             const auto error=m_nativePalette->start(slot,host,m_root);
@@ -272,7 +271,7 @@ public:
         placeholderLayout->addWidget(placeholder);
         placeholder->show();
         }
-        phaseTrace.next("float_adapters_and_constraints");
+
         m_elidingLabels=std::make_unique<PaneElidingLabels>(host,slot->objectName());
         // Native mode stacks budget hidden tools too. Their heights must not
         // constrain a floating control's selected mode. Keep the common width
@@ -346,7 +345,7 @@ public:
                 return QStringLiteral("The native Lightbox controls are unavailable; Clips remains docked.");
             }
         }
-        phaseTrace.next("float_geometry_and_style");
+
         const auto initialArea=panePlacementWorkArea(slot);
         const bool newPlacement=m_savedGeometry.isEmpty() || !host->restoreGeometry(m_savedGeometry);
         if(newPlacement) centerNewPane(host,initialArea);
@@ -355,10 +354,10 @@ public:
             m_returnFade->setTargetObject(host);
             host->setWindowOpacity(0.0);
         }
-        phaseTrace.next("float_show");
+
         PaneUndockDrag::prepareHost(host);
         host->show();
-        phaseTrace.next("float_after_show");
+
         if(newPlacement) centerNewPane(host,initialArea);
         // First-time OS placement and show-time minimum sizing need the same
         // recovery as saved geometry. Never constrain subsequent user dragging.
@@ -473,7 +472,7 @@ protected:
                     m_host->setWindowOpacity(1.0);
                 }
             } else if (event->type() == QEvent::Show && m_hiddenByPage) {
-                m_pageReturnWork.set("pane_page_return",m_host);
+                m_pageReturnWork.set(m_host);
                 const auto generation = m_generation;
                 // Let Resolve finish the page's Show handling before revealing
                 // its floating windows. Do not pump a nested event loop.
@@ -649,7 +648,7 @@ private:
     bool m_hiddenByPage = false;
     bool m_restoring = false;
     PaneDockingGuard m_dockingGuard{this};
-    LayoutTraceWork m_pageReturnWork;
+    LayoutPendingWork m_pageReturnWork;
 };
 }
 #endif

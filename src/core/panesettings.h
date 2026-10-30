@@ -9,7 +9,6 @@
 #include <QJsonArray>
 #include <QSaveFile>
 #include "settingslocation.h"
-#include "layouttracediagnostics.h"
 #include <QMap>
 #include <QSet>
 #include <QUuid>
@@ -313,7 +312,6 @@ private:
     }
     QString write(const QJsonObject &pages)
     {
-        LayoutTraceSpan trace("settings_atomic_write");
         if(!QDir().mkpath(QFileInfo(m_path).absolutePath())) return QStringLiteral("Cannot create Unbound settings directory: %1").arg(m_path);
         QSaveFile file(m_path);
         const auto bytes=QJsonDocument(QJsonObject{{"version",7},{"pages",pages}}).toJson();

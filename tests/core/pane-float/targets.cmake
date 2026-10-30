@@ -16,14 +16,14 @@ function(unbound_add_layout_tests backend adapter)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/colorcontroltest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pagefocustest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/windowgrouptest.cpp"
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/layouttracetest.cpp"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/layoutreadinesstest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/transitiontest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/hostlifecycletest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/dockingguardtest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/indexheaderdragtest.cpp" "${adapter}")
     target_include_directories(UnboundLayoutTests PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
     unbound_link_core(UnboundLayoutTests ${backend})
-    if(WIN32 AND UNBOUND_LAYOUT_COVER_EXPERIMENT)
+    if(WIN32)
         target_sources(UnboundLayoutTests PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../platforms/windows/windowing/layoutcovertest.cpp")
     endif()
 endfunction()

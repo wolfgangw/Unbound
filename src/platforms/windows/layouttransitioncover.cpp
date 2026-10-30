@@ -138,7 +138,7 @@ public:
         if(!captured) {cancel();return false;}
         if(!exclusions.restore()) {cancel();return false;}
         WNDCLASSW wc{};wc.lpfnWndProc=procedure;wc.hInstance=GetModuleHandleW(nullptr);
-        wc.hCursor=LoadCursorW(nullptr,MAKEINTRESOURCEW(32512));wc.lpszClassName=L"UnboundLayoutCoverExperiment";
+        wc.hCursor=LoadCursorW(nullptr,MAKEINTRESOURCEW(32512));wc.lpszClassName=L"UnboundLayoutTransitionCover";
         if(!RegisterClassW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {cancel();return false;}
         for(auto &s:surfaces) {
             s->window=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED,

@@ -271,15 +271,13 @@ private:
         for(const auto &name:m_initializingNative)
             if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)
                 return QStringLiteral("Panels are still initializing. Please try again.");
-        Unbound::LayoutTrace::begin(m_window,page);
-        Unbound::LayoutTraceSpan recallTrace("recall_sync");
         const auto captured=capturePage(page);
         if(!captured.isEmpty()) return captured;
         if(m_settings.activeLayout(page)==layoutId && !m_settings.layoutDirty(page,layoutId)) {
             const auto incoming=configuration.value("panes").toObject();
             auto pause=Unbound::LayoutRestorePolicy::pauseForRecall(m_window,page,incoming,false,true);
             normalColorLayout(page,configuration.value("panes").toObject());
-            Unbound::LayoutTrace::mark("clean_recall");tracePending();
+            updateReadiness();
             return {};
         }
         Unbound::LayoutTransitionRecall transition(m_window,page,[page](const QString &reason) {
@@ -298,7 +296,6 @@ private:
         for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
             if(!panes.value(it.key()).toObject().value("floating").toBool()) {
-                Unbound::LayoutTraceSpan dockTrace("dock",it.key());
                 const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
             }
         }
@@ -351,14 +348,14 @@ private:
             m_pendingLayoutToggles.remove(name);
         }
         m_restoringToggles=false;
-        Unbound::LayoutTrace::mark("menu_finish_recall");
+
         if(m_layoutMenu && m_layoutMenu->page()==page) m_layoutMenu->finishRecall();
     }
     void scheduleDiscovery()
     {
         if (m_discoveryQueued || QCoreApplication::closingDown()) return;
         m_discoveryQueued=true;
-        m_discoveryWork.set("discovery",m_window);
+        m_discoveryWork.set(m_window);
         QTimer::singleShot(0,this,[this] {
             m_discoveryQueued=false;
             m_discoveryWork.clear();
@@ -382,7 +379,6 @@ private:
     }
     void indexBranch(QWidget *root)
     {
-        Unbound::LayoutTraceSpan trace("index_branch",root?root->objectName():QString());
         if (root->objectName()==QLatin1String("UiMainWindow") && m_window!=root) {
             m_window=root;
             m_mainSnap.setWindow(root);
@@ -501,7 +497,7 @@ private:
             if (m_activationRequested.contains(name)) return false;
             m_activationRequested.insert(name);
             m_initializingNative.insert(name);
-            Unbound::LayoutTrace::mark("native_initialization_requested",name);
+
             requested = true;
             m_restoringToggles = true;
             toggle->click();
@@ -509,7 +505,6 @@ private:
             // Other widget events may already have queued discovery ahead of
             // Resolve's toggle handler. Do not detach until that handler ran.
             QTimer::singleShot(0,this,[this,name] {
-                Unbound::LayoutTrace::mark("native_initialization_callback",name);
                 m_initializingNative.remove(name);
                 scheduleDiscovery();
             });
@@ -688,26 +683,23 @@ private:
             mode->click();
         }
     }
-    void tracePending() {
-#ifdef UNBOUND_LAYOUT_TRACE
-        if(!Unbound::LayoutTrace::active()) return;
+    void updateReadiness() {
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
+        if(!Unbound::LayoutReadiness::active()) return;
         int toggles=0,floating=0,initializing=0;
         const auto page=currentPage();
         for(const auto &name:m_initializingNative) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) ++initializing;
         for(const auto &name:(m_pendingLayoutToggles | m_pendingColorToggles | m_pendingDockToggles)) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) {
             ++toggles;
-            Unbound::LayoutTrace::mark(m_pendingDockToggles.contains(name)?"pending_dock_toggle":
-                m_pendingLayoutToggles.contains(name)?"pending_layout_toggle":"pending_color_toggle",name);
         }
         for(auto it=m_names.cbegin();it!=m_names.cend();++it)
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && m_settings.floating(settingsKey(it.key()))
                 && !m_restoreAttempted.contains(it.key())) ++floating;
-        Unbound::LayoutTrace::pending(m_discoveryQueued?1:0,initializing,toggles,floating);
+        Unbound::LayoutReadiness::pending(m_discoveryQueued?1:0,initializing,toggles,floating);
 #endif
     }
     void discover()
     {
-        Unbound::LayoutTraceSpan discoveryTrace("discovery_pass");
         for (auto it = m_decorations.begin(); it != m_decorations.end();) {
             if (!it.value()->pane()) {
                 m_activationRequested.remove(it.key());
@@ -762,7 +754,7 @@ private:
                 && !prepareNativePane(pane, name, requested)) {
                 // Shared sidebar selectors are mutually exclusive. Let one
                 // native activation finish and detach it before selecting next.
-                if (requested && descriptor.serializeInitialization()) { tracePending(); return; }
+                if (requested && descriptor.serializeInitialization()) { updateReadiness(); return; }
                 continue;
             }
             // Fairlight controls belong beside native header actions, never in
@@ -774,7 +766,7 @@ private:
                 restoreDeferredLightbox();
             }
             m_restoreAttempted.insert(name); // No repeated errors for incompatible panes.
-            Unbound::LayoutTraceSpan undockTrace("undock",name);
+
             undock(name, true);
         }
         restoreColorToggles();
@@ -784,7 +776,7 @@ private:
             if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(false);
             m_colorPlayback.reset();
         }
-        tracePending();
+        updateReadiness();
     }
     QPointer<QAbstractButton> m_deferredLightbox;
     Unbound::LayoutRestorePolicy::PlaybackHold m_colorPlayback;
@@ -797,7 +789,7 @@ private:
     QMap<QString,QList<QPointer<QAbstractButton>>> m_toggles;
     QMap<QObject *,QPointer<QObject>> m_pendingBranches;
     bool m_discoveryQueued=false;
-    Unbound::LayoutTraceWork m_discoveryWork;
+    Unbound::LayoutPendingWork m_discoveryWork;
     Unbound::PaneSettings m_settings;
     Unbound::MainWindowPlacement m_mainPlacement{m_settings};
     Unbound::MainWindowSnap m_mainSnap;

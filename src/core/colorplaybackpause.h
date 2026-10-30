@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QAction>
@@ -38,13 +38,10 @@ private:
     double m_speed=1;
     std::weak_ptr<Lease> m_hold;
     QTimer m_deadline;
-    LayoutTraceWork m_work;
+    LayoutPendingWork m_work;
     unsigned m_generation=0;
     bool m_cancelled=false,m_ownCommand=false;
     static QPointer<ColorPlaybackPause> &active() {static QPointer<ColorPlaybackPause> value;return value;}
-    static Hold unavailable(const char *reason) {
-        LayoutTrace::mark("color_playback_pause_unavailable",QLatin1String(reason));return {};
-    }
     static QAbstractButton *button(QWidget *root,const char *name) {
         if(!root)return nullptr;
         const auto values=root->findChildren<QAbstractButton *>(QLatin1String(name));
@@ -71,8 +68,6 @@ private:
         while(speed<m_speed && steps<6) {speed*=2;++steps;}
         if(speed==m_speed && (steps==0 || (m_faster && m_faster->isEnabled()))) {
             for(int i=0;i<steps;++i)m_faster->trigger();
-        } else if(m_speed!=1) {
-            LayoutTrace::mark("color_playback_speed_fallback","1x");
         }
         m_ownCommand=false;
     }
@@ -109,10 +104,7 @@ private:
                 m_deadline.stop();qApp->removeEventFilter(this);
                 if(active()==this)active().clear();
                 m_work.clear();
-                if(resume) {
-                    LayoutTrace::mark("color_playback_resume");
-                    resumePlayback();
-                } else LayoutTrace::mark("color_playback_resume_skipped");
+                if(resume)resumePlayback();
                 deleteLater();
             });
         });
@@ -140,10 +132,10 @@ private:
         return false;
     }
 public:
-    void cancel(const QString &reason) {
+    void cancel(const QString &) {
         if(m_cancelled)return;
         m_cancelled=true;m_deadline.stop();qApp->removeEventFilter(this);m_work.clear();
-        LayoutTrace::mark("color_playback_cancel",reason);
+
         if(active()==this)active().clear();
         ++m_generation;deleteLater();
     }
@@ -166,13 +158,13 @@ public:
         // Unavailable player (including startup/fixtures) has no known playback
         // to pause. Unknown transport disables this workaround, not layout work.
         if(!forward && !reverse && !stop)return {};
-        if(!forward || !reverse || !stop)return unavailable("incomplete_transport");
+        if(!forward || !reverse || !stop)return {};
         // Fresh Resolve sessions can leave all three buttons unchecked while
         // idle. Only the directional buttons identify playback; do not require
         // a prior Stop command or create a resume lease for that idle state.
         if(!forward->isChecked() && !reverse->isChecked())return {};
-        if(forward->isChecked()==reverse->isChecked())return unavailable("ambiguous_direction");
-        if(!stop->isEnabled())return unavailable("stop_disabled");
+        if(forward->isChecked()==reverse->isChecked())return {};
+        if(!stop->isEnabled())return {};
         auto transaction=new ColorPlaybackPause(page,stop->parentWidget(),stop,forward,reverse);
         transaction->m_resume=reverse->isChecked()?reverse:forward;
         const auto actions=page->window()->findChildren<QAction *>(reverse->isChecked()?"controlPlayReverse":"controlPlayForward");
@@ -180,14 +172,14 @@ public:
         const auto labels=player->findChildren<QLabel *>("labelPlaySpeed");
         if(labels.size()==1)transaction->m_speedLabel=labels.first();
         transaction->m_speed=transaction->displayedSpeed();
-        if(!transaction->m_resume->isEnabled()) {delete transaction;return unavailable("resume_disabled");}
+        if(!transaction->m_resume->isEnabled()) {delete transaction;return {};}
         transaction->m_ownCommand=true;stop->click();transaction->m_ownCommand=false;
         // A checked Stop alone could be the button's own toggle. Require the
         // native handler to clear both directional buttons as well.
-        if(!transaction->stopped()) {delete transaction;return unavailable("stop_unconfirmed");}
+        if(!transaction->stopped()) {delete transaction;return {};}
         active()=transaction;
-        transaction->m_work.set("color_playback_pause",page);
-        LayoutTrace::mark("color_playback_stop");
+        transaction->m_work.set(page);
+
         qApp->installEventFilter(transaction);transaction->m_deadline.start(3000);
         return transaction->lease();
     }

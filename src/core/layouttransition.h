@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "layouttransitionpresentation.h"
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include "layoutrestorepolicy.h"
 #include <QApplication>
 #include <QDialog>
@@ -47,76 +47,77 @@ class LayoutTransition final : public QObject {
     }
 public:
     std::function<void(const QString &)> ended;
+    std::function<void()> releaseReadiness;
     bool running() const {return !done;}
     // A page handoff captures on departure before its destination is known.
     // Bind cancellation/dialog scope once the incoming page is identified.
     void destination(QWidget *widget) {page=widget;}
     void ready() {
         if(done || !cover)return;
-        LayoutTrace::mark("cover_reveal_candidate");
+
         QPointer<LayoutTransition> alive=this;
         cover->reveal(120,[alive](bool success) {if(alive)alive->cancel(success?"revealed":"presentation_failed");});
     }
     void invalidate() {
         if(done || !cover)return;
-        LayoutTrace::mark("cover_candidate_invalidated");cover->hold();
+        cover->hold();
     }
     static QPointer<LayoutTransition> begin(QWidget *window,const QString &page,
         std::unique_ptr<LayoutTransitionPresentation> presentation=makeLayoutTransitionPresentation(),
         const QList<QWidget *> &interactiveWindows={}) {
         if(active())active()->cancel("superseded");
         if(!window || !presentation)return {};
-        auto experiment=new LayoutTransition(window,page);active()=experiment;
+        auto transition=new LayoutTransition(window,page);active()=transition;
         for(auto live:interactiveWindows)if(live && live->isVisible()) {
-            experiment->interactive.append(live);
-            connect(live,&QObject::destroyed,experiment,[experiment] {experiment->cancel("interactive_window_destroyed");});
+            transition->interactive.append(live);
+            connect(live,&QObject::destroyed,transition,[transition] {transition->cancel("interactive_window_destroyed");});
         }
-        experiment->cover=std::move(presentation);
-        QPointer<LayoutTransition> alive=experiment;
-        LayoutTraceSpan capture("cover_capture");
-        if(!experiment->cover->begin(window,[alive] {if(alive)alive->cancel("native_interruption");},interactiveWindows)) {
-            experiment->cancel("capture_unavailable");return {};
+        transition->cover=std::move(presentation);
+        QPointer<LayoutTransition> alive=transition;
+
+        if(!transition->cover->begin(window,[alive] {if(alive)alive->cancel("native_interruption");},interactiveWindows)) {
+            transition->cancel("capture_unavailable");return {};
         }
-        LayoutTrace::mark("cover_bitmap_bytes",QString::number(experiment->cover->retainedBytes()));
-        LayoutTrace::mark("cover_visible");
-        qApp->installEventFilter(experiment);
-        experiment->deadline.start(3000);
-        return experiment;
+
+        qApp->installEventFilter(transition);
+        transition->deadline.start(3000);
+        return transition;
     }
     void cancel(const QString &reason) {
         if(done)return;
         done=true;deadline.stop();qApp->removeEventFilter(this);
-        LayoutTrace::mark("cover_end",reason);
+
         // Keep the adapter alive until a native/animation callback has unwound.
         if(cover)cover->cancel();
+        if(releaseReadiness) {auto release=std::move(releaseReadiness);release();}
         if(active()==this)active().clear();
         if(ended)ended(reason);
         deleteLater();
     }
 };
-// Opt-in prototype readiness adapter. Keep its evidence/limitations separate
-// from the reusable presentation API. A future readiness source can call the
-// same ready()/invalidate() methods without depending on diagnostics.
+// Connect bounded readiness evidence to the reusable presentation lifecycle.
 class LayoutTransitionRecall {
-    QPointer<LayoutTransition> experiment;
+    QPointer<LayoutTransition> transition;
     bool succeeded=false;
 public:
     LayoutTransitionRecall(QWidget *window,const QString &page,std::function<void(const QString &)> ended={},QWidget *interactive=nullptr,
         std::unique_ptr<LayoutTransitionPresentation> presentation={}) {
-#ifdef UNBOUND_LAYOUT_COVER_EXPERIMENT
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
+        LayoutReadiness::begin(window,page);
         if(!presentation)presentation=makeLayoutTransitionPresentation();
-        experiment=LayoutTransition::begin(window,page,std::move(presentation),interactive?QList<QWidget *>{interactive}:QList<QWidget *>{});
-        if(experiment) {
-            experiment->ended=std::move(ended);
-            const auto alive=experiment;
-            LayoutTrace::presentationProbe([alive] {if(alive)alive->ready();},
+        transition=LayoutTransition::begin(window,page,std::move(presentation),interactive?QList<QWidget *>{interactive}:QList<QWidget *>{});
+        if(!transition) {if(LayoutReadiness::active())LayoutReadiness::active()->finish();}
+        if(transition) {
+            transition->ended=std::move(ended);
+            const auto alive=transition;
+            transition->releaseReadiness=LayoutReadiness::observe([alive] {if(alive)alive->ready();},
                 [alive] {if(alive)alive->invalidate();});
         }
 #else
         Q_UNUSED(window);Q_UNUSED(page);Q_UNUSED(ended);Q_UNUSED(interactive);Q_UNUSED(presentation);
 #endif
     }
-    ~LayoutTransitionRecall() {if(experiment && !succeeded)experiment->cancel("recall_failed");}
+    ~LayoutTransitionRecall() {if(transition && !succeeded)transition->cancel("recall_failed");}
     void complete() {succeeded=true;}
 };
 }

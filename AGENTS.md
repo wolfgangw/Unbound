@@ -478,8 +478,7 @@ active playback, click native Stop and require Stop checked plus both direction
 buttons cleared before retaining automatic resume intent. Unknown, incomplete,
 disabled or unacknowledged transport skips the workaround and continues normal
 layout work. Playback assistance must never refuse recall, undocking or docking;
-it returns only an optional lease, not permission to proceed. Diagnostic trace
-markers record unavailable assistance without a user-facing error.
+it returns only an optional lease, not permission to proceed. Unavailable assistance introduces no user-facing error.
 Release the final lease after deferred mode work; two queued continuations let
 native handlers unwind before resuming only the playback this transaction stopped.
 This is not a global renderer-ready signal. New input/transport commands,
@@ -767,7 +766,7 @@ cover. macOS explicitly uses `NoLayoutTransitionPresentation` for this optional
 feature; existing pane/layout behavior is unchanged. Alternative presentation
 mechanisms can implement the same contract without changing shared pane policy.
 
-The Windows internal `-LayoutCoverExperiment` captures all displays through
+Windows release and internal builds capture all displays through
 public GDI before showing nonactivating covers. External video appears briefly
 frozen while playback continues. No images are saved. Raw bitmap storage is capped
 at 128 MiB; native compositor memory is additional. Completion/cancellation frees
@@ -794,32 +793,37 @@ newer; unavailable exclusion skips visual protection, never layout work. Normal
 menu painting/input and shared sizing continue during the transition; synchronous
 GUI-thread layout work remains synchronous.
 
-The opt-in `LayoutTransitionRecall` adapter supplies experimental readiness for
+The `LayoutTransitionRecall` adapter supplies bounded readiness evidence for
 layout recall on every supported page, using shared work/geometry/composition
 evidence. Edit viewer restoration registers its queued work; unavailable Source
 intent does not hold a transition open until the viewer becomes available.
 Keep page-specific native workarounds in their adapters; the Color playback lease
 is confined to Color recalls. Keep the readiness adapter
 separate from the reusable presentation lifecycle; its signals are not a general
-native-rendering completion guarantee. The open experiment and remaining
-validation are in `doc/issues/layout-transition-readiness.md`.
+native-rendering completion guarantee. Remaining validation and deferred design
+are in `doc/issues/layout-transition-readiness.md`.
 
-The same opt-in build includes `pagetransition.h` for native page switches.
+`pagetransition.h` applies the same presentation to native Windows page switches.
 It observes the named page stack without intercepting page shortcuts or changing
 selection. Cover when either page has floating content/intent. An outgoing page
 with floaters captures at its Hide boundary before pane-session object filters
 hide hosts; otherwise an incoming floating page captures at its Show boundary
 before hosts return. Carry the departure cover into the destination without
 recapture. Duplicate Hide notifications are coalesced. Two fully docked pages
-allocate no cover or readiness trace. A docked destination uses its own readiness
+allocate no cover or readiness observer. A docked destination uses its own readiness
 evidence and does not wait for outgoing hosts or other pages' restoration work.
 Readiness includes incoming queued host reveals, geometry corrections and main
 placement; departure from that destination cancels the transition.
-Public event timing is provisional evidence: the instrumented build counts main
-paint/update delivery before arrival capture when needed, which does not prove
-absence of earlier native/GPU presentation. Keep the live capture-point validation
-in the open investigation. Page switches acquire no Color playback lease and add
-no native layout mutations. The common cancellation/deadline rules still apply.
+Page switches acquire no Color playback lease and add no native layout mutations.
+The common cancellation/deadline rules still apply.
+
+`layoutreadiness.h` retains pending work across observer generations and tracks
+window geometry revisions, public GL composition and raster update acknowledgements.
+Completion/cancellation releases its event filter and signal connections; unavailable
+capture stops observation, and a bounded deadline provides fallback cleanup.
+No transition logs, profiling spans, paint statistics or trace files are collected.
+macOS does not enable the observer or cover; its native presentation remains intact.
+
 
 ## Settings reference
 
@@ -1095,17 +1099,3 @@ Resolve session without Unbound for native captures and verify `truncated: false
 Edit root is `WStackPage_Conform`, Color `WStackPage_Color`, Fairlight
 `WStackPage_Audio`. The repository is otherwise self-contained apart from the
 installed toolchain and Resolve.
-
-Integrated recall diagnostics are opt-in through `UNBOUND_LAYOUT_TRACE` (Windows
-internal build switch `-LayoutTrace`). `layouttracediagnostics.h` observes on the GUI
-thread for six seconds per explicit recall, buffering bounded phase milestones
-separately from numeric structural/paint/public-GL-swap aggregates. Hot event paths
-do not build JSON; bursts cannot evict phase timings or terminal status. Trace-only mode does not
-consume input, suppress painting or delay recall; a quiet candidate is diagnostic
-evidence, never a presentation-ready guarantee. Diagnostic work markers separate
-queued corrections/checks from idle observer lifetimes; window geometry revisions
-qualify public GL composition evidence. Raster/native surfaces remain unproven.
-The separate opt-in Windows layout cover prototype and its readiness limits remain
-an open investigation in `doc/issues/layout-transition-readiness.md`.
-Build/use and trace summarization
-are documented in `tests/platforms/windows/viewer-probe/README.md`.

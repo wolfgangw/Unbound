@@ -2,7 +2,7 @@
 #ifndef UNBOUND_MAINWINDOWPLACEMENT_H
 #define UNBOUND_MAINWINDOWPLACEMENT_H
 #include "panesettings.h"
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include <QApplication>
 #include <QStackedWidget>
 #include <QPointer>
@@ -117,7 +117,6 @@ public:
         if (!message.isEmpty() && error) error(message);
     }
     void reloadCurrent() {
-        LayoutTraceSpan trace("main_placement_reload");
         // The selected layout has already replaced the saved placement. Drop
         // the outgoing cache before entering the normal page restoration path.
         cancelNormalRestore(); m_save.stop(); m_page.clear(); m_last.clear(); refresh();
@@ -157,7 +156,7 @@ private:
         document.insert("maximized",false);
         const auto generation=++m_restoreGeneration;
         const auto page=m_page;
-        m_restoreWork.set("main_normal_placement",m_window);
+        m_restoreWork.set(m_window);
         QTimer::singleShot(0,this,[this,document,generation,page] {
             if(generation!=m_restoreGeneration)return;
             m_restoreWork.clear();
@@ -208,7 +207,7 @@ private:
     {
         if (m_pending) return;
         m_pending=true;
-        m_work.set("main_placement",m_window);
+        m_work.set(m_window);
         QTimer::singleShot(0,this,[this] { m_pending=false;m_work.clear();refresh(); });
     }
     PaneSettings &m_settings;
@@ -221,8 +220,8 @@ private:
     quint64 m_restoreGeneration=0;
     QTimer m_save;
     bool m_applying=false, m_pending=false;
-    LayoutTraceWork m_work;
-    LayoutTraceWork m_restoreWork;
+    LayoutPendingWork m_work;
+    LayoutPendingWork m_restoreWork;
 };
 }
 #endif

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include <QApplication>
 #include <QAbstractButton>
 #include <QPointer>
@@ -169,7 +169,7 @@ class ColorClipsAdapter final : public QObject {
     bool m_playerHidden=false,m_regionHidden=false;
     bool m_originalMode=false,m_originalControls=false;
     bool m_enabled=false,m_busy=false,m_pending=false,m_restorePending=false,m_returning=false,m_suspended=false;
-    LayoutTraceWork m_layoutWork,m_initializeWork,m_restoreWork;
+    LayoutPendingWork m_layoutWork,m_initializeWork,m_restoreWork;
     ColorPlaybackPause::Hold m_playbackHold;
     void finishPlaybackChange() {
         if(!m_initializing && !m_suspended && !m_restorePending && !m_drag)m_playbackHold.reset();
@@ -181,7 +181,7 @@ class ColorClipsAdapter final : public QObject {
     void schedule() {
         if(m_pending) return;
         m_pending=true;
-        m_layoutWork.set("clips_layout",m_page);
+        m_layoutWork.set(m_page);
         QTimer::singleShot(0,this,[this] {
             m_pending=false;
             m_layoutWork.clear();
@@ -279,7 +279,7 @@ public:
         // its hidden geometry synchronously can retain a collapsed strip. Let
         // that native pass finish before entering Lightbox again.
         m_initializing=true;
-        m_initializeWork.set("clips_initialization",m_page);
+        m_initializeWork.set(m_page);
         const auto generation=++m_startGeneration;
         QTimer::singleShot(0,this,[this,generation] {
             if(!m_enabled || generation!=m_startGeneration) return;
@@ -289,7 +289,6 @@ public:
         return true;
     }
     void completeStart() {
-        LayoutTraceSpan trace("clips_complete_start");
         if(!m_initializing || !m_enabled) return;
         if(!valid()) { stop(); return; }
         if(!m_page->isVisible()) return;
@@ -328,7 +327,7 @@ public:
             m_timelineToggleState.end();
             m_initializeTimelineToggle=false;
             m_initializing=false; m_enabled=false; m_suspended=false;
-            m_restorePending=true; m_restoreWork.set("clips_mode_restore",m_page); restoreMode();
+            m_restorePending=true; m_restoreWork.set(m_page); restoreMode();
             return;
         }
         m_enabled=false;m_suspended=false;
@@ -345,7 +344,7 @@ public:
         }
         if(m_divider) m_divider->setVisible(!m_dividerHidden);
         m_busy=false;
-        m_restorePending=true; m_restoreWork.set("clips_mode_restore",m_page); restoreMode();
+        m_restorePending=true; m_restoreWork.set(m_page); restoreMode();
     }
     bool suspendNativeMode(bool suspend) {
         if(m_initializing) { m_suspended=suspend; return true; }
@@ -383,7 +382,6 @@ public:
         restoreMode();
     }
     void apply() {
-        LayoutTraceSpan trace("clips_geometry_apply");
         if(!m_enabled || m_initializing || m_suspended || m_busy || !valid() || !m_page->isVisible() || !m_mode->isChecked()) return;
         m_busy=true;
         const auto allocation=m_nativeAllocation;

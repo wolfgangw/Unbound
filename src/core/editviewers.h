@@ -18,7 +18,7 @@
 #include "panegeometrytransaction.h"
 #include "panemainresizegeometry.h"
 #include "auditionactivationbridge.h"
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include "panepagecontext.h"
 
 // Whole native viewer widgets retain their layout slots while floating.
@@ -280,7 +280,7 @@ private:
     void queueReclaim() {
         if (m_stopping || m_reclaimPending) return;
         m_reclaimPending=true;
-        m_reclaimWork.set("edit_viewer_restoration",m_page);
+        m_reclaimWork.set(m_page);
         QMetaObject::invokeMethod(this,[this] {
             m_reclaimPending=false;
             m_reclaimWork.clear();
@@ -327,7 +327,7 @@ private:
     QList<Unbound::PaneHeaderDrag *> m_drags;
     ViewerGeometryAdapter *m_geometry=nullptr;
     bool m_reclaimPending=false;
-    Unbound::LayoutTraceWork m_reclaimWork;
+    Unbound::LayoutPendingWork m_reclaimWork;
     bool m_showingProgram=false;
     std::function<void(QWidget *,const QPoint &)> m_contextMenu;
 };

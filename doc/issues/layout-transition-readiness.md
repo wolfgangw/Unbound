@@ -2,7 +2,7 @@
 
 The implemented presentation, restoration and cancellation contracts are in
 [AGENTS.md](../../AGENTS.md#layout-transition-presentation). The Windows cover is
-an opt-in internal feature; macOS retains ordinary presentation without capture
+included in release and internal builds; macOS retains ordinary presentation without capture
 or permission requests. Visual continuity takes priority over latency.
 
 ## Validation gaps
@@ -13,8 +13,7 @@ or permission requests. Visual continuity takes priority over latency.
 - Verify departure capture preserves outgoing hosts, including a lone Media Pool,
   and promptly releases on fully docked destinations without a restoration delay.
   Departure/arrival capture must conceal host removal and incoming restoration
-  across displays and DPI changes. Zero Qt paint events before capture do not
-  prove that native/GPU surfaces have not presented.
+  across displays and DPI changes. Qt event ordering cannot prove that native/GPU surfaces have not presented.
 - Rapid recalls, dialogs, application departure, pinned peers and menus near
   display edges. Verify actual menu input and capture exclusion, including the
   translucent menu on supported Windows versions.
@@ -58,5 +57,7 @@ revision-matched public GL composition and queued raster update acknowledgements
 cannot prove that Resolve has no later native rendering work. A hidden marker,
 zero timer, event-loop idle signal or fixed quiet period cannot supply that proof.
 
-Diagnostic build commands, outputs and interpretation are in the
-[viewer-probe README](../../tests/platforms/windows/viewer-probe/README.md).
+A subtle delayed progress indication remains deferred. A longer covered transition
+can look inactive before the final fade. The indicator should stay visually small,
+avoid flashing during fast transitions, and remain responsive while the GUI thread
+is occupied. No visual design or implementation is selected.

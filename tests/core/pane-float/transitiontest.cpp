@@ -25,7 +25,7 @@ public:
 };
 }
 void testLayoutTransition() {
-#ifdef UNBOUND_LAYOUT_COVER_EXPERIMENT
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
     {
         QWidget root;root.resize(400,300);
         QStackedWidget stack(&root);stack.setObjectName("widgetStack_Panel");stack.resize(400,300);
@@ -40,10 +40,10 @@ void testLayoutTransition() {
             return (floating && page==color.objectName()) || (audioFloating && page==audio.objectName());
         };
         int arrivals=0;
-        pages.arrived=[&] {++arrivals;Unbound::LayoutTrace::pending(0,0,0,0);};pages.attach(&root);
+        pages.arrived=[&] {++arrivals;Unbound::LayoutReadiness::pending(0,0,0,0);};pages.attach(&root);
         stack.setCurrentWidget(&audio);settle();stack.setCurrentWidget(&edit);settle();
         require(!state->begins && !arrivals,"Fully docked page switches started capture or restoration work");
-        Unbound::LayoutTraceWork work;work.set("deferred_page_host_show",&color);
+        Unbound::LayoutPendingWork work;work.set(&color);
         floating=true;
         struct Boundary final : QObject {
             std::shared_ptr<PresentationState> state;int showBegins=0,hideBegins=0;
@@ -88,25 +88,31 @@ void testLayoutTransition() {
         stack.hide();stack.setCurrentWidget(&audio);stack.setCurrentWidget(&color);settle();
         require(state->begins==7,"Hidden page stack started a cover");
         color.removeEventFilter(&boundary);
-        delete Unbound::LayoutTrace::active();
+        delete Unbound::LayoutReadiness::active();
         std::puts("PASS: departure/arrival page capture, docked-to-docked bypass, deferred return, rapid switch and cancellation");
     }
     // Exercise the actual recall adapter, not only its presentation lifecycle.
-    // Catalogue coverage prevents a page-specific experiment gate returning.
+    // Catalogue coverage prevents a page-specific presentation gate returning.
     for(const auto &descriptor:Unbound::PaneCatalogue::pages()) if(descriptor.supported) {
         QWidget root,page(&root);root.resize(400,300);page.resize(400,300);
         page.setObjectName(descriptor.objectName);root.show();page.show();LayoutTest::activate(root);
-        Unbound::LayoutTraceWork work;work.set("deferred_page_restore",&page);
-        Unbound::LayoutTrace::begin(&root,descriptor.objectName);
+        Unbound::LayoutPendingWork work;work.set(&page);
         auto state=std::make_shared<PresentationState>();
         Unbound::LayoutTransitionRecall recall(&root,descriptor.objectName,{},nullptr,std::make_unique<Presentation>(state));
         require(state->begins==1,"Recall presentation excluded a supported Resolve page");
-        recall.complete();Unbound::LayoutTrace::pending(0,0,0,0);
+        recall.complete();Unbound::LayoutReadiness::pending(0,0,0,0);
         auto wait=[] {QEventLoop loop;QTimer::singleShot(100,&loop,&QEventLoop::quit);loop.exec();};
         wait();require(!state->reveals,"Recall revealed before its page adapter finished");
         work.clear();wait();wait();
         require(state->reveals==1 && state->cancels==1,"Supported page failed to reveal and release presentation");
-        delete Unbound::LayoutTrace::active();
+        require(!Unbound::LayoutReadiness::active(),"Completed recall retained readiness observation");
+    }
+    {
+        QWidget root;root.show();LayoutTest::activate(root);
+        Unbound::LayoutTransitionRecall recall(&root,"fixture",{},nullptr,
+            std::make_unique<Unbound::NoLayoutTransitionPresentation>());
+        require(!Unbound::LayoutReadiness::active(),"Unavailable presentation retained readiness observation");
+        recall.complete();
     }
 #endif
     QWidget main,page(&main);page.setObjectName("WStackPage_Color");main.show();page.show();

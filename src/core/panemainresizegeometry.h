@@ -38,7 +38,7 @@ protected:
             if(m_transaction && m_transaction->refresh()) return false;
             if(m_queued) return false;
             m_queued=true;
-            m_work.set("pane_main_resize",m_host);
+            m_work.set(m_host);
             // Installing application filters while Qt walks that filter list
             // can redeliver this same event. Capture now, attach after dispatch.
             QTimer::singleShot(0,this,[this] {
@@ -64,6 +64,6 @@ private:
     std::function<void(const QByteArray &)> m_restore;
     quint64 m_generation=0;
     bool m_queued=false;
-    LayoutTraceWork m_work;
+    LayoutPendingWork m_work;
 };
 }

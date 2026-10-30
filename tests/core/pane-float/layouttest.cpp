@@ -2,7 +2,7 @@
 #include "pagelayoutmenu.h"
 #include "panedecoration.h"
 #include "controller.h"
-#include "layouttracediagnostics.h"
+#include "layoutreadiness.h"
 #include <QFile>
 #include <QApplication>
 #include <QMenu>
@@ -19,7 +19,7 @@
 using namespace Unbound;
 using LayoutTest::require;
 using LayoutTest::settle;
-#if defined(UNBOUND_LAYOUT_COVER_EXPERIMENT) && defined(Q_OS_WIN)
+#if defined(UNBOUND_LAYOUT_TRANSITIONS) && defined(Q_OS_WIN)
 void testLayoutCoverPresentation();
 #endif
 // Resolve can swallow sendEvent(editor, keyPress) before application/object
@@ -260,7 +260,7 @@ void testPageFocus();
 void testIndexHeaderDrag();
 void testDockingGuard();
 void testWindowGroup();
-void testLayoutTrace();
+void testLayoutReadiness();
 void testHostLifecycle();
 void testAuxiliaryPageContext();
 void testLayoutTransition();
@@ -269,7 +269,7 @@ int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
     HostApplication app(argc,argv);
-#if defined(UNBOUND_LAYOUT_COVER_EXPERIMENT) && defined(Q_OS_WIN)
+#if defined(UNBOUND_LAYOUT_TRANSITIONS) && defined(Q_OS_WIN)
     if(app.arguments().contains("--layout-cover-only")) { testLayoutCoverPresentation(); return 0; }
 #endif
     if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
@@ -279,7 +279,7 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--window-group-only")) { testWindowGroup(); return 0; }
     if(app.arguments().contains("--auxiliary-page-context")) { testAuxiliaryPageContext(); return 0; }
     if(!app.arguments().contains("--layout-menu-only")) {
-        testLayoutTrace();
+        testLayoutReadiness();
         testLayoutTransition();testColorPlaybackPause();
         testHostLifecycle();
         LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testColorClips(); storage(); layoutIdentity();
@@ -330,27 +330,19 @@ int main(int argc,char **argv) {
     auto viewerButton=viewerContent->findChild<QToolButton *>("resolvePaneUndockButton");
     require(viewerButton,"Controller did not decorate Color Viewer");
     click(viewerButton); require(viewerContent->window()!=&main,"Viewer did not float in controller fixture");
-#ifdef UNBOUND_LAYOUT_TRACE
-    QTemporaryDir dockTrace;
-    const auto previousTraceDir=qgetenv("UNBOUND_LAYOUT_TRACE_DIR");
-    qputenv("UNBOUND_LAYOUT_TRACE_DIR",dockTrace.path().toUtf8());
-    LayoutTrace::begin(&main,"WStackPage_Color");
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
+    LayoutReadiness::begin(&main,"WStackPage_Color");
+    bool dockingReady=false;
+    auto stopReadiness=LayoutReadiness::observe([&] {dockingReady=true;},[] {});
 #endif
     click(viewerButton);
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
+    QEventLoop dockingLoop;QTimer::singleShot(250,&dockingLoop,&QEventLoop::quit);dockingLoop.exec();
+    require(dockingReady,"Toggle-less pane docking left readiness pending");
+    stopReadiness();
+#endif
     require(viewerContent->parentWidget()==viewerSlot,"Viewer did not return to its native slot");
     stack->setCurrentWidget(edit); settle(); stack->setCurrentWidget(color); settle();
-#ifdef UNBOUND_LAYOUT_TRACE
-    LayoutTrace::begin(&main,"replacement"); delete LayoutTrace::active();
-    const auto dockTraceFiles=QDir(dockTrace.path()).entryList({"*.json"},QDir::Files);
-    require(!dockTraceFiles.isEmpty(),"Missing controller docking trace");
-    for(const auto &name:dockTraceFiles) {
-        QFile traceFile(dockTrace.filePath(name)); require(traceFile.open(QIODevice::ReadOnly),"Cannot read docking trace");
-        const auto data=QJsonDocument::fromJson(traceFile.readAll()).object();
-        require(data.value("pending_at_end").toInt()==0,"Toggle-less pane docking left controller readiness pending");
-    }
-    if(previousTraceDir.isNull()) qunsetenv("UNBOUND_LAYOUT_TRACE_DIR");
-    else qputenv("UNBOUND_LAYOUT_TRACE_DIR",previousTraceDir);
-#endif
     stack->setCurrentWidget(edit); settle();
     auto popup=[&]() {
         static int checkNumber=0; ++checkNumber;

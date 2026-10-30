@@ -143,8 +143,8 @@ void testColorControls() {
         new PaneGeometryTransaction(&host,QSize(600,320),[] {return true;},[&] {host.resize(600,320);});
         LayoutTest::settle();
         require(!stale && host.height()==400,"Restoration overrode a genuine native minimum");
-#ifdef UNBOUND_LAYOUT_TRACE
-        for(auto work:LayoutTraceWork::registry())
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
+        for(auto work:LayoutPendingWork::registry())
             require(work->scope!=&host || !work->pending,"Idle constrained restore blocked transition readiness");
 #endif
         host.setMinimumHeight(200);
