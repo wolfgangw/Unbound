@@ -214,10 +214,20 @@ private:
         for(const auto &name:m_initializingNative)
             if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)
                 return QStringLiteral("Panels are still initializing. Please try again.");
+        // Dock all is an ordinary, fully docked layout transition. Keep one
+        // playback lease across every native return and restore Color controls
+        // before leaving the Lightbox context used by floating Clips.
+        Unbound::LayoutRestorePolicy::PlaybackRecall playbackRecall(m_colorPlayback);
+        const auto outgoingClips=m_sessions.value("m_pLightBox");
+        m_colorPlayback=Unbound::LayoutRestorePolicy::pauseForRecall(m_window,page,{},
+            outgoingClips && outgoingClips->active());
+        if(page=="WStackPage_Color" && outgoingClips && outgoingClips->active())
+            outgoingClips->suspendClipsMode(true);
         for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
             const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
         }
+        normalColorLayout(page,{});
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->prepareLayout({});
         // Clear retained startup intent too: a not-yet-created native pane or
         // Source viewer must not float later after the user chose Dock all.
@@ -237,7 +247,7 @@ private:
             if(m_viewers) m_viewers->restoreLayout();
         }
         const auto error=m_settings.clearActiveLayout(page); if(!error.isEmpty()) return error;
-        scheduleDiscovery(); return {};
+        scheduleDiscovery(); playbackRecall.complete(); return {};
     }
     void normalColorLayout(const QString &page,const QJsonObject &panes)
     {

@@ -411,6 +411,44 @@ void testColorClipsStartup() {
     auto menu=main.findChild<Unbound::PageLayoutMenu *>("unboundLayoutMenu");
     require(menu,"Missing Color layout menu");
     bool applied=false;
+    {
+        // Dock all must perform the same native Color mode transaction as an
+        // ordinary layout recall, including when startup inherited Lightbox.
+        QWidget transport(&player); transport.setObjectName("m_pFramePlayer");
+        QPushButton play(&transport),reverse(&transport),stop(&transport);
+        play.setObjectName("btnTransportPlay"); reverse.setObjectName("btnTransportReversePlay");
+        stop.setObjectName("btnTransportStop");
+        for(auto b:{&play,&reverse,&stop}) b->setCheckable(true);
+        int stops=0,resumes=0;
+        bool unpausedModeChange=false;
+        const auto modeObserver=QObject::connect(&mode,&QPushButton::clicked,&transport,[&] {
+            unpausedModeChange=unpausedModeChange || play.isChecked() || reverse.isChecked();
+        });
+        QObject::connect(&stop,&QPushButton::clicked,[&] {++stops;stop.setChecked(true);play.setChecked(false);reverse.setChecked(false);});
+        QObject::connect(&play,&QPushButton::clicked,[&] {++resumes;play.setChecked(true);reverse.setChecked(false);stop.setChecked(false);});
+        const auto snapshot=Unbound::PaneSettings().layout("WStackPage_Color",clipsLayout);
+        LayoutTest::activate(main); play.setChecked(true);
+        require(menu->dockAll().isEmpty(),"Color Dock all failed");
+        for(int i=0;i<8;++i) settle();
+        require(!mode.isChecked() && player.isVisible(),"Color Dock all retained native Lightbox instead of ordinary Color mode");
+        for(const auto &name:{"m_pWidgetGallery","m_pWidgetLutBrowser","timelineFrame","m_pLightBox"})
+            require(!floating(name),"Color Dock all left a floating host");
+        require(!unpausedModeChange && stops==1 && resumes==1 && play.isChecked() && !stop.isChecked(),
+            "Color Dock all did not preserve playback through one shared stop/resume");
+        require(Unbound::PaneSettings().activeLayout("WStackPage_Color").isEmpty()
+            && Unbound::PaneSettings().layout("WStackPage_Color",clipsLayout)==snapshot,
+            "Dock all retained active layout identity or modified its saved snapshot");
+        // Subsequent user mode changes must not encounter a deferred mode
+        // restoration from the disposed floating Clips session.
+        QObject::disconnect(modeObserver);
+        stop.click(); mode.click(); settle(); require(mode.isChecked(),"Native Lightbox could not open after Dock all");
+        mode.click(); for(int i=0;i<8;++i) settle();
+        require(!mode.isChecked() && player.isVisible(),"Native Lightbox could not close after Dock all");
+        require(menu->recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall floating layout after Dock all and Lightbox toggle");
+        for(int i=0;i<8;++i) settle();
+        for(const auto &name:{"m_pWidgetGallery","m_pWidgetLutBrowser","timelineFrame","m_pLightBox"})
+            require(floating(name) && floating(name)->isVisible(),"Recall after Dock all/Lightbox toggle lost a floating pane");
+    }
     require(menu->recall(nodesLayout,applied).isEmpty() && applied,"Cannot recall Nodes/LUTs layout");
     for(int i=0;i<8;++i) settle();
     require(floating("m_pFrameNodeGraph") && floating("m_pWidgetLutBrowser"),"Leaving floating Clips restored LUTs but lost Nodes");
@@ -481,5 +519,5 @@ void testColorClipsStartup() {
         require(inventedResumes==0,"Unknown/idle transport caused an unowned playback restart");
     }
     delete qApp->findChild<QObject *>("UnboundPaneController");
-    std::puts("PASS: Color Lightbox startup, late Timeline, Nodes/LUTs recall and optional playback assistance across idle/unknown/rejected transport");
+    std::puts("PASS: Color Lightbox startup, late Timeline, Dock all/playback/native mode round trip, Nodes/LUTs recall and optional playback assistance across idle/unknown/rejected transport");
 }
