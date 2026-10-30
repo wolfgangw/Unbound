@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <cstdio>
+#include <memory>
 
 namespace {
 class ScopeResizeDialog : public QDialog {
@@ -199,13 +200,17 @@ void testColorControls() {
     auto stack=new QStackedWidget; stack->setObjectName("UiSecWidgetContainer"); outer->addWidget(stack);
     auto other=new QWidget; stack->addWidget(other);
     page.show(); LayoutTest::settle();
-    {
+    for(bool dialogType:{true,false}) {
         auto slot=new QWidget;slot->setObjectName("scopesWidget");stack->addWidget(slot);
         auto native=new QVBoxLayout(slot);auto item=new QWidget;item->setObjectName("UiWaveformViewerItem");native->addWidget(item);
         auto itemLayout=new QVBoxLayout(item);auto header=new QWidget;header->setObjectName("headerFrame");itemLayout->addWidget(header);
         auto row=new QHBoxLayout(header);auto expand=new QPushButton("Expand");expand->setObjectName("btnUndock");row->addWidget(expand);
         auto options=new QPushButton("Options");options->setObjectName("btnWaveformViewerItemOptions");row->addWidget(options);
-        QDialog dialog(&page);dialog.setObjectName("UiWaveformWindow");dialog.setMinimumSize(900,500);
+        // Resolve uses a QDialog on Windows, but a QWidget window on macOS.
+        std::unique_ptr<QWidget> nativeWindow(dialogType ? static_cast<QWidget *>(new QDialog(&page))
+            : new QWidget(&page,Qt::Window));
+        auto &dialog=*nativeWindow;
+        dialog.setObjectName("UiWaveformWindow");dialog.setMinimumSize(900,500);
         auto layout=new QVBoxLayout(&dialog);auto title=new QWidget;title->setObjectName("titleFrame");layout->addWidget(title);
         auto titleRow=new QHBoxLayout(title);auto hide=new QPushButton("Close");hide->setObjectName("btnHide");titleRow->addWidget(hide);
         auto nativeOptions=new QPushButton("Options");nativeOptions->setObjectName("btnWaveformViewerOptions");titleRow->addWidget(nativeOptions);
@@ -454,14 +459,14 @@ void testColorControls() {
         value->click(); require(clicks==1,"Native tool connection lost");
         page.hide(); LayoutTest::settle(); require(!session.floatingWindow()->isVisible(),"Tool stayed visible on another page");
         page.show(); LayoutTest::settle(); require(session.floatingWindow()->isVisible(),"Tool failed page return");
+        if(retained) require(native->itemAt(0)->widget()==content
+            && slot->findChild<QWidget *>(control.headerOwner,Qt::FindDirectChildrenOnly)==content,
+            "Page return cannot find the retained native tool in its stack slot");
         {
             auto host=session.floatingWindow();
             // Use transferred content, including tools whose native outer
             // container intentionally remains docked (Key/Sizing/Tracker/whole layouts).
             QWidget *controls=dialog ? (warperModes ? warperModes->currentWidget()->layout()->itemAt(0)->widget() : content) : value;
-        if(retained) require(native->itemAt(0)->widget()==content
-            && slot->findChild<QWidget *>(control.headerOwner,Qt::FindDirectChildrenOnly)==content,
-            "Page return cannot find the retained native tool in its stack slot");
             const int nativeMinimum=controls->minimumHeight();
             // Page return is not layout recall: preserve the most recent working
             // size, including manual changes never saved to a layout snapshot.

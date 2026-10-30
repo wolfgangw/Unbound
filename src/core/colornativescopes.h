@@ -23,7 +23,9 @@ public:
  }
  QString start(QWidget *slot,QWidget *host,QWidget *page) {
   auto main=slot->window();
-  auto dialog=main->findChild<QDialog *>("UiWaveformWindow");
+  // The native Scopes shell is a QWidget on macOS and a QDialog on Windows.
+  // Its object identity and native controls define the contract, not that subtype.
+  auto dialog=main->findChild<QWidget *>("UiWaveformWindow");
   if(!dialog || !dialog->isVisible()) {
    QAbstractButton *expand=nullptr;
    for(auto button:slot->findChildren<QAbstractButton *>("btnUndock")) {
@@ -33,7 +35,7 @@ public:
    }
    if(!expand)return QStringLiteral("The native Scopes expansion control is unavailable.");
    expand->click();
-   dialog=main->findChild<QDialog *>("UiWaveformWindow");
+   dialog=main->findChild<QWidget *>("UiWaveformWindow");
   }
   if(!dialog || !dialog->isVisible() || !dialog->findChild<QAbstractButton *>("btnHide"))
    return QStringLiteral("DaVinci Resolve did not provide its native floating Scopes window.");
@@ -66,7 +68,8 @@ public:
   // The native action retires the independent renderer and returns the docked
   // selector. Its public button works even after reparenting has hidden it.
   if(hide)hide->click();
-  else m_dialog->reject();
+  else if(auto dialog=qobject_cast<QDialog *>(m_dialog.data()))dialog->reject();
+  else m_dialog->close();
   if(m_dialog && m_dialog->parentWidget()==m_parent && !m_dialog->isVisible())return true;
   if(m_dialog) {
    m_dialog->setAttribute(Qt::WA_ShowWithoutActivating);
@@ -100,7 +103,7 @@ protected:
  }
 private:
  QPointer<QWidget> m_slot,m_host,m_page,m_parent;
- QPointer<QDialog> m_dialog;
+ QPointer<QWidget> m_dialog;
  Qt::WindowFlags m_flags;QRect m_geometry;QSize m_minimum;
  ColorExpandGuard *m_expandGuard=nullptr;
  ColorScopesLayoutRefresh *m_layoutRefresh=nullptr;

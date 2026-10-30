@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
+#include "widgetquirks.h"
 
 namespace Unbound {
 // Native Scopes refreshes its view-count buttons in its custom border gesture,
@@ -17,6 +18,7 @@ public:
         rememberCursor(m_border,m_borderCursor);
         qApp->installEventFilter(this);
         request();
+        m_quirks=attachScopesWidgetQuirks(dialog,host);
     }
     ~ColorScopesLayoutRefresh() override { if(qApp)qApp->removeEventFilter(this); }
 protected:
@@ -98,6 +100,7 @@ private:
         restoreCursor(m_border,m_borderCursor);
         m_refreshing=false;
     }
+    std::unique_ptr<QObject> m_quirks;
     QPointer<QWidget> m_dialog,m_host,m_border;
     QSize m_lastSize;
     CursorState m_dialogCursor,m_borderCursor;

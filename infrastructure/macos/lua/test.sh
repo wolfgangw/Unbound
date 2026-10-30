@@ -23,6 +23,7 @@ helper="$build/stage/runtime/UnboundHelper.dylib"
 run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader"
 run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader" --existing-controller
 run_native "$build/src/platforms/macos/audition-activation-test"
+run_native "$build/src/platforms/macos/scopes-header-refresh-test"
 binary="$build/src/platforms/macos/pane-float-smoke"
 run_native "$build/src/platforms/macos/UnboundLayoutTests"
 run_native "$build/src/platforms/macos/UnboundLayoutTests" --index-header-drag
