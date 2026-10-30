@@ -11,8 +11,6 @@ This file tracks validation gaps, not build/session history.
   General macOS application switching, menus/dialogs, main minimize/restore and
   ordering against both Dual Screen windows are validated;
   see AGENTS.md.
-- Validate the shared fixes on Windows: retained Tracker ownership, Inspector/Metadata
-  filename sizing and cold-start restoration, and Color Dock all/playback handling.
 - Remaining macOS pre-release checks:
   - Final installer update/uninstall/reinstall, settings preservation and startup.
   - Edit Program/Source viewer mode-exit and page-return compatibility; see
@@ -41,12 +39,3 @@ This file tracks validation gaps, not build/session history.
 - Metadata can lack its Unbound button while empty, until an asset is selected.
   This also occurs outside Dual Screen; make discovery independent of populated
   metadata content without introducing a fallback strip unnecessarily.
-
-## Installer presentation
-
-- Give the enabled Windows Install/Update button a filled accent highlight, matching
-  the primary-action emphasis already visible on macOS. Availability is already
-  shared; define the emphasis rule in shared installer presentation and implement
-  its rendering in the Windows backend. `BS_DEFPUSHBUTTON` alone does not provide
-  the requested filled styling. Keep disabled Install/Update neutral and Uninstall
-  secondary; preserve native keyboard focus and high-contrast accessibility.

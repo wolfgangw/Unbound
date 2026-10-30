@@ -109,6 +109,11 @@ or launch it, and always preserve settings/layouts. No settings-deletion option.
 
 Installer wording, layout, display versions and presentation state belong in
 `src/installer/dialog.json` and `presentation.h`; both builds compile that definition.
+Install/Update is the shared primary action. macOS uses native default-button
+emphasis; Windows paints the enabled primary button with system highlight colors,
+including hover and pressed feedback, without a keyboard-focus outline. Its visible
+bounds, small rounded corners and thin grey border match the secondary button. Disabled and high-contrast
+buttons retain native rendering; Uninstall remains secondary.
 Native installers own transactions and process monitoring. See
 `infrastructure/windows/installer/README.md` and the macOS Lua/installer READMEs
 for build, installation and recovery commands. Isolate fixture logs with
@@ -420,7 +425,7 @@ Manual docking restores the pre-float Lightbox/Color Controls choices, deferred
 when inactive. Color Dock all instead requests normal Color mode, using the
 same playback lease and pre-docking Clips suspension as layout recall. Hold that
 lease through queued discovery so native returns share one stop/resume; saved
-layout snapshots remain unchanged. macOS layout recall → Dock all → recall
+layout snapshots remain unchanged. Windows and macOS layout recall → Dock all → recall
 is user-validated with active playback, including the brief coordinated pause.
 Native Lightbox exit docks Clips. Explicit recall of a Color layout
 without floating Clips instead returns to normal Color mode, even for a clean
@@ -507,6 +512,7 @@ native tool lookup requires that container in its original slot and dereferences
 these lookups without a null check. Keep its identity, stack index and native
 connections intact throughout floating/docking; never replace it with a placeholder.
 The placeholder belongs inside the retained tool container.
+Floating Tracker page return, docking and layout recall are user-validated on Windows.
 
 Curves and Color Warper use `ColorNativePalette`: activate the native Expand button
 and retain its registered `UiFloatingPaletteWidgetDialog` as a child inside the
@@ -635,7 +641,7 @@ vertical policies, stretch and other content minimums remain intact. Scoped chil
 and reparent events coalesce discovery of late variants. Docking/teardown restores
 original policies without overwriting a newer native policy. Media Pool keeps its
 native sizing behavior. Edit Inspector/Metadata filename elision and serialized
-cold-start restoration are user-validated on macOS.
+cold-start restoration are user-validated on Windows and macOS.
 
 Edit/Fairlight Index tab-row backgrounds also drag; tab/action controls retain
 native input.
