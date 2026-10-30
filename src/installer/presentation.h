@@ -5,6 +5,8 @@
 #include <string>
 
 namespace InstallerUI {
+enum class Action { Install, Uninstall };
+inline constexpr Action primaryAction=Action::Install;
 inline std::string trim(std::string value) {
     const auto first=value.find_first_not_of(" \t\r\n");
     return first==std::string::npos ? std::string{} : value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);

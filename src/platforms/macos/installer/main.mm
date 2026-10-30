@@ -99,10 +99,11 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
     [view addSubview:self.status];
     self.installButton = [NSButton buttonWithTitle:@"" target:self action:@selector(install:)];
     self.installButton.frame = frame(InstallerUI::rects::install);
-    self.installButton.keyEquivalent = @"\r";
+    self.installButton.keyEquivalent = InstallerUI::primaryAction==InstallerUI::Action::Install ? @"\r" : @"";
     [view addSubview:self.installButton];
     self.uninstallButton = [NSButton buttonWithTitle:@"" target:self action:@selector(uninstall:)];
     self.uninstallButton.frame = frame(InstallerUI::rects::uninstall);
+    self.uninstallButton.keyEquivalent = InstallerUI::primaryAction==InstallerUI::Action::Uninstall ? @"\r" : @"";
     [view addSubview:self.uninstallButton];
     self.progress = [[NSProgressIndicator alloc] initWithFrame:frame(InstallerUI::rects::progress)];
     self.progress.style = NSProgressIndicatorStyleSpinning;

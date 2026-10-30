@@ -46,7 +46,7 @@ $dumpbin=Join-Path $toolset.FullName 'bin/Hostx64/x64/dumpbin.exe'
 foreach($binary in @((Join-Path $payload 'UnboundLuaLoader.dll'),(Join-Path $build 'Release/UnboundInstaller.exe'))) {
     $imports=& $dumpbin /dependents $binary
     if($LASTEXITCODE) { throw 'Dependency audit failed' }
-    $allowed=if($binary.EndsWith('.dll')) { @('KERNEL32.dll') } else { @('KERNEL32.dll','USER32.dll','GDI32.dll','COMCTL32.dll') }
+    $allowed=if($binary.EndsWith('.dll')) { @('KERNEL32.dll') } else { @('KERNEL32.dll','USER32.dll','GDI32.dll','COMCTL32.dll','UxTheme.dll') }
     $dependencies=@($imports | ForEach-Object { if($_ -match '^\s+([\w.-]+\.dll)\s*$') { $Matches[1] } })
     if(!$dependencies.Count) { throw 'Missing dependency audit results' }
     foreach($dependency in $dependencies) { if($dependency -notin $allowed) { throw "Unexpected dependency: $dependency" } }

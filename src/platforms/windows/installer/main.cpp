@@ -3,6 +3,9 @@
 #include "processmonitor.h"
 #include "../../../installer/presentation.h"
 #include <commctrl.h>
+#include <uxtheme.h>
+#include <vsstyle.h>
+#pragma comment(lib,"uxtheme.lib")
 namespace {
 Installation::Paths paths;
 Installation::Payload payload;
@@ -61,9 +64,94 @@ HWND control(HWND parent,const wchar_t *kind,const wchar_t *text,DWORD style,int
 HWND control(HWND parent,const wchar_t *kind,const char *text,DWORD style,InstallerUI::Rect r,int id=0) {
     return control(parent,kind,wide(text).c_str(),style,r.x,r.y,r.width,r.height,id);
 }
+bool primaryHot=false;
+bool drawPrimaryButton(HWND button,HDC dc,RECT rect) {
+    const auto primary=InstallerUI::primaryAction==InstallerUI::Action::Install ? installButton : uninstallButton;
+    if(button!=primary) return false;
+    const bool enabled=IsWindowEnabled(primary);
+    HIGHCONTRASTW contrast{sizeof(contrast)};
+    const bool native=!enabled || (SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON));
+    const auto state=SendMessageW(primary,BM_GETSTATE,0,0);
+    auto color=GetSysColor(COLOR_HIGHLIGHT);
+    const bool pressed=(state&BST_PUSHED)!=0;
+    const bool hot=primaryHot;
+    auto shade=[&](BYTE channel) { return pressed ? channel*85/100 : hot ? channel+(255-channel)/10 : channel; };
+    color=RGB(shade(GetRValue(color)),shade(GetGValue(color)),shade(GetBValue(color)));
+    const int saved=SaveDC(dc);
+    // The native BUTTON paints its themed face inside a one-pixel client inset.
+    RECT face=rect; InflateRect(&face,-1,-1);
+    FillRect(dc,&rect,GetSysColorBrush(COLOR_BTNFACE));
+    if(native) {
+        if(auto theme=OpenThemeData(button,L"BUTTON")) {
+            DrawThemeBackground(theme,dc,BP_PUSHBUTTON,!enabled ? PBS_DISABLED : pressed ? PBS_PRESSED : hot ? PBS_HOT : PBS_DEFAULTED,&face,nullptr);
+            CloseThemeData(theme);
+        } else DrawFrameControl(dc,&rect,DFC_BUTTON,DFCS_BUTTONPUSH|(!enabled ? DFCS_INACTIVE : pressed ? DFCS_PUSHED : 0));
+    } else {
+        // Recolor the native face, including its two almost-white corner pixels.
+        // Their channels differ from the body by one; border pixels stay intact.
+        const int width=rect.right-rect.left,height=rect.bottom-rect.top;
+        BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth=width; info.bmiHeader.biHeight=-height;
+        info.bmiHeader.biPlanes=1; info.bmiHeader.biBitCount=32; info.bmiHeader.biCompression=BI_RGB;
+        DWORD *pixels=nullptr;
+        auto bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,reinterpret_cast<void **>(&pixels),nullptr,0);
+        auto memory=CreateCompatibleDC(dc);
+        if(bitmap && memory) {
+            auto previous=SelectObject(memory,bitmap);
+            RECT bounds{0,0,width,height},themed{1,1,width-1,height-1};
+            FillRect(memory,&bounds,GetSysColorBrush(COLOR_BTNFACE));
+            if(auto theme=OpenThemeData(button,L"BUTTON")) {
+                DrawThemeBackground(theme,memory,BP_PUSHBUTTON,PBS_DISABLED,&themed,nullptr);
+                CloseThemeData(theme);
+            } else DrawFrameControl(memory,&bounds,DFC_BUTTON,DFCS_BUTTONPUSH);
+            GdiFlush();
+            const auto fill=pixels[(height/2)*width+width/2]&0xffffff;
+            const DWORD accent=(GetRValue(color)<<16)|(GetGValue(color)<<8)|GetBValue(color);
+            for(int i=0;i<width*height;++i) {
+                bool interior=true;
+                for(int shift:{0,8,16}) {
+                    const int difference=int((pixels[i]>>shift)&255)-int((fill>>shift)&255);
+                    if(difference < -1 || difference > 1) interior=false;
+                }
+                if(interior) pixels[i]=accent;
+            }
+            BitBlt(dc,rect.left,rect.top,width,height,memory,0,0,SRCCOPY);
+            SelectObject(memory,previous);
+        }
+        if(memory) DeleteDC(memory);
+        if(bitmap) DeleteObject(bitmap);
+    }
+    SetBkMode(dc,TRANSPARENT); SetTextColor(dc,GetSysColor(!enabled ? COLOR_GRAYTEXT : native ? COLOR_BTNTEXT : COLOR_HIGHLIGHTTEXT));
+    SelectObject(dc,font);
+    wchar_t caption[512]; GetWindowTextW(primary,caption,512);
+    RECT measured=rect; InflateRect(&measured,-8,-4);
+    DrawTextW(dc,caption,-1,&measured,DT_CENTER|DT_WORDBREAK|DT_CALCRECT);
+    RECT textRect=rect; InflateRect(&textRect,-8,0);
+    textRect.top+=(textRect.bottom-textRect.top-(measured.bottom-measured.top))/2;
+    if(pressed) OffsetRect(&textRect,1,1);
+    DrawTextW(dc,caption,-1,&textRect,DT_CENTER|DT_WORDBREAK);
+    RestoreDC(dc,saved);
+    return true;
+}
+LRESULT CALLBACK primaryButtonProc(HWND button,UINT message,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR) {
+    if(message==BM_SETSTYLE) w=(w&~BS_TYPEMASK)|BS_OWNERDRAW;
+    if(message==WM_GETDLGCODE) return DefSubclassProc(button,message,w,l)|DLGC_DEFPUSHBUTTON;
+    if(message==WM_MOUSEMOVE && !primaryHot) {
+        primaryHot=true; TRACKMOUSEEVENT track{sizeof(track),TME_LEAVE,button,0}; TrackMouseEvent(&track);
+        InvalidateRect(button,nullptr,FALSE);
+    } else if(message==WM_MOUSELEAVE) {
+        primaryHot=false; InvalidateRect(button,nullptr,FALSE);
+    }
+    return DefSubclassProc(button,message,w,l);
+}
 LRESULT CALLBACK windowProc(HWND window,UINT message,WPARAM w,LPARAM l) {
     try {
         switch(message) {
+        case WM_DRAWITEM: {
+            auto draw=reinterpret_cast<DRAWITEMSTRUCT *>(l);
+            if(draw->CtlType==ODT_BUTTON && drawPrimaryButton(draw->hwndItem,draw->hDC,draw->rcItem)) return TRUE;
+            break;
+        }
         case WM_CREATE: {
             font=CreateFontW(-InstallerUI::fonts::body,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
             titleFont=CreateFontW(-InstallerUI::fonts::title,0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
@@ -72,8 +160,9 @@ LRESULT CALLBACK windowProc(HWND window,UINT message,WPARAM w,LPARAM l) {
             SendMessageW(icon,STM_SETICON,reinterpret_cast<WPARAM>(LoadImageW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1),IMAGE_ICON,InstallerUI::rects::icon.width,InstallerUI::rects::icon.height,LR_SHARED)),0);
             auto title=control(window,L"STATIC",InstallerUI::text::app,0,InstallerUI::rects::title); SendMessageW(title,WM_SETFONT,reinterpret_cast<WPARAM>(titleFont),TRUE);
             control(window,L"STATIC",InstallerUI::text::subtitle,0,InstallerUI::rects::subtitle);
-            uninstallButton=control(window,L"BUTTON","",BS_PUSHBUTTON|BS_MULTILINE|WS_TABSTOP,InstallerUI::rects::uninstall,102);
-            installButton=control(window,L"BUTTON","",BS_DEFPUSHBUTTON|BS_MULTILINE|WS_TABSTOP,InstallerUI::rects::install,101);
+            uninstallButton=control(window,L"BUTTON","",(InstallerUI::primaryAction==InstallerUI::Action::Uninstall ? BS_OWNERDRAW : BS_PUSHBUTTON)|BS_MULTILINE|WS_TABSTOP,InstallerUI::rects::uninstall,102);
+            installButton=control(window,L"BUTTON","",(InstallerUI::primaryAction==InstallerUI::Action::Install ? BS_OWNERDRAW : BS_PUSHBUTTON)|BS_MULTILINE|WS_TABSTOP,InstallerUI::rects::install,101);
+            SetWindowSubclass(InstallerUI::primaryAction==InstallerUI::Action::Install ? installButton : uninstallButton,primaryButtonProc,1,0);
             control(window,L"STATIC","",SS_ETCHEDHORZ,InstallerUI::rects::separator);
             statusLabel=control(window,L"STATIC","",0,InstallerUI::rects::status);
             SendMessageW(statusLabel,WM_SETFONT,reinterpret_cast<WPARAM>(statusFont),TRUE);
