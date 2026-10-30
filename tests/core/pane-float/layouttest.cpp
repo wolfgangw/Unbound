@@ -278,13 +278,16 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
     if(app.arguments().contains("--window-group-only")) { testWindowGroup(); return 0; }
     if(app.arguments().contains("--auxiliary-page-context")) { testAuxiliaryPageContext(); return 0; }
-    testLayoutTrace();
-    testLayoutTransition();testColorPlaybackPause();
-    testHostLifecycle();
-    LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testColorClips(); storage(); layoutIdentity();
-    testPageFocus();
-    testDockingGuard();
-    testWindowGroup();
+    if(!app.arguments().contains("--layout-menu-only")) {
+        testLayoutTrace();
+        testLayoutTransition();testColorPlaybackPause();
+        testHostLifecycle();
+        LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testColorClips(); storage(); layoutIdentity();
+        testPageFocus();
+        testDockingGuard();
+        testWindowGroup();
+        if(app.arguments().contains("--components-only")) return 0;
+    }
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("layouts.json").toUtf8());
     auto mainOwner=LayoutTest::makeMainWindow();

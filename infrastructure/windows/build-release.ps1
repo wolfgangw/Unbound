@@ -108,7 +108,9 @@ try {
         if ($LayoutCoverExperiment) {
             Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-cover-only')
         }
-        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
+        # Keep each native process inside the watchdog as fixture coverage grows.
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--components-only')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-menu-only')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--index-header-drag')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
