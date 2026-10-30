@@ -9,7 +9,7 @@ public:
     PaneFloatingWindow();
     ~PaneFloatingWindow() override;
     bool restoreGeometry(const QByteArray &bytes);
-    bool beginButtonMove();
+    bool beginButtonMove(bool activate = true);
     void updateButtonMove();
     void finishButtonMove(bool cancel = false);
     bool interactiveDragActive() const;

@@ -65,7 +65,100 @@ static void testIndexHeaderDrag(bool fairlight, bool effects=false) {
         : "PASS: Edit Index tab/header dragging, native clicks and dock/refloat lifecycle");
 }
 
+static void testUndockDrag() {
+    using namespace Unbound;
+    using LayoutTest::require;
+    if(QGuiApplication::platformName()!=QLatin1String("offscreen")) {
+        QWidget docked; docked.resize(400,200); docked.show();
+        WindowGroupActivation group; group.setWindow(&docked);
+        PaneFloatingWindow host; host.resize(420,260);
+        host.setAttribute(Qt::WA_ShowWithoutActivating); host.show();
+        LayoutTest::settle(); LayoutTest::activate(docked);
+        auto active=QApplication::activeWindow();
+        host.setProperty("unboundUndockDragging",true);
+        host.raise();
+        require(host.beginButtonMove(false),"Nonactivating tearoff movement did not begin");
+        LayoutTest::settle();
+        require(QApplication::activeWindow()==active,"Tearoff movement stole activation before release");
+        require(LayoutTest::stackedAbove(host,docked),"Queued group refresh covered the tearoff with main");
+        PaneFloatingWindow pinned; pinned.setProperty("unboundKeepAtop",true); pinned.show();
+        LayoutTest::settle();
+        require(LayoutTest::stackedAbove(pinned,host) && LayoutTest::stackedAbove(host,docked),
+            "Tearoff lost priority below pins and above focused main");
+        host.finishButtonMove();
+        host.setProperty("unboundUndockDragging",QVariant());
+        LayoutTest::settle();
+        require(LayoutTest::stackedAbove(docked,host),"Finished tearoff retained temporary stacking priority");
+        require(!host.interactiveDragActive(),"Nonactivating tearoff retained movement");
+    }
+    // Model both a transferred header button and Scopes' replacement header.
+    for(int mode=0;mode<3;++mode) {
+        QWidget docked; docked.resize(400,200); docked.show();
+        QObject owner;
+        PaneFloatingWindow host; host.resize(420,260);
+        host.setObjectName("unboundFloating_fixture");
+        auto layout=new QHBoxLayout(&host);
+        layout->addWidget(new QWidget,1);
+        QPointer<UndockButton> source=new UndockButton(&docked);
+        source->setCheckable(true); source->setGeometry(20,20,20,20); source->show();
+        source->setProperty("unboundPaneName","fixture");
+        QPointer<UndockButton> target;
+        QSize initialSize;
+        int undocks=0,clicks=0;
+        QObject::connect(source,&QToolButton::clicked,&owner,[&] { ++clicks; });
+        source->undockDrag=[&](QWidget *button,const QPoint &offset) {
+            PaneUndockDrag::start(&owner,button,offset,[&] {
+                ++undocks;
+                auto transfer=[&] {
+                    if(mode==0) target=source;
+                    else { delete source.data(); target=new UndockButton; target->setCheckable(true); }
+                    target->setFixedSize(20,20); layout->addWidget(target); target->setFloatingState(true);
+                    host.move(900,500); PaneUndockDrag::prepareHost(&host);
+                    require(PaneUndockDrag::ownsHost(&host),"Tearoff host was not recognized for delayed activation");
+                    require(host.windowOpacity()==0,"Undock host exposed remembered placement before anchoring");
+                    host.show(); target->show(); layout->activate();
+                    initialSize=host.size();
+                };
+                if(mode==2) QTimer::singleShot(0,&owner,transfer);
+                else transfer();
+            },[&]() -> QWidget * { return target; });
+        };
+        LayoutTest::settle();
+        LayoutTest::activate(docked);
+        auto send=[](QWidget *widget,QEvent::Type type,QPoint point,Qt::MouseButton button,Qt::MouseButtons held) {
+            QMouseEvent event(type,point,widget->mapToGlobal(point),button,held,Qt::NoModifier);
+            QApplication::sendEvent(widget,&event);
+        };
+        // A tiny wiggle remains exactly one normal click.
+        send(source,QEvent::MouseButtonPress,{8,8},Qt::LeftButton,Qt::LeftButton);
+        send(source,QEvent::MouseMove,{9,8},Qt::NoButton,Qt::LeftButton);
+        send(source,QEvent::MouseButtonRelease,{9,8},Qt::LeftButton,Qt::NoButton);
+        require(clicks==1 && undocks==0,"Tiny docked-button wiggle started an undock drag");
+        source->setChecked(false);
+        send(source,QEvent::MouseButtonPress,{8,8},Qt::LeftButton,Qt::LeftButton);
+        send(source,QEvent::MouseMove,{8+QApplication::startDragDistance()+1,8},Qt::NoButton,Qt::LeftButton);
+        // Release before delayed native content exists must not become a click.
+        const auto dropPosition=mode==2 ? docked.mapToGlobal(QPoint(8,8)) : QCursor::pos();
+        if(mode==2 && QGuiApplication::platformName()!=QLatin1String("offscreen")) {
+            QEvent transient(QEvent::ApplicationDeactivate);
+            QApplication::sendEvent(qApp,&transient);
+        }
+        if(mode==2) send(&docked,QEvent::MouseButtonRelease,{8,8},Qt::LeftButton,Qt::NoButton);
+        LayoutTest::settle();
+        require(undocks==1 && clicks==1 && target && target->isVisible(),"Undock transfer lost/repeated action or target");
+        require((target->mapToGlobal({8,8})-dropPosition).manhattanLength()<=2,"Floating button was not anchored under pointer");
+        require(host.size()==initialSize,"Undock drag changed initial floating size");
+        require(host.windowOpacity()==1,"Anchored undock host remained invisible");
+        require(!PaneUndockDrag::ownsHost(&host),"Completed tearoff retained activation ownership");
+        require(!host.property("unboundUndockDragging").isValid(),"Completed tearoff retained stacking priority");
+        send(target,QEvent::MouseButtonRelease,{8,8},Qt::LeftButton,Qt::NoButton);
+        require(clicks==1 && !host.interactiveDragActive(),"Drag release clicked or retained movement");
+    }
+    std::puts("PASS: docked-button click threshold, transfer/replacement, delayed release, anchored size and release suppression");
+}
+
 void testIndexHeaderDrag() {
+    testUndockDrag();
     testIndexHeaderDrag(false);
     testIndexHeaderDrag(true);
     testIndexHeaderDrag(false,true);

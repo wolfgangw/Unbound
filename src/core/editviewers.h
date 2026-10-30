@@ -145,6 +145,14 @@ private:
             auto b=new Unbound::UndockButton(parent);
             b->setProperty("unboundPaneName",pane.content->objectName());
             auto p=&pane;
+            b->undockDrag=[this,p](QWidget *source,const QPoint &offset) {
+                Unbound::PaneUndockDrag::start(this,source,offset,[this,p] { if(!p->host) toggle(*p); },
+                    [p]() -> QWidget * {
+                        for(auto button:p->buttons) if(button && button->isVisible()
+                            && button->window()==p->host) return button;
+                        return nullptr;
+                    });
+            };
             b->contextMenu=[this,p](QWidget *button,const QPoint &position) {
                 if(m_contextMenu) m_contextMenu(button,position);
                 for(auto b:p->buttons) if(b) b->acknowledgeDockingFailure();
@@ -196,14 +204,16 @@ private:
         const auto saved=m_settings.geometry(content->objectName());
         const bool newPlacement=saved.isEmpty() || !host->restoreGeometry(saved);
         if(newPlacement) Unbound::centerNewPane(host,available);
-        content->show(); host->show();
+        content->show();
+        Unbound::PaneUndockDrag::prepareHost(host);
+        host->show();
         if(newPlacement) Unbound::centerNewPane(host,available);
         else preserveGeometry(pane,saved);
         pane.mainResizeGeometry=new Unbound::PaneMainResizeGeometry(host,m_main,[host](const QByteArray &geometry) {
             host->restoreGeometry(geometry);
         });
         if(!newPlacement) pane.mainResizeGeometry->reset(saved);
-        if(!automatic) host->activateWindow();
+        if(!automatic && !Unbound::PaneUndockDrag::ownsHost(host)) host->activateWindow();
         for(auto b:pane.buttons) if(b) b->setFloatingState(true);
         check(m_settings.saveFloating(content->objectName(),true));
         remember(pane);

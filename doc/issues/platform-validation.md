@@ -3,6 +3,14 @@
 Current architecture, supported behavior and tested configurations are in AGENTS.md.
 This file tracks validation gaps, not build/session history.
 
+- Validate docked-button drag-to-undock on Windows/macOS across standard panes,
+  Edit viewers, Color Timeline, Clips and native Curves/Warper/Scopes palettes:
+  button anchoring without placement flash, continuous movement/snapping, saved
+  size, early release, Escape, application switching and subsequent docking.
+  Windows movement, stacking below pins and live Scopes are user-validated;
+  verify native keyboard context on release (including Source and Scopes).
+  Shared fixtures cover click threshold, transferred/replaced headers, deferred
+  release, stacking and cleanup; broader native Resolve coverage remains open.
 - Native Intel Mac installation, startup and pane interaction remain unvalidated.
   Collect hardware, macOS, Resolve and Unbound versions with community reports.
 - Windows Free Resolve needs validation of startup and pane behavior.

@@ -60,7 +60,8 @@ protected:
         if((activationMember(window) && (type==QEvent::WindowActivate || type==QEvent::Show
             || type==QEvent::Hide || type==QEvent::WindowStateChange
             || (type==QEvent::DynamicPropertyChange &&
-                static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()=="unboundKeepAtop")))
+                (static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()=="unboundKeepAtop"
+                 || static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()=="unboundUndockDragging"))))
             || type==QEvent::ApplicationActivate) schedule();
         return false;
     }
@@ -99,12 +100,23 @@ private:
         if(!stackingAllowed()) return;
         auto selected=QApplication::activeWindow();
         if(!activationMember(selected)) return;
-        const auto pins=pinnedWindows();
+        const auto pins=priorityWindows();
         m_raising=true;
         m_group(selected,pins);
         m_raising=false;
     }
 protected:
+    // A tearoff keeps keyboard focus in its original window until release, but
+    // its host must precede that active window in every queued group refresh.
+    // Persistent pins retain priority; this gesture state never enters settings.
+    QList<QWidget *> priorityWindows() {
+        auto windows=pinnedWindows();
+        for(auto window:QApplication::topLevelWidgets())
+            if(member(window) && window->isVisible() && !window->isMinimized()
+                && window->property("unboundUndockDragging").toBool() && !windows.contains(window))
+                windows.append(window);
+        return windows;
+    }
     bool stackingAllowed() const {
         if(!m_main || m_main->isMinimized() || QCoreApplication::closingDown()
             || QApplication::applicationState()!=Qt::ApplicationActive

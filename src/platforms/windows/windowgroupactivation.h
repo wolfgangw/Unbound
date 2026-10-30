@@ -57,7 +57,7 @@ private:
         // can still expose a peer, even when the proposed insert-after handle
         // appears below the pins. Preserve activation, sizing and ownership.
         QSet<HWND> pins;
-        for(auto window:pinnedWindows()) {
+        for(auto window:priorityWindows()) {
             auto handle=reinterpret_cast<HWND>(window->effectiveWinId());
             if(handle && IsWindowVisible(handle) && !IsIconic(handle)) pins.insert(handle);
         }

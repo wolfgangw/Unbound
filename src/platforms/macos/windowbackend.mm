@@ -88,7 +88,7 @@ public:
         for (id observer : {m_beginResize, m_move, m_resize, m_end}) if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
     }
     bool active() const { return m_active; }
-    bool begin(Qt::Edges edges, bool button = false, bool nativeResize = false)
+    bool begin(Qt::Edges edges, bool button = false, bool nativeResize = false, bool activate = true)
     {
         if (!m_window || !m_window->isVisible() || m_active || m_window->isFullScreen()) return false;
         ++m_gesture;
@@ -96,7 +96,7 @@ public:
         WindowInteractionEvent::notify(m_window);
         if (m_window->isMaximized()) m_window->showNormal();
         m_edges = edges; m_button = button; m_nativeResize = nativeResize; m_active = true;
-        m_window->activateWindow();
+        if (activate) m_window->activateWindow();
         m_start = m_window->geometry(); m_startCursor = m_cursor = QCursor::pos();
         m_nativeProposal = m_target = m_start;
         m_margins = QMargins(m_start.left()-m_window->frameGeometry().left(), m_start.top()-m_window->frameGeometry().top(),
@@ -344,7 +344,7 @@ bool PaneFloatingWindow::restoreGeometry(const QByteArray &bytes)
     if (restored) restoreReachablePaneClientGeometry(this,bytes);
     return restored;
 }
-bool PaneFloatingWindow::beginButtonMove() { return m_interaction->begin({},true); }
+bool PaneFloatingWindow::beginButtonMove(bool activate) { return m_interaction->begin({},true,false,activate); }
 void PaneFloatingWindow::updateButtonMove() { m_interaction->update(QCursor::pos()); }
 void PaneFloatingWindow::finishButtonMove(bool cancel) { m_interaction->finish(cancel); }
 bool PaneFloatingWindow::interactiveDragActive() const { return m_interaction->active(); }

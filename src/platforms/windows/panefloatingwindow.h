@@ -47,12 +47,12 @@ public:
         restoreReachablePaneClientGeometry(this,bytes);
         return restored;
     }
-    bool beginButtonMove()
+    bool beginButtonMove(bool activate = true)
     {
         if (QGuiApplication::platformName() != QLatin1String("windows") || !isVisible()) return false;
         // Keep Qt's button grab, including when Resolve gives its header a
         // native child HWND. Do not transfer capture to the floating host.
-        beginInteractiveDrag(HTCAPTION, true);
+        beginInteractiveDrag(HTCAPTION, true, activate);
         return interactiveDragActive();
     }
     void updateButtonMove()
@@ -230,12 +230,12 @@ protected:
         return QWidget::nativeEvent(type, message, result);
     }
 private:
-    void beginInteractiveDrag(int hit, bool fromButton)
+    void beginInteractiveDrag(int hit, bool fromButton, bool activate = true)
     {
         WindowInteractionEvent::notify(this);
         const auto handle = reinterpret_cast<HWND>(winId());
         if (isMaximized()) showNormal();
-        SetForegroundWindow(handle);
+        if (activate) SetForegroundWindow(handle);
         GetWindowRect(handle, &m_dragRect);
         m_snap.begin(handle);
         GetCursorPos(&m_dragStart);

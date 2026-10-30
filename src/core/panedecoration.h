@@ -18,6 +18,7 @@
 #include <QVariantAnimation>
 #include "windowintegration.h"
 #include "paneheaderdrag.h"
+#include "paneundockdrag.h"
 #include <functional>
 namespace Unbound {
 // Proposal 5, rendered as vectors without adding a QtSvg runtime dependency.
@@ -58,6 +59,7 @@ public:
     }
     ~UndockButton() override { finishMove(true); }
     std::function<void(QWidget *,const QPoint &)> contextMenu;
+    std::function<void(QWidget *,const QPoint &)> undockDrag;
     QString dockingFailure() const { return m_failure; }
     bool dockingWarningPending() const { return !m_failure.isEmpty() && !m_acknowledged; }
     bool dockingWarningAnimating() const { return m_pulse.state()==QAbstractAnimation::Running; }
@@ -77,8 +79,9 @@ protected:
     void mousePressEvent(QMouseEvent *event) override
     {
         m_dragged = false;
-        m_moveCandidate = event->button() == Qt::LeftButton && isChecked();
+        m_moveCandidate = event->button() == Qt::LeftButton && (isChecked() || undockDrag);
         m_pressPosition = event->globalPos();
+        m_pressOffset = event->pos();
         QToolButton::mousePressEvent(event);
     }
     void mouseMoveEvent(QMouseEvent *event) override
@@ -91,6 +94,14 @@ protected:
         if (m_moveCandidate && (event->buttons() & Qt::LeftButton)
             && (event->globalPos() - m_pressPosition).manhattanLength() >= QApplication::startDragDistance()) {
             m_moveCandidate = false;
+            if(!isChecked() && undockDrag) {
+                m_dragged=true; setDown(false); event->accept();
+                // The action may replace this button. Never access it after
+                // transferring the gesture to its independent owner.
+                auto action=undockDrag;
+                action(this,m_pressOffset);
+                return;
+            }
             if (auto host = dynamic_cast<PaneFloatingWindow *>(window())) {
                 // Keep delivery in Qt, even for Resolve's native child headers.
                 // Release after a drag must never emit clicked()/toggle docking.
@@ -176,7 +187,7 @@ private:
         if (QWidget::mouseGrabber() == this) releaseMouse();
     }
     QPointer<PaneFloatingWindow> m_dragHost;
-    QPoint m_pressPosition;
+    QPoint m_pressPosition,m_pressOffset;
     bool m_moveCandidate = false;
     bool m_dragged = false;
 };
@@ -251,6 +262,14 @@ private:
     QToolButton *makeButton(QWidget *parent)
     {
         auto b=new UndockButton(parent); b->setObjectName("resolvePaneUndockButton");
+        b->setProperty("unboundPaneName",m_pane->objectName());
+        b->undockDrag=[this](QWidget *source,const QPoint &offset) {
+            PaneUndockDrag::start(this,source,offset,m_action,[this]() -> QWidget * {
+                for(auto button:m_buttons) if(button && button->isVisible()
+                    && dynamic_cast<PaneFloatingWindow *>(button->window())) return button;
+                return nullptr;
+            });
+        };
         b->contextMenu=[this](QWidget *button,const QPoint &position) {
             if(m_contextMenu) m_contextMenu(button,position);
             for(auto b:m_buttons) if(b) static_cast<UndockButton *>(b.data())->acknowledgeDockingFailure();

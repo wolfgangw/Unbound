@@ -124,6 +124,36 @@ for build, installation and recovery commands. Isolate fixture logs with
 The overlapping-squares button clicks to undock/dock and drags an already-floating
 pane. Closing a host docks it. Strokes are muted grey (`#848484`) in both states,
 brightening on hover; tooltips are "Undock" and "Click to dock; drag to move".
+Dragging a docked button beyond Qt's standard drag threshold undocks through its
+normal action and continues with the existing floating-host move/snap mechanism.
+Below-threshold release remains a normal click; no hold timer is used.
+`PaneUndockDrag` owns the gesture independently of the source button, preserving
+it across header transfer/replacement for standard panes, native palettes and Edit
+viewers. Retain the initial floating size, normalize saved maximized/fullscreen
+state for dragging, and anchor the button's pressed point under the pointer.
+Hosts stay transparent through initial show-time sizing until anchored, avoiding
+a flash at remembered/centered placement. Shared widget events resolve deferred
+targets with a bounded deadline; no polling or recurring discovery is introduced.
+Raise the anchored host without activation during tearoff; activate only on successful
+release while Resolve remains active and no modal dialog intervenes. This keeps
+native activation/accessibility work out of sustained pointer movement without
+suppressing accessibility notifications. Both platform movement backends accept
+an optional activation choice; ordinary floating movement retains activation.
+The shared window group gives a tearing-off host temporary priority below pinned
+panes and above the focused ordinary window. Queued show/activation ordering must
+retain that priority until release/cancellation; a one-time raise alone is undone
+by the normal active-window-first policy. This state is neither pinning nor saved
+layout data. Windows also includes it in the preliminary-raise guard.
+An early release places the host at that release position without starting a
+late drag or emitting another click. Escape, new press, application departure,
+host hiding/closing and owner destruction release capture and cancel movement;
+cancellation leaves an already-undocked pane floating. Ordinary floating-button
+dragging is unchanged. As with the layout menu, confirm actual native application
+departure before cancelling on Qt deactivation: native Scopes expansion/reparenting
+can emit transient inactivity while Resolve retains foreground ownership.
+Windows user validation confirms continuous tearoff movement, priority below
+pinned panes and live Scopes throughout the gesture. Remaining platform and
+interaction coverage is in the platform checklist.
 Plain title text and unused native header background also drag. Exclude controls
 and selectable/editable text; preserve immediate native dropdown behavior.
 Fairlight buttons sit immediately left of the native options action (Create Group

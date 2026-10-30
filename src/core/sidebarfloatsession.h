@@ -19,6 +19,7 @@
 #include "nodescanvasbounds.h"
 #include "auditionactivationbridge.h"
 #include "paneheaderdrag.h"
+#include "paneundockdrag.h"
 #include "panecatalogue.h"
 #include "paneelidinglabels.h"
 #include "panedockingguard.h"
@@ -355,6 +356,7 @@ public:
             host->setWindowOpacity(0.0);
         }
         phaseTrace.next("float_show");
+        PaneUndockDrag::prepareHost(host);
         host->show();
         phaseTrace.next("float_after_show");
         if(newPlacement) centerNewPane(host,initialArea);
@@ -366,7 +368,7 @@ public:
             host->restoreGeometry(geometry);
         });
         if(!newPlacement) m_mainResizeGeometry->reset(m_savedGeometry);
-        if(!fadeIn && activate) host->activateWindow(); // Explicit manual undocking.
+        if(!fadeIn && activate && !PaneUndockDrag::ownsHost(host)) host->activateWindow();
         if (preserveNativeLayout && slot->objectName()==QStringLiteral("m_pFrameNodeGraph"))
             m_nodesBounds=new NodesCanvasBounds(m_content,this);
         if (fadeIn) {
