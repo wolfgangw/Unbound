@@ -94,6 +94,7 @@ try {
     Invoke-Checked $test @('--nodes-canvas-test')
     Invoke-Checked $test @('--shutdown-test')
     Invoke-Checked $test @('--close-all-test')
+    Invoke-Checked $test @('--edit-sidebar-startup-test', $dll)
     Invoke-Checked $test @('--standalone-test', $dll)
     Invoke-Checked $test @('--standalone-test', '--visible-start', $dll)
     Invoke-Checked $test @('--standalone-test', '--toggle-state-test', $dll)

@@ -736,6 +736,59 @@ int main(int argc, char **argv)
         std::puts("PASS: application exits naturally with a floating pane (no forced quit)");
         return 0;
     }
+    if (app.arguments().contains("--edit-sidebar-startup-test")) {
+        QTemporaryDir directory;
+        check(directory.isValid(),"Cannot create startup fixture settings");
+        const auto path=directory.filePath("Unbound.json");
+        qputenv("UNBOUND_SETTINGS_FILE",path.toUtf8());
+        Unbound::PaneSettings seed(path);
+        QWidget main; main.setObjectName("UiMainWindow"); main.resize(900,700);
+        auto page=new QWidget(&main); page->setObjectName("frameEditPageWidgetsContainer"); page->resize(900,700);
+        const QStringList names={"frameEditPageInspector","frameEditPageMetadata"};
+        const QStringList toggles={"btnEditToggleInspectorInSSM","btnEditToggleMetadataInSSM"};
+        QVector<QWidget *> paneSlots,contents;
+        QVector<QPushButton *> buttons;
+        QVector<int> activations(2,0);
+        for(int i=0;i<2;++i) {
+            auto slot=new QWidget(page); slot->setObjectName(names[i]);
+            auto layout=new QVBoxLayout(slot);
+            auto content=new QLabel("Native content",slot); layout->addWidget(content);
+            slot->hide(); content->hide(); paneSlots.append(slot); contents.append(content);
+            auto button=new QPushButton(names[i],page); button->setObjectName(toggles[i]);
+            button->setCheckable(true); button->move(i*250,0); buttons.append(button);
+            check(seed.saveFloating(names[i],true).isEmpty(),"Cannot seed sidebar floating intent");
+            check(seed.saveToggle(names[i],false).isEmpty(),"Cannot seed native visibility intent");
+        }
+        for(int i=0;i<2;++i) QObject::connect(buttons[i],&QPushButton::clicked,page,[&,i](bool checked) {
+            ++activations[i];
+            QTimer::singleShot(0,page,[&,i,checked] {
+                // Shared native sidebar selectors: opening the second pane can
+                // deselect the first before its queued initialization completes.
+                if(checked) {buttons[1-i]->setChecked(false);paneSlots[1-i]->hide();}
+                paneSlots[i]->setVisible(checked);
+                if(checked || contents[i]->parentWidget()==paneSlots[i]) contents[i]->setVisible(checked);
+            });
+        });
+        main.show(); page->show(); app.processEvents();
+        QLibrary helper(app.arguments().last()); helper.setLoadHints(QLibrary::PreventUnloadHint);
+        check(helper.load(),qPrintable(helper.errorString()));
+        auto start=resolveBootstrap(helper); check(start && start(nullptr)==1,"Startup bootstrap failed");
+        QEventLoop settle; QTimer::singleShot(1200,&settle,&QEventLoop::quit); settle.exec();
+        for(int i=0;i<2;++i) {
+            QWidget *host=nullptr;
+            for(auto window:QApplication::topLevelWidgets())
+                if(window->objectName()=="unboundFloating_"+names[i])host=window;
+            check(host && host->isVisible() && contents[i]->window()==host && contents[i]->isVisible(),
+                qPrintable(names[i]+" missing after simultaneous sidebar startup"));
+            check(!buttons[i]->isChecked() && activations[i]==2,"Native sidebar initialization repeated or saved toggle lost");
+            Unbound::PaneSettings saved(path);
+            check(saved.floating(names[i]) && !saved.toggle(names[i]),"Startup overwrote saved sidebar intent");
+        }
+        // Teardown controller while fixture widgets and signal captures exist.
+        delete qApp->findChild<QObject *>("UnboundPaneController");
+        std::puts("PASS: competing queued Edit sidebar initialization restores Inspector and Metadata once, preserving native toggle intent");
+        return 0;
+    }
     if (app.arguments().contains("--standalone-test")) {
         QTemporaryDir settingsDirectory(QDir::currentPath() + "/unbound-settings-test-XXXXXX");
         check(settingsDirectory.isValid(), "Cannot create settings test directory");
@@ -910,10 +963,12 @@ int main(int argc, char **argv)
         if (!visibleStart) {
             check(pane->layout() == original, "Startup restored a pane on an inactive page");
             page->show();
-            QEventLoop ready;
-            QTimer::singleShot(1200, &ready, &QEventLoop::quit);
-            ready.exec();
         }
+        // A synthetic programmatic resize below is not a user gesture and
+        // must wait for startup geometry restoration in either entry mode.
+        QEventLoop ready;
+        QTimer::singleShot(1200, &ready, &QEventLoop::quit);
+        ready.exec();
         QWidget *floating = nullptr;
         for (auto widget : QApplication::topLevelWidgets())
             if (widget->objectName() == "unboundFloating_frameEditPageMediaPool") floating = widget;

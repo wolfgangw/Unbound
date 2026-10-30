@@ -30,7 +30,7 @@ run_native "$build/src/platforms/macos/UnboundLayoutTests" --color-clips-startup
 run_native "$build/src/platforms/macos/UnboundLayoutTests" --auxiliary-page-context
 for mode in --mac-control-clearance-test --mac-menu-tracking-test --mac-resize-input-test --mac-grid-test --mac-presentation-test --mac-window-test --mac-main-resize-test --mac-floating-resize-test --mac-main-snap-test --mac-main-drag-test --mac-placement-test --mac-layout-test --header-button-test --eliding-label-test \
     --settings-json-test --nodes-canvas-test --main-placement-test --reclaim-test \
-    --fairlight-test --standalone-test --shutdown-test --close-all-test; do
+    --fairlight-test --edit-sidebar-startup-test --standalone-test --shutdown-test --close-all-test; do
     run_native "$binary" "$mode" "$helper"
 done
 run_native "$binary"

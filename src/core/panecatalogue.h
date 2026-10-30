@@ -102,7 +102,12 @@ struct PaneDescriptor {
     }
     bool preserveNativeLayout() const { const auto control=colorControl(objectName); return page==Page::Color && !(control && control->wholeLayout); }
     bool requireNativeHeader() const { return page==Page::Fairlight || (header==Header::ClipsGutter || header==Header::ColorViewer || header==Header::ColorControl); }
-    bool serializeInitialization() const { return page==Page::Color || page==Page::Fairlight; }
+    bool serializeInitialization() const {
+        // Edit's two right-sidebar selectors can deselect each other while
+        // their native initialization is queued. Detach one before opening next.
+        return page==Page::Color || page==Page::Fairlight
+            || (page==Page::Edit && (header==Header::Inspector || header==Header::Metadata));
+    }
 };
 inline const QVector<PaneDescriptor> &panes() {
     static const QVector<PaneDescriptor> entries=[] { QVector<PaneDescriptor> result={
