@@ -3,8 +3,9 @@
 Supported controls, native expansion, active-mode sizing and validated Windows
 startup restoration are documented in [AGENTS.md](../../AGENTS.md).
 
-- Validate macOS ownership, native graphics surfaces, sizing and page/layout/startup
-  restoration, including Curves and Warper updating simultaneously.
+- Broaden macOS coverage across Color tool modes, clip/node changes and materials.
+  General simultaneous updates, sizing, docking, layout recall and Color cold-start
+  restoration are user-validated; see AGENTS.md.
 - Broaden Windows coverage for Warper modes, clip/node changes and page/layout
   combinations. Larger modes must retain native minimums and allow later manual
   shrinking when the active mode permits it.
@@ -14,8 +15,8 @@ startup restoration are documented in [AGENTS.md](../../AGENTS.md).
   modes as well.
 - Validate 3D with stereoscopic material, including native controls and dragging.
 - Check alternate native expansion/return routes and replacement-tool selection.
-- Validate native multi-scope ownership, independent updates, sizing, view-count
-  controls and docking on macOS. Windows behavior is documented in AGENTS.md.
+- Check macOS Scopes cold-start/layout restoration. Undocking, sizing, view-count
+  controls, live updates, docking and page-return headers are user-validated.
 
 Lower-region reclamation and replacement-tool selection remain unsettled.
 Viewer reclamation is tracked in [color-viewer.md](color-viewer.md). Fixtures cover

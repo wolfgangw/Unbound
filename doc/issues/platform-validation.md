@@ -6,10 +6,19 @@ This file tracks validation gaps, not build/session history.
 - Native Intel Mac installation, startup and pane interaction remain unvalidated.
   Collect hardware, macOS, Resolve and Unbound versions with community reports.
 - Windows Free Resolve needs validation of startup and pane behavior.
-- Per-pane "Always on top" still needs native macOS validation: ordinary/pinned
-  activation, menus/dialogs, viewer/audition routing, page/layout recall and main
-  minimize/restore, including maximized panes. Broaden Windows coverage for
-  fullscreen, multi-display and unusual native dialog/ownership combinations.
+- Broaden Always-on-top coverage for fullscreen/maximized panes and unusual
+  native dialog/ownership combinations on both platforms, plus Windows Dual Screen.
+  General macOS application switching, menus/dialogs, main minimize/restore and
+  ordering against both Dual Screen windows are validated;
+  see AGENTS.md.
+- Validate the shared fixes on Windows: retained Tracker ownership, Inspector/Metadata
+  filename sizing and cold-start restoration, and Color Dock all/playback handling.
+- Remaining macOS pre-release checks:
+  - Final installer update/uninstall/reinstall, settings preservation and startup.
+  - Edit Program/Source viewer mode-exit and page-return compatibility; see
+    [Dual Screen validation](dual-screen-floating-panels.md).
+  - Floating Edit Source versus timeline transport needs separate confirmation.
+    Confirmed startup/interaction results are recorded in AGENTS.md.
 - macOS needs broader multi-display, Retina scaling, display-removal,
   Spaces/fullscreen and Fusion workflow coverage, plus native verification of
   page-return focus restoration and the current shared Color Clips adapter.
@@ -23,6 +32,21 @@ This file tracks validation gaps, not build/session history.
   for stationary modifier changes, Option bypass, other-page outlines and release
   cleanup. Cocoa overlay properties and shared grid/reference calculations are
   fixture-validated; native Intel remains unvalidated.
-- Browser-download distribution checks and signing remain open: Windows code
-  signing and macOS Developer ID/notarization. These are distribution limitations,
+- Windows code signing and macOS Developer ID/notarization remain open. The unsigned/
+  ad-hoc-signed download flow is supported; these are distribution limitations,
   not missing pane features.
+
+## Deferred fixes
+
+- Metadata can lack its Unbound button while empty, until an asset is selected.
+  This also occurs outside Dual Screen; make discovery independent of populated
+  metadata content without introducing a fallback strip unnecessarily.
+
+## Installer presentation
+
+- Give the enabled Windows Install/Update button a filled accent highlight, matching
+  the primary-action emphasis already visible on macOS. Availability is already
+  shared; define the emphasis rule in shared installer presentation and implement
+  its rendering in the Windows backend. `BS_DEFPUSHBUTTON` alone does not provide
+  the requested filled styling. Keep disabled Install/Update neutral and Uninstall
+  secondary; preserve native keyboard focus and high-contrast accessibility.

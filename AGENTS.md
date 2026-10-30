@@ -58,6 +58,9 @@ one implementation under `src/platforms/<platform>/` at compile time. Core must
 not include platform implementation paths or OS headers. Backends provide native
 window rendering, events, coordinate/DPI conversion, placement and data directories.
 Settings filenames, overrides, schema, migration and atomic saves stay shared.
+Narrow platform compatibility workarounds live in `src/platforms/<platform>/quirks/`,
+behind contracts in `src/platform/`. Keep ordinary native responsibilities in their
+existing modules; an unaffected platform explicitly supplies no extra workaround.
 
 | Owner | Responsibility |
 | --- | --- |
@@ -129,6 +132,9 @@ are queued only for panes with a catalogued visibility action or tool selector.
 Returning a pane without either action completes docking without a toggle request;
 such panes must not leave layout/page transition readiness permanently pending.
 Native toggles remain usable; automatic restoration honors saved choices after initialization.
+Edit Inspector/Metadata initialization is serialized: finish native activation and
+detachment of one before requesting the other, so queued sidebar deselection cannot
+strand a pending restore. This ordering policy lives in the shared pane catalogue.
 Retain hosts/content across page switches and reveal immediately; initial startup
 restoration has a separate short fade.
 After successful docking, destroy the empty host through deferred Qt deletion.
@@ -147,7 +153,11 @@ polling, forced host reveals or separate Dual Screen layout state is introduced.
 This applies to all catalogued panes, including scoped Color controls. Edit viewer
 discovery also retains the players container outside main's tree, and viewer
 visibility follows the persistent Edit page when initialized in its auxiliary window.
-Fresh-process native validation remains in `doc/issues/dual-screen-floating-panels.md`.
+Survival, usable content and subsequent docking after leaving Dual Screen are
+user-validated on macOS for the tested panes. macOS cold-start layout restoration
+in Dual Screen and pinned ordering against both native windows are also validated.
+Edit Media Pool survival is validated on Windows.
+Remaining compatibility checks are in `doc/issues/dual-screen-floating-panels.md`.
 
 ### Docking safeguard
 
@@ -185,8 +195,10 @@ only conceals/restores its own hosts when main is minimized.
 The main-owned layout menu retains its popup level and focus above the pinned
 group; opening it, clean recall and renaming must not lift main above pinned panes
 or change their relative order. General Always-on-top use is user-validated on
-Windows; macOS validation remains outstanding. Native adapters keep all hosts at their ordinary OS window level and reorder without activation; no
-desktop-wide topmost flag, activation loop or polling is used. Dialogs, popups,
+Windows and macOS, including macOS application switching, main minimize/restore
+and native dialog/Unbound menu priority. Windows keeps hosts at their ordinary OS level.
+Cocoa applies temporary native pin levels only while the Resolve group is active (see Cocoa windowing below).
+Neither backend activates windows to reorder them or uses idle polling. Dialogs, popups,
 other applications and newer focus choices retain priority. Windows additionally
 checks the actual foreground HWND before ordering the group. Submit the final
 pinned/selected/peer order directly, never demoting pins as an intermediate step.
@@ -405,7 +417,12 @@ and recall passes until their attempts finish. This guard also covers incoming
 layouts without floating Clips: outgoing docking may restore Lightbox-on and hide
 controls needed for incoming initialization.
 Manual docking restores the pre-float Lightbox/Color Controls choices, deferred
-when inactive. Native Lightbox exit docks Clips. Explicit recall of a Color layout
+when inactive. Color Dock all instead requests normal Color mode, using the
+same playback lease and pre-docking Clips suspension as layout recall. Hold that
+lease through queued discovery so native returns share one stop/resume; saved
+layout snapshots remain unchanged. macOS layout recall → Dock all → recall
+is user-validated with active playback, including the brief coordinated pause.
+Native Lightbox exit docks Clips. Explicit recall of a Color layout
 without floating Clips instead returns to normal Color mode, even for a clean
 active layout. Do not restore outgoing Lightbox-on after that recall. Hosts retain
 normal page visibility and geometry persistence; mode choices add no settings field.
@@ -482,9 +499,9 @@ scope, header owner and selector. Scope disambiguates repeated names such as
 `sizingTab`. Retain stack entries and indices; transfer their contents with
 `SidebarFloatSession`. Camera Raw and HDR transfer the whole multi-entry layout;
 other tools preserve the native layout and move its single content widget, except
-Curves/Color Warper/Scopes (native expansion below) and Key/Sizing. For Key and Sizing,
-retain `keyWidget` (`UiSecKeyWidgetImp`) and `sizingWidget`
-as the first widgets in their respective `keyTab`/`sizingTab` native layouts;
+Curves/Color Warper/Scopes (native expansion below) and Key/Sizing/Tracker. For these tools,
+retain `keyWidget` (`UiSecKeyWidgetImp`) and `sizingWidget`, plus Tracker’s `trackerWidget`,
+as the first widgets in their respective `keyTab`/`sizingTab`/`trackerTab` native layouts;
 transfer each tool object's own layout contents instead. Resolve's
 native tool lookup requires that container in its original slot and dereferences
 these lookups without a null check. Keep its identity, stack index and native
@@ -536,8 +553,10 @@ container and do not require native expansion.
 Floating Scopes uses `ColorNativeScopes` through the same native-palette session.
 Its independent renderer belongs to Resolve's `UiWaveformWindow`, separate from
 the single docked scope whose updates depend on the lower-right tool selection.
-Open the native dialog through `btnUndock`, or adopt it if already open, and embed
-the whole dialog in the standard host. Keep the docked scope in its original slot;
+Discover the named native window as a QWidget: macOS uses a QWidget shell,
+while Windows uses a QDialog. Open it through `btnUndock`, or adopt it if already
+open, and embed the whole window in the standard host. Keep the docked scope in
+its original slot;
 no placeholder or content transfer belongs there. Retain native single/dual/quad
 view controls, settings and renderer registration. Clear only the dialog's explicit
 window minimum; descendant constraints still determine useful sizes. The native
@@ -549,6 +568,17 @@ geometry and minimum, then invokes the public `btnHide` action. No forced main
 Scopes selection, frame copying, transport interception or update polling is used
 to keep floating signal updates alive. Windows startup, page return, native
 Close/Escape and independent updates with Info/Keyframes selected are validated.
+macOS Scopes undocking, free resizing, view-count controls, live updates, redocking
+and header painting after page return are user-validated.
+
+`widgetquirks.h` attaches platform-specific work for the embedded Scopes lifetime.
+The macOS quirk invalidates visible native `titleFrame`/`headerFrame` subtrees after
+queued show/content-move layout work. Resolve can show embedded Scopes at its former
+top-level position before layout moves it back inside the host; show-time header
+updates are clipped at that interim position. Refresh again on the child Move,
+without changing its geometry. Hide/reparent/destruction cancel deferred requests.
+Focus, visibility and renderer state remain native. Windows needs no extra repaint.
+
 Guard the retained docked Scopes subtree's Expand actions as well as the floating
 dialog's controls; restore the original enabled states on docking.
 
@@ -597,9 +627,18 @@ and minimum. Remaining validation is tracked in
 
 ### Other pane constraints
 
-Edit Inspector excludes its middle-eliding title label's horizontal size hint from
-the floating minimum, restoring the original policy on docking. Edit/Fairlight
-Index tab-row backgrounds also drag; tab/action controls retain native input.
+`PaneElidingLabels` relaxes only the horizontal full-text hint of native
+middle-eliding labels identified in the shared pane catalogue. Edit/Fairlight
+Inspector titles and Edit Metadata's clip/photo filenames use it, including
+repeated single/multi-selection variants. Resolve retains text and painting;
+vertical policies, stretch and other content minimums remain intact. Scoped child
+and reparent events coalesce discovery of late variants. Docking/teardown restores
+original policies without overwriting a newer native policy. Media Pool keeps its
+native sizing behavior. Edit Inspector/Metadata filename elision and serialized
+cold-start restoration are user-validated on macOS.
+
+Edit/Fairlight Index tab-row backgrounds also drag; tab/action controls retain
+native input.
 
 ## Layout menu
 
@@ -922,6 +961,10 @@ remains unvalidated. macOS validation uses Apple M2, macOS 27.0.1 and Resolve Fr
 21.1.1.10. Both platforms use Qt 5.15.2. Native Intel Mac operation is
 unvalidated despite the universal binary. Open validation is tracked in
 `doc/issues/platform-validation.md`; fixture passes are not native Resolve proof.
+Color cold-start restoration, including floating content, Fairlight cold startup
+with floating Media Pool/Sound Library, and Fairlight audition are user-validated
+on macOS. General Color simultaneous updates, resizing, docking and layout recall
+are also validated; broader mode/material combinations remain open.
 
 Native minimum sizes apply. Known limitations include Media Pool widening and
 overlapping a neighbor during startup restoration, and Nodes requiring manual
@@ -956,6 +999,16 @@ viewer parenting changes. Docking must run the viewer-region restoration path ev
 after Cinema exit so content appears without requiring a main-window resize.
 
 ### Cocoa windowing
+
+Cocoa pins use `NSFloatingWindowLevel` while the active native key window belongs
+to the Resolve group. The shared policy still selects pins and their MRU order.
+A visible Unbound layout menu receives the next level above those pins. Native
+application/key-window notifications and scoped Qt visibility/property/state events
+restore original levels on app departure, unrelated/dialog focus, hiding, unpinning,
+minimization, native window recreation and group teardown. Levels never change
+focus, ownership or geometry. This prevents an ordinary main-window click from
+covering pins before a queued ordering correction; no click interception,
+method replacement, screen capture or polling is used.
 
 The additional Color toolbar row reserves space for native traffic-light buttons
 when they overlap its allocation. The Cocoa adapter measures visible standard

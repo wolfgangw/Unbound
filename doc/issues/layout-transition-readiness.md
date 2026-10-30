@@ -28,12 +28,9 @@ or permission requests. Visual continuity takes priority over latency.
 
 ## Open restoration cases
 
-- Color All Out to All Docked can make Timeline's allocation safeguard reject the
-  first docking attempt; repeating recall succeeds. Diagnose allocation/toggle
-  ordering without weakening the safeguard or silently resaving layouts.
-- A Color All Out to Grid recall after a rejected playing transition can leave
-  the docked Viewer compressed below unused allocation. Isolate native mode and
-  retained allocation from playback assistance.
+- Verify Timeline docking allocation and docked Viewer sizing across Color layout
+  recalls, including active playback and native minimum-size changes. macOS
+  layout recall → Dock all → recall is validated; broader combinations remain open.
 - Check unexplained layout dirtiness after page round trips against actual saved
   geometry; respect persistent native minimums and immutable layout snapshots.
   Broaden main-placement settlement coverage to user resize cancellation and

@@ -1,35 +1,24 @@
-﻿# Dual Screen: remaining work
+# Dual Screen: remaining work
 
-## Floating-panel disappearance
-
-Native Windows reproduction confirms that Edit Media Pool's dock slot moves
-between the main page and `frameEditAuxWidgetsContainer` under `UiEditPanelAux`.
-Floating from the auxiliary container bound visibility to that container; disabling
-Dual Screen hid the host while preserving its content and floating state.
+## Remaining compatibility validation
 
 The shared logical-page association is implemented in `panepagecontext.h` and
-documented in [AGENTS.md](../../AGENTS.md). Edit Media Pool surviving Dual Screen
-exit is user-validated on Windows. Remaining native validation:
+documented in [AGENTS.md](../../AGENTS.md). Current validation there includes macOS
+pane survival, subsequent docking, cold-start layout restoration and pinned ordering
+against both native windows.
 
-- Start directly in Dual Screen; float panes on Edit, Color and Fairlight, then
-  disable it. Include Media Pool/Index, Color Gallery/LUTs and Fairlight Mixer.
-- Repeat both directions, including page departure/return, docking and Dock all.
-- Preserve geometry, focus, native content and saved layouts across these moves.
-- Check Full Screen Timeline, actual multiple monitors and macOS.
-- Exercise both Edit viewers, native Color palettes/Scopes and Clips/Lightbox;
-  native mode-specific initialization/allocation is separate from page association.
-- Check Fairlight Media Pool's audition ownership and keyboard routing.
-- Validate Always on top against activation of both native screens, menu use,
-  application switching and minimization. Shared group membership includes the
-  discovered auxiliary wrapper; native cross-platform validation remains pending.
+Remaining checks of implemented compatibility behavior:
 
-Read-only native snapshots identify all three supported auxiliary windows.
+- Include Edit Program/Source viewers in mode-exit and page-departure/return
+  checks; their page association has a separate implementation path.
+
 Fixtures cover page association for every catalogue entry, host visibility and
 reversible docking on all supported pages, auxiliary startup discovery and Edit
 viewers initialized outside main's tree. These do not replace native validation.
 
-Full Dual Screen layout integration and separate mode-specific layouts remain
-outside the scope of this compatibility fix.
+The release scope is safe coexistence and surviving exit to Single Screen.
+Full Dual Screen layout integration, separate mode-specific layouts, native
+allocation redesign and a broader floating-window workflow are deferred.
 
 ## Native Color Clips / Lightbox constraints
 
