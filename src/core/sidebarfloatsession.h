@@ -161,12 +161,12 @@ public:
         if (!slot || slot->isWindow() || !slot->parentWidget() || !(pageRoot ? pageRoot : slot->parentWidget())->isVisible())
             return QStringLiteral("Open this pane's Resolve page before undocking it.");
         auto layoutSlot=slot;
-        if(slot->objectName()==QLatin1String("keyTab") || slot->objectName()==QLatin1String("sizingTab")) {
-            // Resolve looks up Key and Sizing through the native stack even
-            // when another tool is selected. Keep that container discoverable;
-            // transfer its layout contents, not the native tool object itself.
-            layoutSlot=slot->findChild<QWidget *>(slot->objectName()==QLatin1String("keyTab")
-                ? QStringLiteral("keyWidget") : QStringLiteral("sizingWidget"),Qt::FindDirectChildrenOnly);
+        const auto control=PaneCatalogue::colorControl(slot->objectName());
+        if(control && !control->retainedContainer.isEmpty()) {
+            // Resolve looks up these tools through the native stack even when
+            // another tool/page is selected. Transfer their layout contents,
+            // retaining the native tool identity and its original stack slot.
+            layoutSlot=slot->findChild<QWidget *>(control->retainedContainer,Qt::FindDirectChildrenOnly);
             if(!layoutSlot)
                 return QStringLiteral("The native tool container is unavailable; no changes made.");
             preserveNativeLayout=false;

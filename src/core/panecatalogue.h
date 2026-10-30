@@ -41,6 +41,7 @@ inline const PageDescriptor &page(Page id) {
 struct ColorControlDescriptor {
     QString objectName,label,scope,header,headerOwner,anchor,selector;
     bool wholeLayout=false;
+    QString retainedContainer; // Native tool lookup must still find this object in its stack slot.
 };
 inline const QVector<ColorControlDescriptor> &colorControls() {
     static const QVector<ColorControlDescriptor> entries={
@@ -55,11 +56,11 @@ inline const QVector<ColorControlDescriptor> &colorControls() {
         {"colorMapperTab","Color Warper","UiSecWidgetContainer","frameTop","colorMapperTabWidget","","btnColorMapper",false},
         {"qualTab","Qualifier","UiSecWidgetContainer","frameTop","qualTabWidget","","btnQualifier",false},
         {"windowTab","Window","UiSecWidgetContainer","secWindowTopFrame","windowWidget","btnResetMenu","btnWindow",false},
-        {"trackerTab","Tracker","UiSecWidgetContainer","frameTrackingHeader","trackerWidget","btnContextMenu","btnTracker",false},
+        {"trackerTab","Tracker","UiSecWidgetContainer","frameTrackingHeader","trackerWidget","btnContextMenu","btnTracker",false,"trackerWidget"},
         {"personMaskTab","Magic Mask","UiSecWidgetContainer","secWindowTopFrame","personMaskTabWidget","btnResetMenu","btnPersonMask",false},
         {"blurTab","Blur","UiSecWidgetContainer","headerFrame","frame","","btnBlur",false},
-        {"keyTab","Key","UiSecWidgetContainer","m_KeyHeaderFrame","keyWidget","","btnKey",false},
-        {"sizingTab","Sizing","UiSecWidgetContainer","sizingTopFrame","sizingWidget","btnResetMenu","btnSizing",false},
+        {"keyTab","Key","UiSecWidgetContainer","m_KeyHeaderFrame","keyWidget","","btnKey",false,"keyWidget"},
+        {"sizingTab","Sizing","UiSecWidgetContainer","sizingTopFrame","sizingWidget","btnResetMenu","btnSizing",false,"sizingWidget"},
         {"tab3D","3D","UiSecWidgetContainer","m_FrameTitle3D","stereoWidget","m_ButtonTiltleBar","btn3D",false},
         {"keyframesWidgetContainer","Keyframes","UiMarkTimelineContainer","frameHeader","keyframesWidget","","btnKeyframes",false},
         {"scopesWidget","Scopes","UiMarkTimelineContainer","headerFrame","UiWaveformViewerItem","btnWaveformViewerItemOptions","btnScopes",false},

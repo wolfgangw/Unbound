@@ -256,12 +256,12 @@ void testColorControls() {
         native->addWidget(content);
         // Camera Raw/HDR own multiple layout entries, transferred as a unit.
         if(control.wholeLayout) native->addWidget(new QLabel("Footer"));
-        const bool key=control.objectName=="keyTab" || control.objectName=="sizingTab";
+        const bool retained=control.objectName=="keyTab" || control.objectName=="sizingTab" || control.objectName=="trackerTab";
         const bool expanded=ColorNativePalette::supports(slot);
-        auto owner=key || expanded ? content : new QWidget;
+        auto owner=retained || expanded ? content : new QWidget;
         owner->setObjectName(control.headerOwner);
-        if(!key && !expanded) body->addWidget(owner);
-        auto ownerLayout=key || expanded ? body : new QVBoxLayout(owner);
+        if(!retained && !expanded) body->addWidget(owner);
+        auto ownerLayout=retained || expanded ? body : new QVBoxLayout(owner);
         auto header=new QFrame; header->setObjectName(control.header); ownerLayout->addWidget(header);
         auto row=new QHBoxLayout(header); row->addWidget(new QLabel(control.label),1);
         QWidget *paletteTitle=nullptr;
@@ -399,7 +399,7 @@ void testColorControls() {
             delete late;
             checkPaletteSizing();
         }
-        if(key) {
+        if(retained) {
             require(slot->findChild<QWidget *>(control.headerOwner,Qt::FindDirectChildrenOnly)==content
                 && native->itemAt(0)->widget()==content && content->layout()!=body,
                 "Native tool container disappeared from its original stack slot");
@@ -457,8 +457,11 @@ void testColorControls() {
         {
             auto host=session.floatingWindow();
             // Use transferred content, including tools whose native outer
-            // container intentionally remains docked (Key/Sizing/whole layouts).
+            // container intentionally remains docked (Key/Sizing/Tracker/whole layouts).
             QWidget *controls=dialog ? (warperModes ? warperModes->currentWidget()->layout()->itemAt(0)->widget() : content) : value;
+        if(retained) require(native->itemAt(0)->widget()==content
+            && slot->findChild<QWidget *>(control.headerOwner,Qt::FindDirectChildrenOnly)==content,
+            "Page return cannot find the retained native tool in its stack slot");
             const int nativeMinimum=controls->minimumHeight();
             // Page return is not layout recall: preserve the most recent working
             // size, including manual changes never saved to a layout snapshot.
@@ -494,7 +497,7 @@ void testColorControls() {
             "Native Color layout was not restored");
         if(lateExpand) require(lateExpand->isEnabled(),"Late Expand was not restored on docking");
         if(wheels) require(wheels->sizePolicy()==originalPolicy && wheels->minimumWidth()==0,"Wheel native sizing policy not restored");
-        if(key) require(content->layout()==body,"Retained tool original content layout was not restored");
+        if(retained) require(content->layout()==body,"Retained tool original content layout was not restored");
         require(expand->isEnabled() && stack->currentWidget()==other,"Dock changed native stack selection or failed to restore Expand");
         stack->setCurrentWidget(slot); value->click(); require(clicks==2,"Native action lost after docking");
         if(dialog) {
