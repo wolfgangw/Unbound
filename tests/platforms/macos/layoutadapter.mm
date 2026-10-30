@@ -2,6 +2,7 @@
 #import <AppKit/AppKit.h>
 #include "layoutadapter.h"
 #include "windowplacement.h"
+#include "windowintegration.h"
 #include "geometryjson.h"
 #include <QApplication>
 #include <QMenu>
@@ -60,6 +61,40 @@ void verifyActivationBelowPins(QWidget &window,const QList<QWidget *> &pins) {
             qPrintable(window.objectName()),qPrintable(pin->objectName()),ownsKeyboardFocus(window),int(NSApp.active));
     for(auto pin:pins) require(stackedAbove(*pin,window),"Activated window crossed pinned panes");
     require(ownsKeyboardFocus(window),"Stack constraint interfered with activation");
+    // An already-key Cocoa window can rise on a click without a second Qt
+    // WindowActivate. Model that native raise, then deliver real fixture input.
+    auto native=reinterpret_cast<NSView *>(window.winId()).window;
+    for(auto pin:pins) Unbound::applyPaneDarkCaption(pin,&window);
+    [native orderFront:nil];
+    for(auto pin:pins) {
+        require(reinterpret_cast<NSView *>(pin->winId()).window.level>native.level,
+            "Pinned host lacks native priority over the ordinary window");
+        require(stackedAbove(*pin,window),"Native raise transiently covered a pinned pane before deferred correction");
+    }
+    for(auto type:{NSEventTypeLeftMouseDown,NSEventTypeLeftMouseUp}) {
+        auto event=[NSEvent mouseEventWithType:type location:NSMakePoint(100,100)
+            modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime
+            windowNumber:native.windowNumber context:nil eventNumber:0 clickCount:1 pressure:0];
+        [NSApp postEvent:event atStart:NO];
+    }
+    deadline.restart();
+    do {
+        settle();
+        bool ordered=true;
+        for(auto pin:pins) ordered=ordered && stackedAbove(*pin,window);
+        if(ordered)break;
+    } while(deadline.elapsed()<1000);
+    for(auto pin:pins) require(stackedAbove(*pin,window),"Clicking an already-key window covered pinned panes");
+    require(ownsKeyboardFocus(window),"Repeated-click pin correction stole keyboard focus");
+    [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationWillResignActiveNotification object:NSApp];
+    for(auto pin:pins) require(reinterpret_cast<NSView *>(pin->winId()).window.level==NSNormalWindowLevel,
+        "Application departure retained elevated pin levels");
+    [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp];
+    settle();
+    for(auto pin:pins) require(reinterpret_cast<NSView *>(pin->winId()).window.level==NSFloatingWindowLevel,
+        "Group reactivation failed to restore pin levels");
+
+
 }
 std::unique_ptr<QWidget> makeMainWindow() { return std::make_unique<QWidget>(); }
 QRect nativeBounds(QWidget &window) { return window.frameGeometry(); }

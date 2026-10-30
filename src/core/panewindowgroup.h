@@ -9,8 +9,8 @@
 #include <functional>
 #include "panecatalogue.h"
 namespace Unbound {
-// Shared application-local stacking. Native adapters only reorder normal-level
-// windows without activation; no desktop-wide topmost flag is required.
+// Shared application-local pinning and ordering policy. Native adapters preserve
+// focus and confine pin priority to the active application group.
 class PaneWindowGroup : public QObject {
 public:
     PaneWindowGroup(std::function<bool(QWidget *,const QList<QWidget *> &)> group,
@@ -64,12 +64,15 @@ protected:
             || type==QEvent::ApplicationActivate) schedule();
         return false;
     }
-private:
+protected:
+    // Native adapters can request the same coalesced policy pass when an OS
+    // gesture changes stacking without changing Qt activation.
     void schedule() {
         if(m_pending) return;
         m_pending=true;
         QTimer::singleShot(0,this,[this] { m_pending=false; refresh(); });
     }
+private:
     void refresh() {
         if(!m_main || QCoreApplication::closingDown()) return;
         m_raising=true;

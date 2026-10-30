@@ -366,7 +366,8 @@ bool applyPaneDarkCaption(QWidget *host,QWidget *)
     window.hasShadow=YES;
     window.styleMask |= NSWindowStyleMaskResizable;
     window.hidesOnDeactivate=NO;
-    window.level=NSNormalWindowLevel;
+    // WindowGroupActivation owns temporary pin levels; appearance refreshes
+    // must not reset them on activation, page return or caption updates.
     window.movableByWindowBackground=NO;
     return true;
 }
@@ -380,12 +381,96 @@ void MainWindowSnap::setWindow(QWidget *window)
     m_interaction.reset();
     if (window) { m_interaction.reset(new MacWindowInteraction(window,false)); m_interaction->setProperty("window",QVariant::fromValue<QObject *>(window)); }
 }
+// Pin levels are temporary application-local presentation state. Retain native
+// windows until their original level is restored, including native recreation.
+class CocoaGroupLevels {
+    struct Entry { QPointer<QWidget> widget; NSWindow *window; NSInteger original; };
+    QList<Entry> m_entries;
+    QList<id> m_observers;
+public:
+    explicit CocoaGroupLevels(std::function<void(bool)> changed) {
+        for(NSString *name in @[NSApplicationWillResignActiveNotification,
+            NSApplicationDidResignActiveNotification,NSApplicationDidBecomeActiveNotification,
+            NSWindowDidBecomeKeyNotification]) {
+            m_observers.append([NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:nil
+                usingBlock:^(NSNotification *note) {
+                    changed([note.name isEqualToString:NSApplicationWillResignActiveNotification]
+                        || [note.name isEqualToString:NSApplicationDidResignActiveNotification]);
+                }]);
+        }
+    }
+    ~CocoaGroupLevels() {
+        for(id observer:m_observers) [NSNotificationCenter.defaultCenter removeObserver:observer];
+        apply({});
+    }
+    void apply(const QList<QPair<QWidget *,NSInteger>> &desired) {
+        for(int i=m_entries.size()-1;i>=0;--i) {
+            const auto entry=m_entries[i];
+            bool keep=false;
+            for(const auto &item:desired)
+                if(entry.widget==item.first && nativeWindow(item.first)==entry.window) { keep=true; break; }
+            if(!keep) {
+                entry.window.level=entry.original;
+                [entry.window release]; m_entries.removeAt(i);
+            }
+        }
+        for(const auto &item:desired) if(auto window=nativeWindow(item.first)) {
+            bool known=false;
+            for(const auto &entry:m_entries) if(entry.window==window) {known=true;break;}
+            if(!known) m_entries.append({item.first,[window retain],window.level});
+            if(window.level!=item.second) window.level=item.second;
+        }
+    }
+};
 WindowGroupActivation::WindowGroupActivation() : PaneWindowGroup(
     [this](QWidget *selected,const QList<QWidget *> &pins) { return raiseGroup(selected,pins); },
     [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderOut:nil]; },
-    [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderFront:nil]; }) {}
+    [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderFront:nil]; }) {
+    m_levels=std::make_unique<CocoaGroupLevels>([this](bool departing) {
+        if(departing) m_levels->apply({});
+        else {refreshLevels(); schedule();}
+    });
+}
+WindowGroupActivation::~WindowGroupActivation() = default;
+void WindowGroupActivation::setWindow(QWidget *window) {
+    if(m_main!=window) m_levels->apply({});
+    PaneWindowGroup::setWindow(window);
+    refreshLevels();
+}
+void WindowGroupActivation::refreshLevels() {
+    if(!m_levels || m_updatingLevels) return;
+    m_updatingLevels=true;
+    QList<QPair<QWidget *,NSInteger>> desired;
+    bool ownsKey=false;
+    if(NSApp.active && NSApp.keyWindow && stackingAllowed())
+        for(auto widget:QApplication::topLevelWidgets())
+            if(activationMember(widget) && nativeWindow(widget)==NSApp.keyWindow) {ownsKey=true;break;}
+    if(ownsKey) {
+        const auto pins=pinnedWindows();
+        for(auto widget:pins) desired.append({widget,NSFloatingWindowLevel});
+        if(!pins.isEmpty()) for(auto widget:QApplication::topLevelWidgets())
+            if(layoutMenu(widget) && widget->isVisible())
+                desired.append({widget,NSFloatingWindowLevel+1});
+    }
+    m_levels->apply(desired);
+    m_updatingLevels=false;
+}
+bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
+    const bool result=PaneWindowGroup::eventFilter(object,event);
+    switch(event->type()) {
+    case QEvent::WindowActivate: case QEvent::Show: case QEvent::Hide:
+    case QEvent::WindowStateChange: case QEvent::DynamicPropertyChange:
+    case QEvent::WinIdChange: case QEvent::Destroy: case QEvent::ApplicationActivate: case QEvent::ApplicationDeactivate:
+        if(object==qApp || (qobject_cast<QWidget *>(object) && static_cast<QWidget *>(object)->isWindow()))
+            refreshLevels();
+        break;
+    default: break;
+    }
+    return result;
+}
 bool WindowGroupActivation::raiseGroup(QWidget *selected,const QList<QWidget *> &pins)
 {
+    refreshLevels();
     NSWindow *key=nativeWindow(selected);
     if (!m_main || !selected || !key || NSApp.keyWindow!=key || !NSApp.active
         || QApplication::activeModalWidget() || QApplication::activePopupWidget()) return false;
