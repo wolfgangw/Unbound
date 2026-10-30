@@ -71,7 +71,7 @@ protected:
 };
 
 // Models the native UiElidedLabel's observed full-text minimum-size hint.
-class InspectorTitleLabel : public QLabel
+class ElidingTitleLabel : public QLabel
 {
 public:
     using QLabel::QLabel;

@@ -72,6 +72,18 @@ inline const ColorControlDescriptor *colorControl(const QString &name) {
     for(const auto &entry:colorControls()) if(entry.objectName==name) return &entry;
     return nullptr;
 }
+// Only these native, already-eliding labels may ignore their full-text width
+// hint while floating. Scope keeps repeated generic label names unambiguous.
+struct ElidingLabelDescriptor { QString pane,scope,label; };
+inline const QVector<ElidingLabelDescriptor> &elidingLabels() {
+    static const QVector<ElidingLabelDescriptor> entries={
+        {"frameEditPageInspector","frameEffectsWidgetsTitle","labelTitle"},
+        {"frameInspectorContainer","frameEffectsWidgetsTitle","labelTitle"},
+        {"frameEditPageMetadata","frameClipInfoTop","lblMetadataFileName"},
+        {"frameEditPageMetadata","framePhotoInfoTop","lblMetadataPhotoFileName"},
+    };
+    return entries;
+}
 struct PaneDescriptor {
     QString objectName, label;
     Page page;

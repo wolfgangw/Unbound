@@ -90,7 +90,7 @@ try {
     Invoke-Checked $test @('--main-placement-test')
     Invoke-Checked $test @('--settings-json-test')
     Invoke-Checked $test @('--header-button-test')
-    Invoke-Checked $test @('--inspector-title-test')
+    Invoke-Checked $test @('--eliding-label-test')
     Invoke-Checked $test @('--nodes-canvas-test')
     Invoke-Checked $test @('--shutdown-test')
     Invoke-Checked $test @('--close-all-test')

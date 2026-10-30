@@ -9,57 +9,86 @@ int main(int argc, char **argv)
     initializePlatformTests();
     QApplication app(argc, argv);
     if (runFairlightTest(app)) return 0;
-    if (app.arguments().contains("--inspector-title-test")) {
-        QWidget page; page.resize(700,500);
-        auto slot=new QWidget(&page); slot->setObjectName("frameEditPageInspector"); slot->resize(600,400);
-        auto outer=new QVBoxLayout(slot);
-        auto inspector=new QWidget(slot); outer->addWidget(inspector);
-        auto column=new QVBoxLayout(inspector);
-        auto header=new QWidget(inspector); header->setObjectName("frameEffectsWidgetsTitle"); column->addWidget(header);
-        auto row=new QHBoxLayout(header);
-        auto action=new QPushButton("Menu",header); action->setFixedSize(40,24); row->addWidget(action);
-        const QString filename=QString(180,QLatin1Char('W'))+QStringLiteral("_[000001-999999].dpx");
-        auto title=new InspectorTitleLabel(filename,header); title->setObjectName("labelTitle");
-        title->setProperty("elideMode",int(Qt::ElideMiddle));
-        QSizePolicy original(QSizePolicy::Expanding,QSizePolicy::Preferred);
-        original.setHorizontalStretch(2); title->setSizePolicy(original); row->addWidget(title);
-        auto content=new QWidget(inspector); content->setMinimumSize(360,100); column->addWidget(content);
-        page.show(); app.processEvents();
-        const auto fullWidth=title->minimumSizeHint().width();
-        check(fullWidth>1000,"Inspector fixture filename is too short");
-        for (int pass=0;pass<4;++pass) {
-            original.setHorizontalStretch(pass%2 ? 2 : 0);
-            title->setSizePolicy(original);
-            Unbound::SidebarFloatSession session;
-            check(session.start(slot,"Inspector",&page).isEmpty(),"Inspector detach failed");
-            auto host=session.floatingWindow(); host->resize(420,300); app.processEvents();
-            check(host->width()==420 && host->minimumWidth()>=360 && host->minimumWidth()<fullWidth,
-                qPrintable(QString("Filename still constrains floating width or content minimum was lost: width=%1 minimum=%2 full=%3").arg(host->width()).arg(host->minimumWidth()).arg(fullWidth)));
-            check(title->width()<fullWidth && title->text()==filename && title->property("elideMode").toInt()==int(Qt::ElideMiddle),
-                "Native label lost its full text/elision mode or cannot shrink");
-            const int narrowTitleWidth=title->width();
-            host->resize(520,300); app.processEvents();
-            check(title->width()>narrowTitleWidth,"Title does not use additional header space");
-            host->resize(420,300); app.processEvents();
-            check(title->sizePolicy().horizontalStretch()==qMax(1,original.horizontalStretch())
-                && title->sizePolicy().verticalPolicy()==original.verticalPolicy(),"Title expansion/stretch/height policy changed");
-            title->setText(filename+filename); app.processEvents();
-            check(host->width()==420 && host->minimumWidth()<fullWidth,"Clip selection update widened Inspector");
-            title->setText(filename); app.processEvents();
-            if (pass<2) {
-                check(session.dock().isEmpty(),"Inspector docking failed");
-                check(title->sizePolicy()==original,"Docking did not restore title policy");
+    if (app.arguments().contains("--eliding-label-test")) {
+        const QVector<Unbound::PaneCatalogue::ElidingLabelDescriptor> cases={
+            {"frameEditPageInspector","frameEffectsWidgetsTitle","labelTitle"},
+            {"frameInspectorContainer","frameEffectsWidgetsTitle","labelTitle"},
+            {"frameEditPageMetadata","frameClipInfoTop","lblMetadataFileName"},
+            {"frameEditPageMetadata","framePhotoInfoTop","lblMetadataPhotoFileName"}};
+        for(const auto &spec:cases) {
+            QWidget page; page.resize(700,500);
+            auto slot=new QWidget(&page); slot->setObjectName(spec.pane); slot->resize(600,400);
+            auto outer=new QVBoxLayout(slot);
+            auto bodyContainer=new QWidget(slot); outer->addWidget(bodyContainer);
+            auto column=new QVBoxLayout(bodyContainer);
+            auto header=new QWidget(bodyContainer); header->setObjectName(spec.scope); column->addWidget(header);
+            auto row=new QHBoxLayout(header);
+            auto action=new QPushButton("Menu",header); action->setFixedSize(40,24); row->addWidget(action);
+            const QString filename=QString(180,QLatin1Char('W'))+QStringLiteral("_[000001-999999].dpx");
+            auto title=new ElidingTitleLabel(filename,header); title->setObjectName(spec.label);
+            title->setProperty("elideMode",int(Qt::ElideMiddle));
+            QSizePolicy original(QSizePolicy::Expanding,QSizePolicy::Preferred);
+            original.setHorizontalStretch(2); title->setSizePolicy(original); row->addWidget(title);
+            auto content=new QWidget(bodyContainer); content->setMinimumSize(360,100); column->addWidget(content);
+            page.show(); app.processEvents();
+            const auto fullWidth=title->minimumSizeHint().width();
+            check(fullWidth>1000,"Pane fixture filename is too short");
+            auto unrelated=new ElidingTitleLabel(filename,bodyContainer);
+            unrelated->setObjectName(spec.label); unrelated->setProperty("elideMode",int(Qt::ElideMiddle));
+            unrelated->setSizePolicy(original); unrelated->hide();
+            const auto unrelatedPolicy=unrelated->sizePolicy();
+            QPointer<ElidingTitleLabel> late;
+            QSizePolicy lateOriginal(QSizePolicy::Expanding,QSizePolicy::Preferred);
+            for (int pass=0;pass<4;++pass) {
+                original.setHorizontalStretch(pass%2 ? 2 : 0);
+                title->setSizePolicy(original);
+                Unbound::SidebarFloatSession session;
+                check(session.start(slot,spec.pane,&page).isEmpty(),"Pane detach failed");
+                auto host=session.floatingWindow(); host->resize(420,300); app.processEvents();
+                check(host->width()==420 && host->minimumWidth()>=360 && host->minimumWidth()<fullWidth,
+                    qPrintable(QString("Filename still constrains floating width or content minimum was lost: width=%1 minimum=%2 full=%3").arg(host->width()).arg(host->minimumWidth()).arg(fullWidth)));
+                check(title->width()<fullWidth && title->text()==filename && title->property("elideMode").toInt()==int(Qt::ElideMiddle),
+                    "Native label lost its full text/elision mode or cannot shrink");
+                check(unrelated->sizePolicy()==unrelatedPolicy,"Label outside catalogued scope was changed");
+                if(pass==0) {
+                    auto lateScope=new QWidget(bodyContainer); lateScope->setObjectName(spec.scope);
+                    auto lateRow=new QHBoxLayout(lateScope); column->addWidget(lateScope);
+                    late=new ElidingTitleLabel(filename,lateScope); late->setObjectName(spec.label);
+                    late->setProperty("elideMode",int(Qt::ElideMiddle));late->setSizePolicy(lateOriginal);
+                    lateRow->addWidget(late);lateScope->show();app.processEvents();
+                    check(late->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored,
+                        "Late/repeated native title variant retained its full-text hint");
+                }
+                host->resize(420,300); app.processEvents();
+                const int narrowTitleWidth=title->width();
+                host->resize(520,300); app.processEvents();
+                check(title->width()>narrowTitleWidth,"Title does not use additional header space");
+                host->resize(420,300); app.processEvents();
+                check(title->sizePolicy().horizontalStretch()==qMax(1,original.horizontalStretch())
+                    && title->sizePolicy().verticalPolicy()==original.verticalPolicy(),"Title expansion/stretch/height policy changed");
+                title->setText(filename+filename); app.processEvents();
+                check(host->width()==420 && host->minimumWidth()<fullWidth,"Clip selection update widened the floating pane");
+                title->setText(filename); app.processEvents();
+                if (pass<2) {
+                    check(session.dock().isEmpty(),"Pane docking failed");
+                    check(title->sizePolicy()==original,"Docking did not restore title policy");
+                }
+                if(pass<2) check(late->sizePolicy()==lateOriginal,"Repeated title policy was not restored");
+                // Last two passes exercise destructor restoration.
             }
-            // Last two passes exercise destructor restoration.
+            check(title->sizePolicy()==original && slot->layout()==outer,"Docking did not restore original policy/layout");
+            title->setProperty("elideMode",int(Qt::ElideRight));
+            {
+                Unbound::SidebarFloatSession session;
+                check(session.start(slot,spec.pane,&page).isEmpty(),"Unrecognized title detach failed");
+                check(title->sizePolicy()==original,"Nonmatching title sizing was changed");
+                auto newer=lateOriginal; newer.setHorizontalPolicy(QSizePolicy::MinimumExpanding);
+                late->setSizePolicy(newer);
+                check(session.dock().isEmpty(),"Final title fixture docking failed");
+                check(late->sizePolicy()==newer,"Docking overwrote a newer native sizing policy");
+            }
         }
-        check(title->sizePolicy()==original && slot->layout()==outer,"Docking did not restore original policy/layout");
-        title->setProperty("elideMode",int(Qt::ElideRight));
-        {
-            Unbound::SidebarFloatSession session;
-            check(session.start(slot,"Inspector",&page).isEmpty(),"Unrecognized title detach failed");
-            check(title->sizePolicy()==original,"Nonmatching title sizing was changed");
-        }
-        std::puts("PASS: Inspector filename does not constrain floating width; native text, elision, other minimums and docking policy preserved");
+        std::puts("PASS: Catalogued Inspector/Metadata titles shrink; native text/elision, late variants, content minimums and docking policy preserved");
         return 0;
     }
     if (runPlatformDiscoveryTests(app)) return 0;
