@@ -4,6 +4,7 @@
 #include <QFrame>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QStackedWidget>
 #include <cstdio>
 
 static void testIndexHeaderDrag(bool fairlight, bool effects=false) {
@@ -63,6 +64,69 @@ static void testIndexHeaderDrag(bool fairlight, bool effects=false) {
     std::puts(effects ? "PASS: Color Effects full title/header dragging, excluded native controls and dock/refloat lifecycle"
         : fairlight ? "PASS: Fairlight Index tab/header dragging, native clicks and dock/refloat lifecycle"
         : "PASS: Edit Index tab/header dragging, native clicks and dock/refloat lifecycle");
+}
+
+static void testMetadataHeaders(bool fairlight) {
+    using LayoutTest::require;
+    QWidget docked;
+    Unbound::PaneFloatingWindow host;
+    host.setGeometry(300,200,500,300);
+    auto outer=new QVBoxLayout(&host);
+    auto pane=new QFrame;
+    pane->setObjectName(fairlight ? "frameMetadataContainer" : "frameEditPageMetadata");
+    outer->addWidget(pane);
+    auto column=new QVBoxLayout(pane);
+    auto stack=new QStackedWidget; column->addWidget(stack);
+    QList<QWidget *> headers;
+    QList<QLabel *> titles;
+    for(const auto &name:{"emptyClipView","singleViewFrame","multiViewFrame"}) {
+        auto view=new QFrame; view->setObjectName(name); stack->addWidget(view);
+        auto content=new QVBoxLayout(view);
+        auto header=new QFrame; header->setObjectName("frameMetadataTop"); content->addWidget(header);
+        auto row=new QHBoxLayout(header);
+        auto title=new QLabel("Metadata"); row->addWidget(title,1); titles.append(title);
+        if(QString(name)!="emptyClipView") {
+            auto options=new QToolButton; options->setObjectName("btnPresetsSelector"); row->addWidget(options);
+        }
+        content->addStretch(); headers.append(header);
+    }
+    int clicks=0;
+    {
+        Unbound::PaneDecoration decoration(pane,&host,[&] { ++clicks; });
+        decoration.setFloating(true); host.show(); LayoutTest::settle();
+        require(decoration.usesNativeHeader() && pane->contentsMargins()==QMargins(),"Metadata added a fallback strip");
+        for(int i:{0,1,2,0}) {
+            stack->setCurrentIndex(i); LayoutTest::settle();
+            auto button=headers[i]->findChild<QToolButton *>("resolvePaneUndockButton");
+            require(button && button->isVisible() && button->isChecked(),"Metadata state lost floating button");
+            button->click();
+            decoration.setFloating(true);
+            auto row=qobject_cast<QBoxLayout *>(headers[i]->layout());
+            auto options=headers[i]->findChild<QToolButton *>("btnPresetsSelector");
+            require(row->indexOf(button)==(options ? row->indexOf(options)-1 : row->count()-1),"Metadata header placement changed");
+        }
+        require(clicks==4,"Metadata buttons lost docking action");
+        if(QGuiApplication::platformName()!=QLatin1String("offscreen")) {
+            auto title=titles[0]; const QPoint start(3,title->height()/2);
+            auto send=[&](QEvent::Type type,QPoint pos,Qt::MouseButton button,Qt::MouseButtons held) {
+                QMouseEvent event(type,pos,title->mapToGlobal(pos),button,held,Qt::NoModifier);
+                QApplication::sendEvent(title,&event);
+            };
+            send(QEvent::MouseButtonPress,start,Qt::LeftButton,Qt::LeftButton);
+            send(QEvent::MouseMove,start+QPoint(QApplication::startDragDistance()+1,0),Qt::NoButton,Qt::LeftButton);
+            require(host.interactiveDragActive(),"Empty Metadata title did not drag");
+            send(QEvent::MouseButtonRelease,start,Qt::LeftButton,Qt::NoButton);
+            require(!host.interactiveDragActive(),"Empty Metadata title retained drag");
+        }
+        pane->setParent(&docked); decoration.setFloating(false);
+        pane->show(); docked.show(); LayoutTest::settle();
+        auto button=headers[0]->findChild<QToolButton *>("resolvePaneUndockButton");
+        require(button && button->isVisible() && !button->isChecked(),"Empty Metadata lost undocking button after docking");
+        button->click(); require(clicks==5,"Empty Metadata lost undocking action");
+    }
+    require(pane->findChildren<QToolButton *>("resolvePaneUndockButton").isEmpty(),"Metadata decoration leaked buttons");
+    std::puts(fairlight ? "PASS: Fairlight Metadata empty/single/multi headers, title dragging and docking"
+        : "PASS: Edit Metadata empty/single/multi headers, title dragging and docking");
 }
 
 static void testUndockDrag() {
@@ -159,6 +223,8 @@ static void testUndockDrag() {
 
 void testIndexHeaderDrag() {
     testUndockDrag();
+    testMetadataHeaders(false);
+    testMetadataHeaders(true);
     testIndexHeaderDrag(false);
     testIndexHeaderDrag(true);
     testIndexHeaderDrag(false,true);

@@ -157,7 +157,12 @@ interaction coverage is in the platform checklist.
 Plain title text and unused native header background also drag. Exclude controls
 and selectable/editable text; preserve immediate native dropdown behavior.
 Fairlight buttons sit immediately left of the native options action (Create Group
-for Groups), never in a fallback strip. Other panes may use the compact fallback.
+for Groups), never in a fallback strip. Metadata on Edit and Fairlight also decorates
+the actionless `frameMetadataTop` under `emptyClipView`: append the button after
+the title in its existing row and enable the same title/background dragging.
+Decorate all three native selection-state headers so clearing or changing the
+selection preserves docking and movement without adding a header or changing
+native stack visibility. Other panes may use the compact fallback.
 
 Hosts retain native resize borders, shell identity and window commands; Windows
 hosts have no title bar. Nonmodal gestures and deferred content layout preserve

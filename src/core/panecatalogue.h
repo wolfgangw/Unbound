@@ -161,6 +161,9 @@ inline QString pageForRoot(const QString &name) {
         if(entry.supported && (entry.objectName==name || entry.paneRoot==name)) return entry.objectName;
     return {};
 }
+inline bool matchesActionlessHeader(Header header,const QString &name,const QString &parent) {
+    return header==Header::Metadata && name=="frameMetadataTop" && parent=="emptyClipView";
+}
 inline bool matchesHeader(Header header,const QString &name,const QString &parent,const QString &grandparent) {
     switch(header) {
     case Header::MediaPool: return name=="btnMediaPoolOptions" && parent=="frameMediaPoolTitleBarTop";

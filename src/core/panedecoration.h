@@ -401,20 +401,27 @@ private:
             }
             position(); m_refreshing=false; return;
         }
-        QList<QAbstractButton *> anchors;
+        QList<QPair<QWidget *,QAbstractButton *>> headers;
         for(auto b:m_pane->findChildren<QAbstractButton *>()) {
             if(!isAnchor(b)) continue;
             auto layout=qobject_cast<QBoxLayout *>(b->parentWidget()->layout());
-            if(layout && layout->direction()==QBoxLayout::LeftToRight && layout->indexOf(b)>=0) anchors.append(b);
+            if(layout && layout->direction()==QBoxLayout::LeftToRight && layout->indexOf(b)>=0) headers.append({b->parentWidget(),b});
         }
-        if(!anchors.isEmpty()) {
+        if(paneDescriptor) for(auto header:m_pane->findChildren<QWidget *>()) {
+            const auto parent=header->parentWidget();
+            if(!parent || !PaneCatalogue::matchesActionlessHeader(paneDescriptor->header,
+                header->objectName(),parent->objectName())) continue;
+            auto row=qobject_cast<QBoxLayout *>(header->layout());
+            if(row && row->direction()==QBoxLayout::LeftToRight) headers.append({header,nullptr});
+        }
+        if(!headers.isEmpty()) {
             qDeleteAll(m_headerDrags); m_headerDrags.clear();
             for(auto b:m_buttons) delete b.data(); m_buttons.clear(); removeStrip(); m_native=true;
-            for(auto anchor:anchors) {
-                auto layout=static_cast<QBoxLayout *>(anchor->parentWidget()->layout());
-                auto b=makeButton(anchor->parentWidget());
-                layout->insertWidget(layout->indexOf(anchor),b,0,Qt::AlignVCenter); b->show();
-                auto header = anchor->parentWidget();
+            for(const auto &entry:headers) {
+                auto header=entry.first;
+                auto layout=static_cast<QBoxLayout *>(header->layout());
+                auto b=makeButton(header);
+                layout->insertWidget(entry.second ? layout->indexOf(entry.second) : layout->count(),b,0,Qt::AlignVCenter); b->show();
                 if ((header->objectName()==QLatin1String("frameOptions")
                         && header->parentWidget()->objectName()==QLatin1String("frameMixerMeterTitle"))
                     || (header->objectName()==QLatin1String("rightFrame")

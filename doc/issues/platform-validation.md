@@ -42,8 +42,7 @@ This file tracks validation gaps, not build/session history.
   ad-hoc-signed download flow is supported; these are distribution limitations,
   not missing pane features.
 
-## Deferred fixes
-
-- Metadata can lack its Unbound button while empty, until an asset is selected.
-  This also occurs outside Dual Screen; make discovery independent of populated
-  metadata content without introducing a fallback strip unnecessarily.
+- Verify Edit/Fairlight Metadata's empty-selection header in a fresh Resolve process
+  on both platforms: dock/undock, title/background dragging and transitions between
+  empty, single-clip and multiple-clip selection. The shared decoration uses the
+  existing native header row; no fallback strip is added.
