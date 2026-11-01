@@ -117,6 +117,26 @@ void testLayoutTransition() {
 #endif
     QWidget main,page(&main);page.setObjectName("WStackPage_Color");main.show();page.show();
     LayoutTest::activate(main);
+    // Color hands global native Scopes back before the destination is known.
+    // Its Show must not uncover the intermediate page/viewer construction.
+    QStringList scopesContexts{QString()};
+    for(const auto &descriptor:Unbound::PaneCatalogue::pages())
+        if(descriptor.supported)scopesContexts.append(descriptor.objectName);
+    for(const auto &context:scopesContexts) {
+        auto state=std::make_shared<PresentationState>();
+        auto cover=Unbound::LayoutTransition::begin(&main,context,std::make_unique<Presentation>(state));
+        QDialog scopes(&main);scopes.setObjectName("UiWaveformWindow");scopes.show();
+        require(cover && cover->running() && !state->cancels,
+            "Global Scopes handoff cancelled the page/layout cover");
+        scopes.hide();
+        QDialog prompt(&main);prompt.show();
+        require(!cover->running() && state->cancels==1,"Unexpected dialog failed to uncover the UI");
+        prompt.hide();
+        cover=Unbound::LayoutTransition::begin(&main,context,std::make_unique<Presentation>(state));
+        scopes.setModal(true);scopes.show();
+        require(!cover->running() && state->cancels==2,"Modal Scopes window was covered by the native-window exception");
+        scopes.hide();settle();
+    }
     auto none=Unbound::LayoutTransition::begin(&main,page.objectName(),
         std::make_unique<Unbound::NoLayoutTransitionPresentation>());
     require(!none,"Unsupported presentation must not create a readiness wait");settle();

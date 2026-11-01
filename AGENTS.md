@@ -606,7 +606,8 @@ and snapping reuse the standard session. No private offsets, update polling or
 transport interception. Key's matte updates work through its existing retained
 container and do not require native expansion.
 
-Floating Scopes uses `ColorNativeScopes` through the same native-palette session.
+Floating Scopes uses `ColorNativeScopes` through the same native-palette session;
+`NativeScopesContent` owns shared native transfer, visibility and resize guards.
 Its independent renderer belongs to Resolve's `UiWaveformWindow`, separate from
 the single docked scope whose updates depend on the lower-right tool selection.
 Discover the named native window as a QWidget: macOS uses a QWidget shell,
@@ -619,13 +620,32 @@ window minimum; descendant constraints still determine useful sizes. The native
 multi-scope mode can require more space than an older single-scope saved layout.
 Insert the Unbound button before the native dialog options action and make unused
 title background draggable. Native Close/Escape/Hide requests use deferred session
-docking; page hiding retains the session. Docking restores parent, window flags,
-geometry and minimum, then invokes the public `btnHide` action. No forced main
+docking; page hiding retains the session. Docking invokes the public `btnHide`
+action before restoring parent, window flags, geometry and minimum. No forced main
 Scopes selection, frame copying, transport interception or update polling is used
 to keep floating signal updates alive. Windows startup, page return, native
 Close/Escape and independent updates with Info/Keyframes selected are validated.
 macOS Scopes undocking, free resizing, view-count controls, live updates, redocking
 and header painting after page return are user-validated.
+
+`UiWaveformWindow` is Resolve's global Video Scopes window. On Color departure,
+return its native parent, window flags, minimum and geometry while retaining the
+hidden Unbound host and Color floating intent. Remove Unbound chrome, resize
+adapters and expansion guards during native use. Restore visibility as it was
+before Color borrowed the window; use the native close action when it was closed.
+Invoke that action while the native content is still visible, before hiding its
+host or reparenting. Resolve needs that native visibility transition to retire
+its global Scopes visibility; closing an already-hidden window lets the next
+page reopen it. The session hands native ownership back before hiding its host.
+When restoring a visible native window, reapply its retained top-level geometry
+after native Show handling, which can otherwise restore the embedded origin.
+Other pages can then open/close Scopes normally. Color return captures that updated
+native visibility/geometry and embeds the window again. Closing native Scopes or
+retiring the inactive Color host must not change the other owner's intent.
+Main-window hiding/minimization alone does not hand ownership back. This is shared,
+event-driven Qt code. Windows native outside-Color visibility, placement and
+transition-cover behavior are user-validated; Edit's automatic adoption is a
+separate lifecycle requiring fresh validation.
 
 `widgetquirks.h` attaches platform-specific work for the embedded Scopes lifetime.
 The macOS quirk invalidates visible native `titleFrame`/`headerFrame` subtrees after
@@ -790,6 +810,10 @@ the captures, and docking releases empty hosts rather than caching compositors.
 Reveal uses a 120 ms fade. Input outside the live menu, real dialogs, application
 departure and superseding transitions cancel protection. A three-second GUI-thread
 deadline releases it on failure but cannot preempt a blocked GUI thread.
+The shared policy recognises nonmodal `UiWaveformWindow` as global native Scopes,
+including its Color departure handoff before the destination page is known.
+Showing that window must not cancel the cover and expose intermediate viewer or
+pane construction. Ordinary dialogs and modal windows still cancel protection.
 
 Readiness combines tracked restoration work, 50 ms structural quiet and final
 coalesced updates, with at most three update attempts. Public GL composition must

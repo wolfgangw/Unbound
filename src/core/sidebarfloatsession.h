@@ -470,6 +470,12 @@ protected:
                     m_returnFade->stop();
                 }
                 returnSharedContent(true);
+                if(m_nativePalette && m_root->window()->isVisible() && !m_root->window()->isMinimized())
+                    if(m_nativePalette->suspendForPage()) {
+                        restoreNativeExpand();m_nativePageSuspended=true;
+                    }
+                // Native shared windows must retire their visible state before
+                // hiding the host suppresses their own visibility transition.
                 if(m_hiddenByPage) {
                     m_host->hide();
                     m_host->setWindowOpacity(1.0);
@@ -484,6 +490,12 @@ protected:
                     m_pageReturnWork.clear();
                     if (!m_host || !m_root || !m_root->isVisible() || !m_hiddenByPage || m_generation != generation) return;
                     m_hiddenByPage = false;
+                    if(m_nativePalette && !m_nativePalette->resumeForPage()) {
+                        m_hiddenByPage=true;return;
+                    }
+                    if(m_nativePageSuspended) {
+                        m_expandGuard=new ColorExpandGuard(m_host,this);m_nativePageSuspended=false;
+                    }
                     returnSharedContent(false);
                     const auto returningGeometry=m_mainResizeGeometry
                         ?m_mainResizeGeometry->intendedGeometry(m_savedGeometry):m_savedGeometry;
@@ -635,6 +647,7 @@ private:
         if (m_content) m_content->removeEventFilter(this);
         m_graphRecoveryQueued = false;
         m_contentReturned = false;
+        m_nativePageSuspended = false;
         m_nativeLayout = nullptr; m_hostLayout = nullptr; m_content = nullptr;
         m_hiddenByPage = false;
         m_splitter = nullptr; m_splitterSizes.clear(); m_splitterWidgets.clear();
@@ -657,6 +670,7 @@ private:
     QList<QMetaObject::Connection> m_nativeToggleConnections;
     bool m_graphRecoveryQueued = false;
     bool m_contentReturned = false;
+    bool m_nativePageSuspended = false;
     bool m_recoveringGraph = false;
     Qt::Alignment m_contentAlignment;
     int m_gridRow = 0, m_gridColumn = 0, m_gridRows = 1, m_gridColumns = 1;

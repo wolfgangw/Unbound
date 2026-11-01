@@ -238,6 +238,8 @@ public:
 protected:
     bool eventFilter(QObject *object,QEvent *event) override
     {
+        if(object==m_pane && event->type()==QEvent::DynamicPropertyChange
+            && m_pane->objectName()==QLatin1String("scopesWidget")) refresh();
         if(event->type()==QEvent::Show || event->type()==QEvent::ParentChange) updateClipsContext();
         if(event->type()==QEvent::ShowToParent || event->type()==QEvent::HideToParent)
             for(const auto &pair:m_menuButtons) if(pair.first==object && pair.second)
@@ -249,6 +251,14 @@ protected:
         return false;
     }
 private:
+    bool updateScopesContext() {
+        if(!m_pane || m_pane->objectName()!=QLatin1String("scopesWidget"))return true;
+        auto native=ColorNativeScopes::content(m_pane);
+        for(auto button:m_buttons) if(button)
+            button->setVisible(m_floating ? native!=m_pane && native->isAncestorOf(button)
+                                          : m_pane->isAncestorOf(button));
+        return !m_floating || native!=m_pane;
+    }
     bool updateClipsContext() {
         if(!m_pane || m_pane->objectName()!=QLatin1String("m_pLightBox")) return true;
         const bool available=panePageContext(m_pane,m_pane->window())!=nullptr;
@@ -320,6 +330,9 @@ private:
     {
         if(!updateClipsContext()) return;
         if(m_refreshing || !m_pane || (m_floating && !PaneCatalogue::colorControl(m_pane->objectName()))) return;
+
+        // Outside Color, the global native Scopes window has no Unbound UI.
+        if(!updateScopesContext())return;
 
         m_refreshing=true;
         bool any=false; for(auto b:m_buttons) if(b) any=true;
@@ -470,6 +483,7 @@ private:
     void position()
     {
         if(!updateClipsContext()) return;
+        if(!updateScopesContext()) return;
         if(m_gutterContent && button()) {
             // Keep floating Clips at the top-left of its reserved gutter,
             // independent of the native filtering header and thumbnail rows.

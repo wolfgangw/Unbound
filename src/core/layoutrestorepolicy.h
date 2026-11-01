@@ -33,11 +33,16 @@ struct LayoutRestorePolicy {
             ColorPlaybackPause::cancelActive(reason);
     }
     static bool expectedDialog(const QString &page,QWidget *dialog) {
+        if(!dialog)return false;
+        // Scopes is a global native window. Color returns it during departure,
+        // before a page-switch cover knows its destination, and other pages
+        // can show it normally. It is not a prompt that must uncover the UI.
+        if(dialog->objectName()==QLatin1String("UiWaveformWindow")
+            && dialog->windowModality()==Qt::NonModal)return true;
         // Expanded palettes briefly remain top-level before their native
         // registration is retained inside the regular floating host.
-        return page==QLatin1String("WStackPage_Color") && dialog
-            && (dialog->objectName()==QLatin1String("UiFloatingPaletteWidgetDialog")
-                || dialog->objectName()==QLatin1String("UiWaveformWindow"));
+        return page==QLatin1String("WStackPage_Color")
+            && dialog->objectName()==QLatin1String("UiFloatingPaletteWidgetDialog");
     }
 };
 }

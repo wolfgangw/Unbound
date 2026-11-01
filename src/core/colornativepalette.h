@@ -78,6 +78,8 @@ public:
             && ((m_dialog && m_dialog->parentWidget()==m_host && m_dialog->isAncestorOf(m_palette))
                 || m_slot->isAncestorOf(m_palette));
     }
+    bool suspendForPage() {return m_scopes && m_scopes->suspend();}
+    bool resumeForPage() {return !m_scopes || m_scopes->resume();}
     bool stop() {
         if(m_scopes)return m_scopes->stop();
         if(!intact()) return false;

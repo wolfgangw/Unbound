@@ -9,6 +9,17 @@
 #include <memory>
 
 namespace {
+template<class Base> class NativeScopesWindow : public Base {
+public:
+    explicit NativeScopesWindow(QWidget *parent):Base(parent,Qt::Window) {}
+protected:
+    void showEvent(QShowEvent *event) override {
+        Base::showEvent(event);
+        // Native Scopes restores its own position during Show, including the
+        // origin retained while it was embedded in the Color host.
+        if(this->isWindow())this->move(0,0);
+    }
+};
 class ScopeResizeDialog : public QDialog {
 public:
     explicit ScopeResizeDialog(QWidget *parent):QDialog(parent,Qt::Widget) {
@@ -195,7 +206,8 @@ void testColorControls() {
         }
         require(modes->widget(1)->sizePolicy()==original,"Mode sizing failed to restore native policy");
     }
-    QWidget page; page.setObjectName("WStackPage_Color"); page.resize(800,500);
+    QWidget mainWindow;mainWindow.resize(800,500);mainWindow.show();
+    QWidget page(&mainWindow); page.setObjectName("WStackPage_Color"); page.resize(800,500);
     auto outer=new QVBoxLayout(&page);
     auto stack=new QStackedWidget; stack->setObjectName("UiSecWidgetContainer"); outer->addWidget(stack);
     auto other=new QWidget; stack->addWidget(other);
@@ -207,17 +219,23 @@ void testColorControls() {
         auto row=new QHBoxLayout(header);auto expand=new QPushButton("Expand");expand->setObjectName("btnUndock");row->addWidget(expand);
         auto options=new QPushButton("Options");options->setObjectName("btnWaveformViewerItemOptions");row->addWidget(options);
         // Resolve uses a QDialog on Windows, but a QWidget window on macOS.
-        std::unique_ptr<QWidget> nativeWindow(dialogType ? static_cast<QWidget *>(new QDialog(&page))
-            : new QWidget(&page,Qt::Window));
+        std::unique_ptr<QWidget> nativeWindow(dialogType ? static_cast<QWidget *>(new NativeScopesWindow<QDialog>(&page))
+            : new NativeScopesWindow<QWidget>(&page));
         auto &dialog=*nativeWindow;
         dialog.setObjectName("UiWaveformWindow");dialog.setMinimumSize(900,500);
         auto layout=new QVBoxLayout(&dialog);auto title=new QWidget;title->setObjectName("titleFrame");layout->addWidget(title);
         auto titleRow=new QHBoxLayout(title);auto hide=new QPushButton("Close");hide->setObjectName("btnHide");titleRow->addWidget(hide);
         auto nativeOptions=new QPushButton("Options");nativeOptions->setObjectName("btnWaveformViewerOptions");titleRow->addWidget(nativeOptions);
+        auto scopeExpand=new QPushButton("Expand scope");scopeExpand->setObjectName("btnUndock");titleRow->addWidget(scopeExpand);
         auto renderer=new QWidget;renderer->setMinimumSize(300,200);layout->addWidget(renderer);
         bool registered=false;
         QObject::connect(expand,&QPushButton::clicked,&dialog,[&]{registered=true;dialog.show();stack->setCurrentWidget(other);});
-        QObject::connect(hide,&QPushButton::clicked,&dialog,[&]{registered=false;dialog.hide();stack->setCurrentWidget(slot);});
+        QObject::connect(hide,&QPushButton::clicked,&dialog,[&]{
+            // Native Scopes needs a real visible-to-hidden transition to retire
+            // its global visibility; closing after host hiding loses that path.
+            if(dialog.isVisible())registered=false;
+            dialog.hide();stack->setCurrentWidget(slot);
+        });
         stack->setCurrentWidget(slot);LayoutTest::settle();
         SidebarFloatSession session;
         PaneDecoration decoration(slot,&page,[&]{session.dock();},{});
@@ -227,13 +245,35 @@ void testColorControls() {
         require(registered && dialog.parentWidget()==host && !dialog.isWindow(),"Native Scopes registration or embedded ownership lost");
         require(item->parentWidget()==slot && native->count()==1,"Docked Scopes content was transferred or replaced");
         require(!expand->isEnabled(),"Docked Scopes Expand can steal the floating dialog");
+        require(!scopeExpand->isEnabled(),"Embedded Scopes expansion was not guarded");
         require(dialog.minimumSize().isEmpty() && host->minimumWidth()>=300,"Native Scopes minimum was not delegated to children");
         auto buttons=title->findChildren<QToolButton *>("resolvePaneUndockButton");
         require(buttons.size()==1 && buttons.first()->isChecked(),"Native Scopes header lacks the active Unbound button");
         stack->setCurrentWidget(other);LayoutTest::settle();
         require(registered && renderer->isVisible(),"Changing native tool stopped independent Scopes");
-        page.hide();LayoutTest::settle();page.show();LayoutTest::settle();
+        page.hide();LayoutTest::settle();
+        require(session.active() && !registered && dialog.isWindow() && dialog.parentWidget()==&page
+            && dialog.minimumSize()==QSize(900,500) && buttons.first()->isHidden(),
+            "Page departure trapped global Scopes or retained Color chrome");
+        require(scopeExpand->isEnabled(),"Native Scopes retained the embedded expansion guard");
+        expand->click();LayoutTest::settle();
+        require(registered && dialog.isVisible() && !host->isVisible(),
+            "Native Scopes could not open independently outside Color");
+        dialog.setGeometry(110,130,940,540);LayoutTest::settle();
+        const auto outsideGeometry=dialog.geometry();
+        page.show();LayoutTest::settle();
         require(session.active() && registered && host->isVisible(),"Page hiding docked native Scopes");
+        require(dialog.parentWidget()==host && buttons.first()->isVisible(),"Color return did not reclaim Scopes and chrome");
+        require(!scopeExpand->isEnabled(),"Color return did not restore the expansion guard");
+        page.hide();LayoutTest::settle();
+        require(dialog.isWindow() && dialog.isVisible() && registered && buttons.first()->isHidden(),
+            "Native Scopes visibility choice was lost across Color");
+        require(dialog.geometry()==outsideGeometry,
+            "Native Scopes Show replaced the outside-Color position or size");
+        hide->click();LayoutTest::settle();
+        require(session.active() && !registered,"Closing native Scopes outside Color docked the Color host");
+        page.show();LayoutTest::settle();
+        require(dialog.parentWidget()==host && registered,"Color could not reacquire closed native Scopes");
         hide->click();LayoutTest::settle();
         require(!session.active() && !registered && dialog.parentWidget()==&page && dialog.minimumSize()==QSize(900,500),"Native Scopes close failed to return ownership and constraints");
         require(expand->isEnabled(),"Docked Scopes Expand was not restored");
@@ -251,6 +291,14 @@ void testColorControls() {
         require(session.start(slot,"Scopes",&page,false,false,true,false).isEmpty(),"Repeated Scopes attachment failed");
         dialog.close();LayoutTest::settle();
         require(!session.active() && !registered,"Native Scopes Close did not dock through the session");
+        require(session.start(slot,"Scopes",&page,false,false,true,false).isEmpty(),"Cannot test inactive Scopes retirement");
+        decoration.setFloating(true);page.hide();LayoutTest::settle();
+        expand->click();LayoutTest::settle();
+        require(session.dock().isEmpty(),"Cannot retire suspended Color Scopes");
+        decoration.setFloating(false);LayoutTest::settle();
+        require(registered && dialog.isVisible() && dialog.isWindow() && buttons.first()->isHidden(),
+            "Retiring Color Scopes changed native visibility or exposed Color chrome");
+        hide->click();page.show();LayoutTest::settle();
         stack->removeWidget(slot);slot->hide();slot->deleteLater();
     }
     for(const auto &control:PaneCatalogue::colorControls()) {
