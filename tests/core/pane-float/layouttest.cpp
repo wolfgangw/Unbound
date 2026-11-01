@@ -611,7 +611,7 @@ int main(int argc,char **argv) {
     menu->removeEventFilter(&visibility);
     std::puts("PASS: docked/floating context menus; persistent Save/Recall/Delete; retained hosts; docking, geometry and Edit/Color/Fairlight isolation");
     if(!app.arguments().contains("--preview")) {
-        auto waitDock=[] { QEventLoop loop; QTimer::singleShot(180,&loop,&QEventLoop::quit); loop.exec(); };
+        auto waitDock=[] { QEventLoop loop; QTimer::singleShot(1150,&loop,&QEventLoop::quit); loop.exec(); };
         auto warning=dynamic_cast<UndockButton *>(poolButton);
         require(warning && poolButton->isChecked(),"Missing floating Media Pool before docking safeguard test");
         const auto floatingGeometry=pool.content->window()->geometry();

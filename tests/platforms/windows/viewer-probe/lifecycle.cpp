@@ -323,7 +323,7 @@ int main(int argc,char **argv)
         source->window()->geometry()==sourceRect,"Viewer layout did not restore through startup floating intent");
     program->window()->close(); app.processEvents();
     require(!reloaded.floating(program->objectName()) && reloaded.floating(source->objectName()),"User docking did not preserve separate floating states");
-    auto waitDock=[] { QEventLoop loop; QTimer::singleShot(180,&loop,&QEventLoop::quit); loop.exec(); };
+    auto waitDock=[] { QEventLoop loop; QTimer::singleShot(1150,&loop,&QEventLoop::quit); loop.exec(); };
     experiment->toggleProgram(); app.processEvents();
     const auto beforeFailedDock=program->window()->geometry();
     nativeLayout->setSizeConstraint(QLayout::SetNoConstraint);

@@ -201,11 +201,17 @@ Remaining compatibility checks are in `doc/issues/dual-screen-floating-panels.md
 
 ### Docking safeguard
 
-After native layout settles, a bounded shared check verifies visible allocation,
-including clipping by ancestors. A one-pixel collapsed allocation returns content
+After docking, a shared check observes the pane and its ancestor allocation chain.
+Usable allocation completes after 100 ms without geometry/layout activity; a
+collapsed allocation remains under observation for up to one second, allowing
+queued native layout and main-window placement to settle. The absolute deadline
+is not extended by further events. There is no polling or paint observation.
+A persistently one-pixel collapsed allocation, including ancestor clipping, returns content
 to its saved floating geometry without activation. Inactive pages defer this check;
 respect intentional native hiding and unavailable viewers. Save actual floating
 state without overwriting layout snapshots; incomplete recall can leave one dirty.
+Color Timeline docking during floating-to-docked layout recall is user-validated
+on Windows with this settlement mechanism.
 
 The affected button pulses between muted grey and playhead red until its own menu
 opens, then stays muted. Tooltip/menu guidance remains until successful docking;

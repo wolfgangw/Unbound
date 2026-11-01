@@ -8,26 +8,30 @@
 #include <functional>
 
 namespace Unbound {
-// One bounded check after docking, never a recurring discovery/polling loop.
+// Bounded event-driven settlement after docking, never a polling loop.
 // Page return starts a new settling interval; intentional native hiding is valid.
 class PaneDockingGuard final : public QObject {
 public:
     explicit PaneDockingGuard(QObject *owner) : QObject(owner) {
         m_timer.setSingleShot(true); m_timer.setInterval(100);
-        connect(&m_timer,&QTimer::timeout,this,[this] { check(); });
+        m_deadline.setSingleShot(true); m_deadline.setInterval(1000);
+        connect(&m_timer,&QTimer::timeout,this,[this] { check(false); });
+        connect(&m_deadline,&QTimer::timeout,this,[this] { check(true); });
     }
     ~PaneDockingGuard() override { cancel(); }
     void cancel() {
         m_timer.stop();
+        m_deadline.stop();
         m_work.clear();
-        if(m_page) m_page->removeEventFilter(this);
+        for(auto widget:m_ancestors) if(widget) widget->removeEventFilter(this);
+        m_ancestors.clear();
         m_page=nullptr; m_content=nullptr; m_finished={};
     }
     void watch(QWidget *content,QWidget *page,std::function<void(bool)> finished) {
         cancel(); m_content=content; m_page=page; m_finished=std::move(finished);
 
-        m_work.set(page);
-        if(m_page) { m_page->installEventFilter(this); if(m_page->isVisible()) m_timer.start(); }
+        observeAncestors();
+        if(m_page && m_page->isVisible()) beginSettlement();
     }
     static bool collapsed(QWidget *content,QWidget *page) {
         if(!content || !page || !page->isAncestorOf(content) || !content->isVisibleTo(page)) return false;
@@ -42,22 +46,44 @@ public:
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
         if(object==m_page) {
-            if(event->type()==QEvent::Hide) {m_timer.stop();m_work.clear();}
-            else if(event->type()==QEvent::Show) {m_work.set(m_page);m_timer.start();}
+            if(event->type()==QEvent::Hide) {m_timer.stop();m_deadline.stop();m_work.clear();}
+            else if(event->type()==QEvent::Show) beginSettlement();
         }
+        if(event->type()==QEvent::ParentChange) observeAncestors();
+        if(m_deadline.isActive() && (event->type()==QEvent::Resize || event->type()==QEvent::Move
+            || event->type()==QEvent::LayoutRequest || event->type()==QEvent::Show
+            || event->type()==QEvent::Hide || event->type()==QEvent::ParentChange)) m_timer.start();
         return false;
     }
 private:
-    void check() {
+    void observeAncestors() {
+        for(auto widget:m_ancestors) if(widget) widget->removeEventFilter(this);
+        m_ancestors.clear();
+        for(auto widget=m_content.data();widget;widget=widget->parentWidget()) {
+            m_ancestors.append(widget); widget->installEventFilter(this);
+            if(widget==m_page) break;
+        }
+        if(m_page && !m_ancestors.contains(m_page)) {
+            m_ancestors.append(m_page); m_page->installEventFilter(this);
+        }
+    }
+    void beginSettlement() {
+        m_work.set(m_page); m_deadline.start(); m_timer.start();
+    }
+    void check(bool deadline) {
         if(!m_page || !m_content) { cancel(); return; }
         if(!m_page->isVisible()) return;
         const bool failed=collapsed(m_content,m_page);
+        // A quiet but collapsed intermediate allocation is not yet failure.
+        // Keep observing until allocation recovers or the absolute cap expires.
+        if(failed && !deadline) return;
 
         auto finished=std::move(m_finished); cancel();
         if(finished) finished(failed);
     }
     QPointer<QWidget> m_content,m_page;
-    QTimer m_timer;
+    QList<QPointer<QWidget>> m_ancestors;
+    QTimer m_timer,m_deadline;
     LayoutPendingWork m_work;
     std::function<void(bool)> m_finished;
 };
