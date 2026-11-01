@@ -15,6 +15,7 @@
 #include "panedecoration.h"
 #include "editviewers.h"
 #include "editscopes.h"
+#include "colortoolselection.h"
 #include "pagelayoutmenu.h"
 #include "pagefocus.h"
 #include "gridreferenceevent.h"
@@ -73,6 +74,7 @@ public:
     {
         if(qApp) qApp->removeEventFilter(this);
         delete m_layoutMenu.data();
+        delete m_colorTools.data();
         delete m_editScopes.data();
         delete m_viewers.data();
         m_mainPlacement.flush();
@@ -215,6 +217,7 @@ private:
         menu->popup(button ? button->mapToGlobal(QPoint(0,button->height())) : position,button);
     }
     QString dockAll(const QString &page) {
+        if(page=="WStackPage_Color" && m_colorTools)m_colorTools->cancel();
         if(currentPage()!=page) return QStringLiteral("Return to this page before docking its panels.");
         if(!m_settings.readError().isEmpty()) return m_settings.readError();
         for(const auto &name:m_initializingNative)
@@ -270,6 +273,7 @@ private:
             buttons.first()->click();
     }
     QString recallLayout(const QString &page,const QString &layoutId,bool &applied) {
+        if(page=="WStackPage_Color" && m_colorTools)m_colorTools->cancel();
         applied=false;
         if(currentPage()!=page) return QStringLiteral("Return to this page before recalling its configuration.");
         if(!m_settings.readError().isEmpty()) return m_settings.readError();
@@ -732,6 +736,8 @@ private:
         // Project Manager/other pages can exist before Edit is ready. Keep
         // intent pending, without selecting a page or touching empty layouts.
         if (QCoreApplication::closingDown() || QApplication::activeModalWidget()) return;
+        if(!m_colorTools && m_window)if(auto page=m_window->findChild<QWidget *>("WStackPage_Color"))
+            m_colorTools=new Unbound::ColorToolSelection(page,this);
         if(!m_editScopes && m_window)if(auto page=m_window->findChild<QWidget *>("WStackPage_Conform")) {
             m_editScopes=new Unbound::EditScopes(m_window,page,m_settings,this);
             m_editScopes->report=[this](const QString &message){settingsError(message);};
@@ -800,6 +806,7 @@ private:
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
     QPointer<Unbound::EditScopes> m_editScopes;
+    QPointer<Unbound::ColorToolSelection> m_colorTools;
     QPointer<QWidget> m_editPlayers;
     QPointer<Unbound::PageLayoutMenu> m_layoutMenu;
     QSet<QWidget *> m_pages;

@@ -465,6 +465,20 @@ width is 240 logical pixels for labels/clip bars; native height resizing, track
 scrolling and clip selection remain Resolve's. Native resizing/selection are
 validated on Windows.
 
+### Color tool selection
+
+`ColorToolSelection` retains the checked, catalogued selectors in `frameColorBottom`
+on page departure, before native Scopes handoff changes them. Restore through native
+button actions after queued page-return work, preserving every visible tool region
+without assuming a two- or three-region arrangement. Observe selector changes for
+at most one second after return; coalesce corrections without polling. New input,
+explicit layout recall/Dock all, app departure and teardown cancel restoration.
+Rapid page switches retain the outgoing intent rather than intermediate native
+choices. Hidden/disabled controls remain native. Only queued correction work enters
+transition readiness. Selection memory is session-only, with no settings/schema or
+layout-snapshot changes; main-window hiding/minimization is not page departure.
+Tracker/Info preservation across Edit/Color page return is user-validated on macOS.
+
 ### Color Clips
 
 Resolve shares the native `m_pLightBox` instance between Color and Fusion by

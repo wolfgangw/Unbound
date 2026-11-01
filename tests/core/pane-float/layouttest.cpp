@@ -256,6 +256,7 @@ void testColorClips();
 void testColorViewer();
 void testColorControls();
 void testEditScopes();
+void testColorToolSelection();
 void testColorClipsStartup();
 void testPageFocus();
 void testIndexHeaderDrag();
@@ -274,6 +275,7 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--layout-cover-only")) { testLayoutCoverPresentation(); return 0; }
 #endif
     if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
+    if(app.arguments().contains("--color-tool-selection-only")) { testColorToolSelection(); return 0; }
     if(app.arguments().contains("--edit-scopes-only")) { testEditScopes(); return 0; }
     if(app.arguments().contains("--transition-only")) { testLayoutTransition(); testColorPlaybackPause(); return 0; }
     if(app.arguments().contains("--color-clips-startup")) { testColorClipsStartup(); return 0; }
@@ -284,7 +286,7 @@ int main(int argc,char **argv) {
         testLayoutReadiness();
         testLayoutTransition();testColorPlaybackPause();
         testHostLifecycle();
-        LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testEditScopes(); testColorClips(); storage(); layoutIdentity();
+        LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testEditScopes(); testColorToolSelection(); testColorClips(); storage(); layoutIdentity();
         testPageFocus();
         testDockingGuard();
         testWindowGroup();
