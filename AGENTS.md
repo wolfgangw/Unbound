@@ -43,7 +43,7 @@ These distribution limitations do not imply missing features.
 
 | Page | Supported content |
 | --- | --- |
-| Edit | Media Pool, Effects, Sound Library, Keyframe Editor, Edit Index, Inspector, Metadata, Mixer, Program and Source viewers |
+| Edit | Media Pool, Effects, Sound Library, Keyframe Editor, Edit Index, Inspector, Metadata, Mixer, Program and Source viewers, floating Video Scopes |
 | Color | Nodes, Gallery, LUTs, Media Pool, Effects, Timeline, Clips, Viewer and lower Color controls (listed below) |
 | Fairlight | Media Pool, Effects, Index, Groups, Sound Library, ADR, Mixer, Metadata, Inspector; Meters excluded |
 
@@ -69,6 +69,7 @@ existing modules; an unaffected platform explicitly supplies no extra workaround
 | `sidebarfloatsession.h`, `panefloatsession.h` | Reparent native content into hosts; preserve/restore original layout slots, constraints and ownership |
 | `panedecoration.h`, `paneheaderdrag.h` | Dock buttons and scoped header movement |
 | `editviewers.h`, `viewergeometryadapter.h` | Edit viewer lifecycle and timeline space reclamation |
+| `editscopes.h`, `nativescopescontent.h` | Edit Scopes visibility/layout lifecycle and shared exclusive ownership of the native Scopes renderer |
 | `colorclipsadapter.h`, `colorclipssidebars.h`, `colorclipstoolbar.h` | Lightbox mode, Color allocation/dividers and reversible toolbar transfer |
 | `panesettings.h`, `geometryjson.h`, `mainwindowplacement.h` | JSON persistence, geometry conversion, per-page placement and monitor checks |
 | `pagelayoutmenu.h`, `pagefocus.h` | Layout UI and session-only page focus |
@@ -404,6 +405,40 @@ and ownership changes; Source hiding marks return to Program even when Resolve's
 show is already satisfied. Page/host hiding still wins. No frame copying, playback
 interception or changes to native Source preview/viewer mode.
 
+### Edit Scopes
+
+`editscopes.h` adopts native `UiWaveformWindow` directly when opened on Edit through
+Workspace > Video Scopes. Observe the catalogued `workspaceVideoScopesToggle`
+action and named native window events; preserve native command/shortcut routing
+and renderer initialization. No extra adoption click, toolbar toggle or dock slot
+is introduced. Add the Unbound button before the native window options, with
+header/button dragging, snapping, Always on top and the Edit layout menu.
+Explicit Workspace On activates the adopted host like manual undocking, subject
+to application/modal priority and normal pinned-window ordering. Startup, layout
+recall and page return remain nonactivating; remembered geometry does not change
+this distinction.
+The button click, host close, Workspace Off and Dock all close Scopes; no native
+docked allocation check applies to this floating-only lifecycle.
+
+Persist Edit visibility and geometry under its own `UiWaveformWindow` pane entry;
+older layouts omit it and therefore recall with Edit Scopes closed. Existing
+settings/snapshots require no migration or rewriting. Native opening dirties the
+active Edit layout normally. Startup and layout recall initialize Scopes through
+its native action. Page departure retains Edit's floating intent and host, closes
+the native renderer while visible, and returns native ownership before hiding the
+host. Color can then acquire that same renderer through `NativeScopesContent`.
+Page release runs in the page's object filter, after application-level transition
+capture. The application-wide native-window observer only schedules adoption;
+it must not release content or hide hosts before that capture.
+Edit return reacquires it with Edit's placement; neither page writes the other's
+visibility, geometry or layout. Closing releases the empty host. The shared
+geometry restoration and main-resize observers apply to the Edit host too.
+Fixtures cover QWidget/QDialog shells, native commands, closing, page handoff,
+geometry, startup and layouts. Windows explicit opening/activation and outgoing
+transition coverage are user-validated. Broader Windows lifecycle coverage, macOS
+and coexistence with native Dual Screen allocations remain pending. This manages the global
+floating window, not a separate secondary-screen docked Scopes view.
+
 ### Audition players
 
 `auditionactivationbridge.h` serves Edit/Fairlight Sound Library, Fairlight Media
@@ -644,8 +679,8 @@ native visibility/geometry and embeds the window again. Closing native Scopes or
 retiring the inactive Color host must not change the other owner's intent.
 Main-window hiding/minimization alone does not hand ownership back. This is shared,
 event-driven Qt code. Windows native outside-Color visibility, placement and
-transition-cover behavior are user-validated; Edit's automatic adoption is a
-separate lifecycle requiring fresh validation.
+transition-cover behavior are user-validated. Edit's automatic adoption has its
+own lifecycle and validation coverage described above.
 
 `widgetquirks.h` attaches platform-specific work for the embedded Scopes lifetime.
 The macOS quirk invalidates visible native `titleFrame`/`headerFrame` subtrees after

@@ -14,6 +14,7 @@
 #include "sidebarfloatsession.h"
 #include "panedecoration.h"
 #include "editviewers.h"
+#include "editscopes.h"
 #include "pagelayoutmenu.h"
 #include "pagefocus.h"
 #include "gridreferenceevent.h"
@@ -46,6 +47,7 @@ public:
         m_mainPlacement.error = [this](const QString &message) { settingsError(message); };
         m_names = Catalogue::sidebarNames();
         m_pageTransition.hasFloating=[this](const QString &page) {
+            if(page=="WStackPage_Conform" && m_editScopes && m_editScopes->active())return true;
             if(page=="WStackPage_Conform" && m_viewers && m_viewers->hasFloating())return true;
             for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it)
                 if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && it.value()->active())return true;
@@ -71,6 +73,7 @@ public:
     {
         if(qApp) qApp->removeEventFilter(this);
         delete m_layoutMenu.data();
+        delete m_editScopes.data();
         delete m_viewers.data();
         m_mainPlacement.flush();
         m_mainPlacement.error = {};
@@ -108,7 +111,7 @@ protected:
                     auxiliary && name==auxiliary->auxiliaryWindow) queueBranch(widget);
                 else if (!Catalogue::pageForRoot(name).isEmpty())
                     { if (!m_pages.contains(widget)) queueBranch(widget); else scheduleDiscovery(); }
-                else if (m_names.contains(name) || name=="frameEditPageVideoPlayers") { indexWidget(widget); scheduleDiscovery(); }
+                else if (m_names.contains(name) || name=="frameEditPageVideoPlayers" || name=="UiWaveformWindow") { indexWidget(widget); scheduleDiscovery(); }
                 else if (m_watchedToggles.contains(qobject_cast<QAbstractButton *>(widget))) scheduleDiscovery();
             }
             break;
@@ -145,6 +148,7 @@ private:
         m_lastSettingsError.clear();
         m_mainPlacement.refresh(); m_mainPlacement.flush();
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->flushGeometry();
+        if(page=="WStackPage_Conform" && m_editScopes)m_editScopes->flushGeometry();
         for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
             const auto key=settingsKey(it.key());
             if(Unbound::PaneSettings::pageForPane(key)!=page) continue;
@@ -160,6 +164,7 @@ private:
         return m_lastSettingsError;
     }
     QWidget *floatingHost(const QString &name) const {
+        if(name==Unbound::EditScopes::key() && m_editScopes)return m_editScopes->host();
         if(auto session=m_sessions.value(name)) return session->floatingWindow();
         for(auto window:QApplication::topLevelWidgets())
             if(window->property("unboundFloatingWindow").toBool()
@@ -172,6 +177,7 @@ private:
         delete m_layoutMenu.data();
         auto menu=new Unbound::PageLayoutMenu(m_settings,page,m_window,[this,page] {
             if(currentPage()!=page) return false;
+            if(page=="WStackPage_Conform" && m_editScopes && m_editScopes->active())return true;
             if(page=="WStackPage_Conform" && m_viewers && m_viewers->hasFloating()) return true;
             for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it)
                 if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && it.value()->active()) return true;
@@ -228,6 +234,7 @@ private:
             const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
         }
         normalColorLayout(page,{});
+        if(page=="WStackPage_Conform" && m_editScopes)m_editScopes->close();
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->prepareLayout({});
         // Clear retained startup intent too: a not-yet-created native pane or
         // Source viewer must not float later after the user chose Dock all.
@@ -300,6 +307,7 @@ private:
             }
         }
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->prepareLayout(panes);
+        if(page=="WStackPage_Conform" && m_editScopes)m_editScopes->prepareLayout(panes);
         const auto error=m_settings.activateLayout(page,layoutId);
         if(!error.isEmpty()) return error;
         normalColorLayout(page,panes);
@@ -318,6 +326,7 @@ private:
         }
         m_mainPlacement.reloadCurrent();
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->restoreLayout();
+        if(page=="WStackPage_Conform" && m_editScopes)m_editScopes->restoreLayout();
         scheduleDiscovery();
         transition.complete();
         playbackRecall.complete();
@@ -723,6 +732,14 @@ private:
         // Project Manager/other pages can exist before Edit is ready. Keep
         // intent pending, without selecting a page or touching empty layouts.
         if (QCoreApplication::closingDown() || QApplication::activeModalWidget()) return;
+        if(!m_editScopes && m_window)if(auto page=m_window->findChild<QWidget *>("WStackPage_Conform")) {
+            m_editScopes=new Unbound::EditScopes(m_window,page,m_settings,this);
+            m_editScopes->report=[this](const QString &message){settingsError(message);};
+            m_editScopes->contextMenu=[this](QWidget *button,const QPoint &position) {
+                openLayouts("WStackPage_Conform",button,position,Unbound::EditScopes::key());
+            };
+        }
+        if(m_editScopes)m_editScopes->refresh();
         if (!m_viewers && m_window) {
             auto page=m_window->findChild<QWidget *>("WStackPage_Conform");
             auto players=page && page->isVisible() ? m_editPlayers.data() : nullptr;
@@ -782,6 +799,7 @@ private:
     Unbound::LayoutRestorePolicy::PlaybackHold m_colorPlayback;
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
+    QPointer<Unbound::EditScopes> m_editScopes;
     QPointer<QWidget> m_editPlayers;
     QPointer<Unbound::PageLayoutMenu> m_layoutMenu;
     QSet<QWidget *> m_pages;

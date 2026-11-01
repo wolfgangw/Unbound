@@ -14,6 +14,7 @@ function(unbound_add_layout_tests backend adapter)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/colorclipstest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/colorviewertest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/colorcontroltest.cpp"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/editscopestest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pagefocustest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/windowgrouptest.cpp"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/layoutreadinesstest.cpp"

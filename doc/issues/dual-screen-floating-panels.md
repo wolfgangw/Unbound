@@ -11,6 +11,10 @@ Remaining checks of implemented compatibility behavior:
 
 - Include Edit Program/Source viewers in mode-exit and page-departure/return
   checks; their page association has a separate implementation path.
+- Validate direct Workspace opening of Edit Video Scopes alongside native Dual
+  Screen Scopes allocations, including mode exit and Edit/Color round trips.
+  Unbound manages the global floating window; a separate native secondary-screen
+  allocation must not be mistaken for that window or adopted twice.
 
 Fixtures cover page association for every catalogue entry, host visibility and
 reversible docking on all supported pages, auxiliary startup discovery and Edit

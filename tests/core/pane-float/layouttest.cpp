@@ -255,6 +255,7 @@ void testPaneCatalogue();
 void testColorClips();
 void testColorViewer();
 void testColorControls();
+void testEditScopes();
 void testColorClipsStartup();
 void testPageFocus();
 void testIndexHeaderDrag();
@@ -273,6 +274,7 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--layout-cover-only")) { testLayoutCoverPresentation(); return 0; }
 #endif
     if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
+    if(app.arguments().contains("--edit-scopes-only")) { testEditScopes(); return 0; }
     if(app.arguments().contains("--transition-only")) { testLayoutTransition(); testColorPlaybackPause(); return 0; }
     if(app.arguments().contains("--color-clips-startup")) { testColorClipsStartup(); return 0; }
     if(app.arguments().contains("--index-header-drag")) { testIndexHeaderDrag(); return 0; }
@@ -282,7 +284,7 @@ int main(int argc,char **argv) {
         testLayoutReadiness();
         testLayoutTransition();testColorPlaybackPause();
         testHostLifecycle();
-        LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testColorClips(); storage(); layoutIdentity();
+        LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testEditScopes(); testColorClips(); storage(); layoutIdentity();
         testPageFocus();
         testDockingGuard();
         testWindowGroup();
@@ -319,11 +321,35 @@ int main(int argc,char **argv) {
     auto audio=new QWidget(stack); audio->setObjectName("WStackPage_Audio"); stack->addWidget(audio);
     auto audioLayout=new QVBoxLayout(audio);
     const auto groups=panel(audio,audioLayout,"frameAudioPanelGroupsContainer","btnAudioPanelGroupsInSSM","frameHeaderTitle","m_BtnMenu");
+    QDialog nativeScopes(&main);nativeScopes.setObjectName("UiWaveformWindow");
+    auto scopesLayout=new QVBoxLayout(&nativeScopes);
+    auto scopesTitle=new QWidget;scopesTitle->setObjectName("titleFrame");scopesLayout->addWidget(scopesTitle);
+    auto scopesRow=new QHBoxLayout(scopesTitle);
+    auto scopesHide=new QPushButton("Close");scopesHide->setObjectName("btnHide");scopesRow->addWidget(scopesHide);
+    auto scopesOptions=new QPushButton("Options");scopesOptions->setObjectName("btnWaveformViewerOptions");scopesRow->addWidget(scopesOptions);
+    scopesLayout->addWidget(new QLabel("Scope signal"));
+    QAction scopesToggle(&main);scopesToggle.setObjectName("workspaceVideoScopesToggle");scopesToggle.setCheckable(true);
+    QObject::connect(&scopesToggle,&QAction::triggered,&nativeScopes,[&](bool on){nativeScopes.setVisible(on);});
+    QObject::connect(scopesHide,&QPushButton::clicked,&nativeScopes,[&]{scopesToggle.setChecked(false);nativeScopes.hide();});
     main.setGeometry(30,40,650,450); main.show(); settle();
     const auto initialNative=LayoutTest::prepareMainPlacement(main);
     require(startController(),"Cannot start layout controller"); settle();
     auto poolButton=pool.pane->findChild<QToolButton *>("resolvePaneUndockButton");
     require(poolButton,"Controller did not decorate Media Pool");
+    scopesToggle.trigger();settle();
+    auto scopesButton=nativeScopes.findChild<UndockButton *>("resolvePaneUndockButton");
+    require(scopesButton && scopesButton->isChecked() && nativeScopes.window()!=&nativeScopes,
+        "Controller did not adopt Workspace Scopes directly");
+    context(scopesButton);settle();
+    auto scopesMenu=main.findChild<PageLayoutMenu *>("unboundLayoutMenu");
+    require(scopesMenu && scopesMenu->page()=="WStackPage_Conform","Scopes opened the wrong page's layout menu");
+    auto scopesPin=scopesMenu->findChild<QCheckBox *>("unboundKeepAtop");
+    require(scopesPin && scopesPin->isEnabled(),"Edit Scopes lacks its stacking preference");
+    click(scopesPin);require(nativeScopes.window()->property("unboundKeepAtop").toBool(),"Edit Scopes pin did not reach its host");
+    click(scopesPin);click(control(scopesMenu,"unboundLayoutDockAll"));settle();
+    require(nativeScopes.isWindow() && !nativeScopes.isVisible() && !scopesToggle.isChecked(),
+        "Controller Dock all did not close Edit Scopes");
+    scopesMenu->dismiss();
     // A pane without a native visibility action must not leave a docking
     // request behind that blocks readiness on every subsequent page return.
     stack->setCurrentWidget(color); settle();

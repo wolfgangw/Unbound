@@ -9,7 +9,7 @@ namespace Unbound {
 // discovery, decoration and persistence; specialized layout adapters stay in core.
 namespace PaneCatalogue {
 enum class Page { Edit, Color, Fairlight, Media, Cut, Fusion, Deliver };
-enum class Kind { Sidebar, Viewer };
+enum class Kind { Sidebar, Viewer, NativeWindow };
 enum class Header { None, MediaPool, SoundLibrary, Keyframes, Effects, Index,
     Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner, ClipsGutter, ColorViewer, ColorControl };
 struct PageDescriptor {
@@ -92,6 +92,7 @@ struct PaneDescriptor {
     bool initializeBeforeRestore;
     Kind kind=Kind::Sidebar;
     QString additionalDragHeader;
+    QString nativeVisibilityAction;
     QString settingsKey() const { return PaneCatalogue::page(page).settingsPrefix+objectName; }
     QStringList toggleNames() const {
         QStringList names;
@@ -119,6 +120,7 @@ inline const QVector<PaneDescriptor> &panes() {
         {"frameEditPageInspector","Inspector",Page::Edit,"Inspector","inspector",Header::Inspector,true},
         {"frameEditPageMetadata","Metadata",Page::Edit,"Metadata","metadata",Header::Metadata,true},
         {"frameEditAudioMeter","Mixer",Page::Edit,"Mixer","mixer",Header::Mixer,true},
+        {"UiWaveformWindow","Scopes",Page::Edit,"","",Header::None,false,Kind::NativeWindow,"","workspaceVideoScopesToggle"},
         {"m_pFrameNodeGraph","Nodes",Page::Color,"btnColorToggleNodeGraph","nodes",Header::Nodes,true},
         {"m_pWidgetGallery","Gallery",Page::Color,"btnColorToggleGallery","gallery",Header::Gallery,true},
         {"m_pWidgetLutBrowser","LUTs",Page::Color,"btnColorToggleLutsBrowser","luts",Header::Luts,true},
