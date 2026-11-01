@@ -387,7 +387,7 @@ public:
         recoverFloatingGraph();
         const bool layoutIntact = m_nativePalette ? m_nativePalette->intact() : m_nativeLayout
             ? (m_content && m_hostLayout && m_slot && m_slot->layout() == m_nativeLayout
-                && m_host->layout() == m_hostLayout && m_content->parentWidget() == m_host)
+                && m_host->layout() == m_hostLayout && m_content->parentWidget() == (m_contentReturned ? m_slot : m_host))
             : (m_slot && m_layoutSlot && m_layout && m_placeholderLayout && m_layoutSlot->layout() == m_placeholderLayout
                 && m_host->layout() == m_layout);
         if (!layoutIntact || (!m_nativePalette && !m_placeholder))
@@ -423,9 +423,9 @@ public:
         m_host->removeEventFilter(this);
         if (m_nativeLayout) {
             m_content->removeEventFilter(this);
-            m_hostLayout->removeWidget(m_content);
+            if(!m_contentReturned) m_hostLayout->removeWidget(m_content);
             delete m_placeholder.data();
-            addNativeContent(m_content);
+            if(!m_contentReturned) addNativeContent(m_content);
             m_content->setVisible(!m_contentWasHidden);
         } else if(!nativePalette) {
             delete m_placeholderLayout.data();
@@ -468,6 +468,9 @@ protected:
                     static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
                     rememberGeometry();
                     m_returnFade->stop();
+                }
+                returnSharedContent(true);
+                if(m_hiddenByPage) {
                     m_host->hide();
                     m_host->setWindowOpacity(1.0);
                 }
@@ -481,6 +484,7 @@ protected:
                     m_pageReturnWork.clear();
                     if (!m_host || !m_root || !m_root->isVisible() || !m_hiddenByPage || m_generation != generation) return;
                     m_hiddenByPage = false;
+                    returnSharedContent(false);
                     const auto returningGeometry=m_mainResizeGeometry
                         ?m_mainResizeGeometry->intendedGeometry(m_savedGeometry):m_savedGeometry;
                     if (m_host->layout()) m_host->layout()->activate();
@@ -577,7 +581,7 @@ private:
     }
     void recoverFloatingGraph()
     {
-        if (m_restoring || m_recoveringGraph || !m_nativeLayout || !m_slot
+        if (m_contentReturned || m_restoring || m_recoveringGraph || !m_nativeLayout || !m_slot
             || m_slot->layout() != m_nativeLayout || !m_content || !m_host || !m_hostLayout
             || m_host->layout() != m_hostLayout) return;
         m_recoveringGraph = true;
@@ -585,6 +589,28 @@ private:
             m_hostLayout->addWidget(m_content);
         if (m_content->isHidden()) m_content->show();
         m_recoveringGraph = false;
+    }
+    void returnSharedContent(bool returned)
+    {
+        // Resolve moves the same Clips slot into Fusion. Keep Color's host and
+        // floating intent, but let the native page borrow its real content.
+        if(!m_clipsAdapter || !m_nativeLayout || !m_content || !m_slot || !m_hostLayout
+            || returned==m_contentReturned) return;
+        m_recoveringGraph=true;
+        m_contentReturned=returned;
+        if(returned) {
+            m_nativeLayout->removeWidget(m_placeholder);
+            m_placeholder->hide();
+            m_hostLayout->removeWidget(m_content);
+            addNativeContent(m_content);
+        } else {
+            m_nativeLayout->removeWidget(m_content);
+            m_hostLayout->addWidget(m_content);
+            addNativeContent(m_placeholder);
+            m_placeholder->show();
+        }
+        m_content->show();
+        m_recoveringGraph=false;
     }
     void restoreNativeExpand() { delete m_expandGuard; m_expandGuard=nullptr; }
     ColorExpandGuard *m_expandGuard=nullptr;
@@ -608,6 +634,7 @@ private:
         m_nativeToggleConnections.clear();
         if (m_content) m_content->removeEventFilter(this);
         m_graphRecoveryQueued = false;
+        m_contentReturned = false;
         m_nativeLayout = nullptr; m_hostLayout = nullptr; m_content = nullptr;
         m_hiddenByPage = false;
         m_splitter = nullptr; m_splitterSizes.clear(); m_splitterWidgets.clear();
@@ -629,6 +656,7 @@ private:
     QPointer<QWidget> m_content;
     QList<QMetaObject::Connection> m_nativeToggleConnections;
     bool m_graphRecoveryQueued = false;
+    bool m_contentReturned = false;
     bool m_recoveringGraph = false;
     Qt::Alignment m_contentAlignment;
     int m_gridRow = 0, m_gridColumn = 0, m_gridRows = 1, m_gridColumns = 1;

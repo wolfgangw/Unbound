@@ -426,6 +426,16 @@ validated on Windows.
 
 ### Color Clips
 
+Resolve shares the native `m_pLightBox` instance between Color and Fusion by
+moving its enclosing container. While Color is inactive, return its content to
+the retained native layout and hide the floating placeholder; retain Color's host,
+geometry and floating intent. Page return transfers content back before revealing
+the host. Native graph recovery must respect this temporary return, and docking
+must also work while content is returned. The Color button and gutter are removed
+outside the catalogued Color page context, including when Clips is docked.
+This uses shared Qt ownership and page events, not duplicated content or polling.
+The Fusion round trip is user-validated on Windows; macOS validation remains pending.
+
 Floating Clips uses native Lightbox rendering, thumbnail sizing, filtering,
 timecode ruler and overflow scrolling. Minimum host size is 360 by 240 logical
 pixels; Windows reflows on resize release. The floating button sits at the top-left
@@ -1097,5 +1107,5 @@ stays under `build/macos/` with an isolated `UNBOUND_LOG_FILE`.
 `run-gammaray.cmd` and page snapshots; see its README for capture steps. Use a fresh
 Resolve session without Unbound for native captures and verify `truncated: false`.
 Edit root is `WStackPage_Conform`, Color `WStackPage_Color`, Fairlight
-`WStackPage_Audio`. The repository is otherwise self-contained apart from the
+`WStackPage_Audio`, Fusion `WStackPage_Fusion`. The repository is otherwise self-contained apart from the
 installed toolchain and Resolve.

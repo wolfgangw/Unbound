@@ -261,8 +261,22 @@ void testColorClips() {
     require(region.isHidden() && player.height()==380,"Hidden Timeline did not release viewer space");
     page.hide(); settle();
     require(session.active() && !host->isVisible(),"Page departure docked or leaked Clips");
+    QWidget fusion(&main); fusion.setObjectName("WStackPage_Fusion");
+    region.setParent(&fusion); fusion.show(); region.show(); slot.show(); settle();
+    require(content->parentWidget()==&slot && content->isVisible(),
+        "Fusion did not receive the shared native Clips content");
+    require(button->isHidden() && content->contentsMargins().left()==0,
+        "Color Clips decoration leaked into Fusion");
+    require(slot.findChildren<QLabel *>("unboundSidebarPlaceholder").first()->isHidden(),
+        "Floating placeholder remained visible in Fusion");
+    // Native visibility/layout activity must not reclaim the borrowed content.
+    content->hide(); content->show(); settle();
+    require(content->parentWidget()==&slot,"Graph recovery stole Fusion Clips");
+    fusion.hide(); region.setParent(&root); region.show(); slot.show();
     page.show(); settle();
     require(session.floatingWindow()==host && host->isVisible() && player.isVisible(),"Page return did not retain Clips host/adapter");
+    require(content->window()==host && button->isVisible() && content->contentsMargins().left()==32,
+        "Color return did not restore floating Clips content and decoration");
     page.hide(); settle();
     require(session.dock().isEmpty(),"Hidden-page Clips docking failed"); decoration.setFloating(false); settle();
     require(mode.isChecked(),"Hidden-page docking changed native mode prematurely");

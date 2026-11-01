@@ -2,6 +2,7 @@
 #ifndef UNBOUND_PANEDECORATION_H
 #define UNBOUND_PANEDECORATION_H
 #include "panecatalogue.h"
+#include "panepagecontext.h"
 #include "colornativepalette.h"
 #include <QWidget>
 #include <QToolButton>
@@ -215,7 +216,10 @@ public:
     QWidget *pane() const { return m_pane; }
     QToolButton *button() const { for(auto b:m_buttons) if(b) return b; return nullptr; }
     bool usesNativeHeader() const { return m_native; }
-    void refreshNativeHeader() { if(m_pane && PaneCatalogue::colorControl(m_pane->objectName())) refresh(); }
+    void refreshNativeHeader() {
+        updateClipsContext();
+        if(m_pane && PaneCatalogue::colorControl(m_pane->objectName())) refresh();
+    }
     void setDockingFailure(const QString &message) {
         m_failure=message;
         for(auto b:m_buttons) if(b) static_cast<UndockButton *>(b.data())->setDockingFailure(message);
@@ -234,6 +238,7 @@ public:
 protected:
     bool eventFilter(QObject *object,QEvent *event) override
     {
+        if(event->type()==QEvent::Show || event->type()==QEvent::ParentChange) updateClipsContext();
         if(event->type()==QEvent::ShowToParent || event->type()==QEvent::HideToParent)
             for(const auto &pair:m_menuButtons) if(pair.first==object && pair.second)
                 pair.second->setVisible(!pair.first->isHidden());
@@ -244,6 +249,17 @@ protected:
         return false;
     }
 private:
+    bool updateClipsContext() {
+        if(!m_pane || m_pane->objectName()!=QLatin1String("m_pLightBox")) return true;
+        const bool available=panePageContext(m_pane,m_pane->window())!=nullptr;
+        if(m_gutterContent) {
+            const auto desired=m_gutterMargins+(available ? QMargins(32,0,0,0) : QMargins());
+            if(m_gutterContent->contentsMargins()!=desired) m_gutterContent->setContentsMargins(desired);
+        }
+        if(m_gutterDragSurface) m_gutterDragSurface->setVisible(available);
+        for(auto button:m_buttons) if(button) button->setVisible(available);
+        return available;
+    }
     bool requiresNativeHeader() const
     {
         const auto pane=PaneCatalogue::find(m_pane->objectName());
@@ -302,6 +318,7 @@ private:
     QList<QPointer<QWidget>> m_controlDragSurfaces;
     void refresh()
     {
+        if(!updateClipsContext()) return;
         if(m_refreshing || !m_pane || (m_floating && !PaneCatalogue::colorControl(m_pane->objectName()))) return;
 
         m_refreshing=true;
@@ -452,6 +469,7 @@ private:
     }
     void position()
     {
+        if(!updateClipsContext()) return;
         if(m_gutterContent && button()) {
             // Keep floating Clips at the top-left of its reserved gutter,
             // independent of the native filtering header and thumbnail rows.
