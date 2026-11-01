@@ -176,7 +176,9 @@ static void testUndockDrag() {
                 auto transfer=[&] {
                     if(mode==0) target=source;
                     else { delete source.data(); target=new UndockButton; target->setCheckable(true); }
-                    target->setFixedSize(20,20); layout->addWidget(target); target->setFloatingState(true);
+                    // Model a header button at the top, not vertically centered in the
+                    // host: the latter can require offscreen placement near the menu bar.
+                    target->setFixedSize(20,20); layout->addWidget(target,0,Qt::AlignTop); target->setFloatingState(true);
                     host.move(900,500); PaneUndockDrag::prepareHost(&host);
                     require(PaneUndockDrag::ownsHost(&host),"Tearoff host was not recognized for delayed activation");
                     require(host.windowOpacity()==0,"Undock host exposed remembered placement before anchoring");
