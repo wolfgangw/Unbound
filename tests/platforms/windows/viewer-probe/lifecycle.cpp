@@ -141,10 +141,12 @@ int main(int argc,char **argv)
             "Source activation bridge changed the active window");
         const int beforeProgram=app.mainActivations;
         QApplication::setActiveWindow(program->window()); app.processEvents();
-        require(app.mainActivations==beforeProgram,
-            "Program activation unexpectedly synthesized main activation");
-        QApplication::setActiveWindow(source->window()); app.processEvents();
         require(app.mainActivations==beforeProgram+1,
+            "Floating Program activation did not restore native page command context exactly once");
+        require(QApplication::activeWindow()==program->window(),
+            "Program activation bridge changed the active window");
+        QApplication::setActiveWindow(source->window()); app.processEvents();
+        require(app.mainActivations==beforeProgram+2,
             "Returning to floating Source did not restore native page command context");
         if(pass==0) {
             context(program); context(source);

@@ -17,7 +17,7 @@
 #include "windowintegration.h"
 #include "layoutreadiness.h"
 #include "nodescanvasbounds.h"
-#include "auditionactivationbridge.h"
+#include "paneactivationbridge.h"
 #include "paneheaderdrag.h"
 #include "paneundockdrag.h"
 #include "panecatalogue.h"
@@ -305,15 +305,26 @@ public:
             || (slot->objectName() == QLatin1String("frameAudioPanelSoundLibraryContainer")
                 && m_root->objectName() == QLatin1String("WStackPage_Audio"));
         if ((fairlightAudition || soundLibraryAudition)
-            && slot->window()->objectName() == QLatin1String("UiMainWindow")) {
+            && m_root->window()->objectName() == QLatin1String("UiMainWindow")) {
             // One targeted lookup inside this pane per detach, before its first
             // activation (also for startup restoration). No recurring discovery.
             if (auto preview = host->findChild<QWidget *>(soundLibraryAudition
                     ? QStringLiteral("m_PlayerPreview") : QStringLiteral("previewPlayer"))) {
-                m_auditionBridge = new AuditionActivationBridge(slot->window(), m_root, preview, this, host->objectName());
+                m_activationBridge = new PaneActivationBridge(m_root->window(), m_root, preview, this, host->objectName());
                 if (auto header = fairlightAudition ? preview->findChild<QWidget *>(QStringLiteral("framePlayerTime"), Qt::FindDirectChildrenOnly) : nullptr)
                     m_auditionHeaderDrag = new PaneHeaderDrag(header, this);
             }
+        }
+        // Bind once before the first show, using the persistent logical page
+        // even when Resolve keeps the native dock slot in its auxiliary window.
+        // The host is the visibility target: its native slot is hidden to reclaim
+        // space. Existing audition panes retain their player visibility guard.
+        if (!fairlightAudition && !soundLibraryAudition) {
+            const auto descriptor=PaneCatalogue::find(slot->objectName());
+            if (descriptor && descriptor->needsActivationBridge()
+                && PaneCatalogue::page(descriptor->page).paneRoot==m_root->objectName()
+                && m_root->window()->objectName()==QLatin1String("UiMainWindow"))
+                m_activationBridge=new PaneActivationBridge(m_root->window(),m_root,host,this,host->objectName());
         }
         if(PaneCatalogue::colorControl(slot->objectName()))
             m_expandGuard=new ColorExpandGuard(host,this);
@@ -397,7 +408,7 @@ public:
         rememberGeometry();
         m_restoring = true;
         delete m_timelineHeader; m_timelineHeader=nullptr;
-        stopAuditionBridge();
+        stopActivationBridge();
         restoreNativeExpand();
         const bool nativePalette=bool(m_nativePalette);
         if(nativePalette) {
@@ -551,15 +562,15 @@ private:
                 && host->windowState()==state;
         },[host,requested] { host->restoreGeometry(requested); });
     }
-    void stopAuditionBridge()
+    void stopActivationBridge()
     {
         delete m_auditionHeaderDrag; m_auditionHeaderDrag = nullptr;
-        if (!m_auditionBridge) return;
-        m_auditionBridge->stop();
+        if (!m_activationBridge) return;
+        m_activationBridge->stop();
         // Native event processing can dock reentrantly. Keep the stopped filter
         // alive until its synthetic notification has finished unwinding.
-        m_auditionBridge->deleteLater();
-        m_auditionBridge = nullptr;
+        m_activationBridge->deleteLater();
+        m_activationBridge = nullptr;
     }
     void restoreModeSizes() { qDeleteAll(m_modeSizes); m_modeSizes.clear(); }
     QList<ActiveStackSize *> m_modeSizes;
@@ -634,7 +645,7 @@ private:
         delete m_timelineHeader; m_timelineHeader=nullptr;
         delete m_nativePalette; m_nativePalette=nullptr;
         restoreNativeExpand();
-        stopAuditionBridge();
+        stopActivationBridge();
         m_elidingLabels.reset();
         restoreModeSizes();
         restoreWheelsPolicy();
@@ -660,7 +671,7 @@ private:
     NodesCanvasBounds *m_nodesBounds=nullptr;
     ColorClipsAdapter *m_clipsAdapter=nullptr;
     ColorTimelineHeader *m_timelineHeader=nullptr;
-    QPointer<AuditionActivationBridge> m_auditionBridge;
+    QPointer<PaneActivationBridge> m_activationBridge;
     PaneHeaderDrag *m_auditionHeaderDrag = nullptr;
     QPointer<QLayout> m_layout;
     QPointer<QLayout> m_nativeLayout;

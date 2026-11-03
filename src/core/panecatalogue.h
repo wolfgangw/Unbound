@@ -102,6 +102,14 @@ struct PaneDescriptor {
         return names;
     }
     bool preserveNativeLayout() const { const auto control=colorControl(objectName); return page==Page::Color && !(control && control->wholeLayout); }
+    bool needsActivationBridge() const {
+        // Native command contexts confirmed by docked/floating comparisons.
+        // Local text input alone does not justify adding an activation bridge.
+        return header==Header::MediaPool || header==Header::SoundLibrary
+            || (page==Page::Edit && header==Header::Keyframes)
+            || (page==Page::Color && (header==Header::Nodes || header==Header::Gallery
+                || header==Header::TimelineCorner || objectName==QLatin1String("keyframesWidgetContainer")));
+    }
     bool requireNativeHeader() const { return page==Page::Fairlight || (header==Header::ClipsGutter || header==Header::ColorViewer || header==Header::ColorControl); }
     bool serializeInitialization() const {
         // Edit's two right-sidebar selectors can deselect each other while

@@ -2,6 +2,7 @@
 #include "cinemaviewervisibility.h"
 #include <QDialog>
 #include <QShortcut>
+#include <QKeyEvent>
 #include <cstdio>
 #include <cstdlib>
 
@@ -11,6 +12,14 @@ static void require(bool value,const char *message) {
     if(!value) { std::fprintf(stderr,"FAIL: %s\n",message); std::exit(1); }
 }
 static void settle() { for(int i=0;i<4;++i) QApplication::processEvents(); }
+class ShowObserver : public QObject {
+public:
+    std::function<void()> callback;
+    bool eventFilter(QObject *,QEvent *event) override {
+        if(event->type()==QEvent::Show && callback) callback();
+        return false;
+    }
+};
 int main(int argc,char **argv) {
     QApplication app(argc,argv);
     app.setQuitOnLastWindowClosed(false);
@@ -22,13 +31,18 @@ int main(int argc,char **argv) {
     QWidget program(&host); program.setObjectName("widgetEditTimelinePlayer");
     QWidget source(&main); source.setObjectName("widgetEditSourcePlayer");
     QWidget image(&program); image.setObjectName("EditTimelinePlayer");
+    program.setFocusPolicy(Qt::StrongFocus); source.setFocusPolicy(Qt::StrongFocus);
     QShortcut shortcut(QKeySequence("J"),&main);
     shortcut.setContext(Qt::ApplicationShortcut);
-    Unbound::CinemaViewerVisibility visibility;
+    // The offscreen backend has no native window activation implementation.
+    int returnActivations=0;
+    Unbound::CinemaViewerVisibility visibility([&](QWidget *w) { ++returnActivations; QApplication::setActiveWindow(w); });
     visibility.setWindow(&main);
     main.show(); host.show(); program.show(); source.show(); image.show(); settle();
     const auto mainGeometry=main.geometry(),hostGeometry=host.geometry();
     UiCinemaViewerDialog cinema;
+    ShowObserver mainShow;
+    main.installEventFilter(&mainShow);
     for(int cycle=0;cycle<3;++cycle) {
         image.setParent(&cinema); image.show(); host.hide(); cinema.show(); settle();
         require(!main.isVisible() && cinema.isVisible(),"floating Cinema hides only the remaining main workspace");
@@ -37,6 +51,30 @@ int main(int argc,char **argv) {
         require(main.isVisible(),"main visibility restored after exit");
         require(main.geometry()==mainGeometry && host.geometry()==hostGeometry,"window geometry retained");
         require(!main.testAttribute(Qt::WA_ShowWithoutActivating),"temporary activation attribute restored");
+    }
+    // Match Resolve's exit ordering: host activation while main is hidden,
+    // followed by main activation after the adapter restores visibility.
+    for(bool newerInput : {false,true}) {
+        const int beforeReturn=returnActivations;
+        image.setParent(&cinema); image.show(); host.hide(); cinema.show(); settle();
+        if(newerInput) mainShow.callback=[&] {
+            QKeyEvent input(QEvent::KeyPress,Qt::Key_K,Qt::NoModifier);
+            QApplication::sendEvent(&program,&input);
+        };
+        cinema.hide(); image.setParent(&program); image.show(); host.show();
+        QApplication::setActiveWindow(&host); program.setFocus(); settle();
+        mainShow.callback={};
+        require(main.isVisible(),"return fixture restores main before late activation");
+        if(newerInput) require(returnActivations==beforeReturn,"input cancels the pending return before main activates");
+        // Offscreen may already have delivered the late main activation from
+        // show(). Otherwise explicitly supply the observed Resolve event.
+        if(newerInput || returnActivations==beforeReturn) {
+            QApplication::setActiveWindow(&main); source.setFocus(); settle();
+        }
+        require(QApplication::activeWindow()==(newerInput ? &main : &host),
+            "Cinema return preserves host unless newer input supersedes it");
+        require(QApplication::focusWidget()==(newerInput ? &source : &program),
+            "Cinema return preserves originating player focus");
     }
     // Source in its docked location: native Resolve owns main visibility.
     image.setObjectName("EditSourcePlayer"); image.setParent(&cinema); image.show();

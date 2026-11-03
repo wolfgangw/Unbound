@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-#include "auditionactivationbridge.h"
+#include "paneactivationbridge.h"
 #include "sidebarfloatsession.h"
 #include <functional>
-using Unbound::AuditionActivationBridge;
+using Unbound::PaneActivationBridge;
 #include <QFocusEvent>
 #include <QMouseEvent>
 #include <QStringList>
@@ -65,7 +65,7 @@ int main(int argc,char **argv)
     main.show();page.show();slot.show();mainChild.show();host.show();
     preview.setParent(&host);preview.show();play.show();app.processEvents();
     QApplication::setActiveWindow(&main);app.processEvents();
-    AuditionActivationBridge bridge(&main,&page,&preview);
+    PaneActivationBridge bridge(&main,&page,&preview);
     app.sequence.clear();main.activations=0;mainChild.activations=0;
     const int before=app.mainNotifications;
     QApplication::setActiveWindow(&host);app.processEvents();
@@ -108,7 +108,7 @@ int main(int argc,char **argv)
     const int stopped=app.mainNotifications;activateEvent(&host);
     check(app.mainNotifications==stopped && app.scope==7,"Stopped bridge leaves native behavior untouched");
     preview.setParent(&slot);preview.show();play.show();QApplication::setActiveWindow(&main);app.processEvents();
-    AuditionActivationBridge docked(&main,&page,&preview);
+    PaneActivationBridge docked(&main,&page,&preview);
     const int native=app.mainNotifications;activateEvent(&main);
     check(app.mainNotifications==native+1,"Docked/main activation is never duplicated");
     // Reparent into a NEW host to exercise retained controller references.
@@ -122,10 +122,14 @@ int main(int argc,char **argv)
     // Exercise the production session, including attachment BEFORE its show,
     // startup restoration, retained page hosts and teardown before redocking.
     for(const auto slotName : {"frameAudioPanelMediaPoolContainer", "frameEditPageSoundLibrary",
-                              "frameAudioPanelSoundLibraryContainer"}) {
+                              "frameAudioPanelSoundLibraryContainer", "frameEditPageMediaPool",
+                              "frameEditPageKeyframeEditor", "m_pWidgetMediaPool", "m_pFrameNodeGraph",
+                              "m_pWidgetGallery", "timelineFrame", "keyframesWidgetContainer"}) {
     const bool soundLibrary=QString::fromLatin1(slotName).contains("SoundLibrary");
-    const bool edit=QString::fromLatin1(slotName)=="frameEditPageSoundLibrary";
-    main.setObjectName("UiMainWindow");page.setObjectName(edit ? "frameEditPageWidgetsContainer" : "WStackPage_Audio");
+    const auto descriptor=Unbound::PaneCatalogue::find(QString::fromLatin1(slotName));
+    check(descriptor && descriptor->needsActivationBridge(),"Test pane opts into shared command activation");
+    const bool owned=QString::fromLatin1(slotName)=="frameAudioPanelMediaPoolContainer";
+    main.setObjectName("UiMainWindow");page.setObjectName(Unbound::PaneCatalogue::page(descriptor->page).paneRoot);
     QWidget sessionSlot(&page);sessionSlot.setObjectName(slotName);
     auto layout=new QVBoxLayout(&sessionSlot);
     auto sessionPreview=new Target(&sessionSlot);sessionPreview->setObjectName(soundLibrary ? "m_PlayerPreview" : "previewPlayer");
@@ -135,9 +139,10 @@ int main(int argc,char **argv)
     Unbound::SidebarFloatSession session;
     for (bool automatic : {false,true}) {
         QApplication::setActiveWindow(&main);
-        check(session.start(&sessionSlot,"Media Pool",&page,false,automatic).isEmpty(),"Production detach failed");
+        check(session.start(&sessionSlot,"Media Pool",&page,false,automatic,
+            descriptor->preserveNativeLayout(),!automatic).isEmpty(),"Production detach failed");
         auto floating=session.floatingWindow();app.host=floating;
-        check(floating->parentWidget()==(soundLibrary ? nullptr : &sessionSlot),
+        check(floating->parentWidget()==(owned ? &sessionSlot : nullptr),
             "Sound Library correction does not require changing host ownership");
         QApplication::setActiveWindow(&main);const int startCount=app.mainNotifications;
         QApplication::setActiveWindow(floating);app.processEvents();

@@ -17,7 +17,7 @@
 #include "panegeometryrestore.h"
 #include "panegeometrytransaction.h"
 #include "panemainresizegeometry.h"
-#include "auditionactivationbridge.h"
+#include "paneactivationbridge.h"
 #include "layoutreadiness.h"
 #include "panepagecontext.h"
 
@@ -30,7 +30,7 @@ class EditViewers : public QObject
         QPointer<QBoxLayout> originalLayout;
         QPointer<Unbound::PaneFloatingWindow> host;
         QPointer<Unbound::PaneMainResizeGeometry> mainResizeGeometry;
-        QPointer<Unbound::AuditionActivationBridge> activationBridge;
+        QPointer<Unbound::PaneActivationBridge> activationBridge;
         QList<QPointer<Unbound::UndockButton>> buttons;
         int stretch=0;
         Qt::Alignment alignment;
@@ -198,8 +198,7 @@ private:
         host->resize(content->size().expandedTo(QSize(640,400)).boundedTo(available.size()*0.7));
         auto hl=new QVBoxLayout(host); hl->setContentsMargins(0,0,0,0); hl->addWidget(content);
         pane.host=host; host->installEventFilter(this);
-        if(&pane==&m_source)
-            pane.activationBridge=new Unbound::AuditionActivationBridge(m_main,m_page,content,this,host->objectName());
+        pane.activationBridge=new Unbound::PaneActivationBridge(m_main,m_page,content,this,host->objectName());
         Unbound::applyPaneDarkCaption(host,parent->window());
         const auto saved=m_settings.geometry(content->objectName());
         const bool newPlacement=saved.isEmpty() || !host->restoreGeometry(saved);

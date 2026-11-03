@@ -9,11 +9,11 @@
 namespace Unbound {
 // Resolve selects a separate-window input scope before delivering WindowActivate
 // to a floating pane. Restore the page scope through its normal application notify
-// path, then let genuine Qt focus select the player. No private state.
-class AuditionActivationBridge : public QObject
+// path, then let genuine Qt focus select the subcontrol/player. No private state.
+class PaneActivationBridge : public QObject
 {
 public:
-    AuditionActivationBridge(QWidget *main, QWidget *page, QWidget *preview, QObject *parent = nullptr,
+    PaneActivationBridge(QWidget *main, QWidget *page, QWidget *preview, QObject *parent = nullptr,
         QString hostName = QStringLiteral("unboundFloating_frameAudioPanelMediaPoolContainer"))
         : QObject(parent), m_main(main), m_page(page), m_preview(preview), m_hostName(std::move(hostName))
     {
@@ -21,7 +21,7 @@ public:
         m_enabled = true;
         qApp->installEventFilter(this);
     }
-    ~AuditionActivationBridge() override { qApp->removeEventFilter(this); }
+    ~PaneActivationBridge() override { qApp->removeEventFilter(this); }
     bool enabled() const { return m_enabled; }
     void stop()
     {
@@ -47,7 +47,7 @@ protected:
         // of the same host. Child activation, clicks and focus do no work here.
         QEvent notification(QEvent::WindowActivate);
         m_synthetic = &notification;
-        QPointer<AuditionActivationBridge> alive(this);
+        QPointer<PaneActivationBridge> alive(this);
         QApplication::sendEvent(m_main, &notification);
         if (!alive) return false;
         m_synthetic = nullptr;

@@ -377,9 +377,10 @@ intent. Source restoration waits for native availability; do not force Single/Du
 Viewer Mode or add a separate control window. When no visible viewer stays docked,
 `viewergeometryadapter.h` expands the timeline using retained native baselines.
 
-Floating Source uses the activation bridge described under Audition players;
+Both floating Edit viewers use the activation bridge described under Audition players;
 native focus continues to select Source versus Program/timeline transport.
-Bind before first host show and stop before docking. Program needs no bridge.
+Bind before first host show and stop before docking. Program activation also needs
+the page command context restored when Source was the previously selected player.
 
 During resizing, an application filter scoped to reclamation intercepts retained
 timeline Resize events before QLayout processes child viewports. Coalesce interim
@@ -439,14 +440,26 @@ transition coverage are user-validated. Broader Windows lifecycle coverage, macO
 and coexistence with native Dual Screen allocations remain pending. This manages the global
 floating window, not a separate secondary-screen docked Scopes view.
 
-### Audition players
+### Pane command activation and audition players
 
-`auditionactivationbridge.h` serves Edit/Fairlight Sound Library, Fairlight Media
-Pool and Edit Source viewer. Bind the recognized host/page/player before first show.
+`paneactivationbridge.h` serves catalogued command-sensitive panes: Media Pool on
+Edit/Color/Fairlight, Edit Keyframe Editor, Color Nodes/Gallery/Timeline/Keyframes,
+and the existing Edit/Fairlight Sound Library and both Edit viewers. Catalogue
+policy opts standard panes in; local field editing alone does not justify a bridge.
+Bind the recognized host/logical page/visible content before first show. Use the
+logical page's main window even when the native dock slot is in an auxiliary window.
 On genuine host activation, deliver one main-window activation notification to restore Resolve's
 command context; consume that exact event before QWidget propagation and let
-actual focus select the player. Do not forward transport keys, force focus or alter
+actual focus select the subcontrol or player. Clicks and child focus changes send
+no extra notifications. Do not forward keys, force focus or alter
 waveforms. Stop before docking/reparenting; tolerate nested notification/destruction.
+Retained page hosts retain the bridge, gated by page/content visibility and actual
+host activation. Hidden/minimized hosts, unrelated windows, popups and modal dialogs
+must not trigger correction. Standard panes use their host as the visibility target
+because the native slot is intentionally hidden while floating. Native expanded
+palettes and Scopes receive no additional bridge. Live lifecycle
+validation of the broader integration is tracked in
+`doc/issues/floating-pane-keyboard-routing.md`; fixture coverage is not Resolve proof.
 Sound Library's player is `m_PlayerPreview` and needs no Qt parent change.
 Fairlight Media Pool's `previewPlayer` retains the tested Qt parent/native owner
 relationship. Windows adds `WS_EX_APPWINDOW` before first show so the owned host
@@ -1129,7 +1142,13 @@ Target selection uses host registration and measured contact bounds, not pane na
 Cinema Viewer from a floating Edit viewer hides the main window to match native
 docked Cinema behavior and prevent duplicate application/menu transport shortcuts.
 Exit restores only visibility Unbound changed; no transport-key interception or
-viewer parenting changes. Docking must run the viewer-region restoration path even
+viewer parenting changes. If Resolve has already returned activation to the floating
+viewer, preserve that host and focused control across main-window restoration.
+A subsequent main activation queues one correction, bounded to one second and
+cancelled by newer input, another window activation or application departure.
+Require main to remain foreground and no modal dialog or popup before correcting;
+the normal host activation bridge then restores Resolve's command context.
+Docking must run the viewer-region restoration path even
 after Cinema exit so content appears without requiring a main-window resize.
 
 ### Cocoa windowing
