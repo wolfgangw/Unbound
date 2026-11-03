@@ -5,6 +5,7 @@
 using Unbound::PaneActivationBridge;
 #include <QFocusEvent>
 #include <QMouseEvent>
+#include <QLineEdit>
 #include <QStringList>
 #include <cstdio>
 #include <cstdlib>
@@ -118,6 +119,33 @@ int main(int argc,char **argv)
     QApplication::setActiveWindow(&secondHost);app.processEvents();
     check(app.mainNotifications==redetach+1,"New host after redocking uses current public window identity");
     docked.stop();preview.setParent(&slot);
+
+    // Audio activation must visit the preview without losing the user's field
+    // or list focus; cancellation must not steal focus back from another window.
+    {
+        QWidget audioHost;QWidget audioPage(&main),audioPreview(&audioHost),list(&audioHost);
+        QLineEdit search(&audioHost);
+        audioPreview.setFocusPolicy(Qt::StrongFocus);list.setFocusPolicy(Qt::StrongFocus);
+        audioPage.show();audioHost.show();audioPreview.show();list.show();search.show();
+        QApplication::setActiveWindow(&audioHost);list.setFocus();app.processEvents();
+        Unbound::AuditionPlayerActivation audio(&audioHost,&audioPage,&audioPreview,&audioHost);
+        int visits=0;
+        auto connection=QObject::connect(&app,&QApplication::focusChanged,&audio,[&](QWidget*,QWidget *now){if(now==&audioPreview)++visits;});
+        activateEvent(&audioHost);app.processEvents();
+        check(visits==1 && QApplication::focusWidget()==&list,"Audio activation visits preview and preserves list focus");
+        search.setFocus();search.setText("waves");search.setSelection(1,3);
+        activateEvent(&audioHost);app.processEvents();
+        check(visits==2 && QApplication::focusWidget()==&search && search.selectedText()=="ave",
+            "Audio activation preserves search text selection and focus");
+        audioPreview.setFocus();const int focusedVisits=visits;
+        activateEvent(&audioHost);app.processEvents();
+        check(visits==focusedVisits,"Already focused preview needs no extra focus visit");
+        list.setFocus();activateEvent(&audioHost);QApplication::setActiveWindow(&main);app.processEvents();
+        check(visits==focusedVisits && QApplication::activeWindow()==&main,"Leaving host cancels queued audio activation");
+        QApplication::setActiveWindow(&audioHost);list.setFocus();audioPage.hide();app.processEvents();
+        check(visits==focusedVisits,"Hidden page does not activate audio preview");
+        QObject::disconnect(connection);
+    }
 
     // Exercise the production session, including attachment BEFORE its show,
     // startup restoration, retained page hosts and teardown before redocking.

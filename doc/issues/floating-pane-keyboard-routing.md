@@ -130,6 +130,36 @@ Program/timeline transport without another click.
 Fairlight and other Dual Screen configurations remain separate coverage.
 macOS remains separate coverage.
 
+### Open Sound Library audio activation issue
+
+The user reproduces silent audition after returning from docked Program to floating
+Edit Sound Library through its header or Alt+Tab on both Windows and macOS.
+Transport can advance while Program remains Resolve's active audio player.
+Windows passive signal tracing confirms that waveform focus deactivates Program
+and activates the preview; restoring container/results-list focus can omit that
+step. Native docked header return briefly focuses the preview before settling on
+the container. A first floating return may work when Qt still remembers preview
+focus, so repeated returns with different remembered subcontrols are required.
+
+Earlier transport checks do not establish audible return through every activation
+path. A container-only Qt focus proxy is insufficient; it does not cover remembered
+results-list focus. A temporary preview-focus visit followed by restoration of the
+selected control is user-validated for consistent audio on Edit header/Alt+Tab
+return. Shared integration is now implemented for Edit and Fairlight Sound Library.
+Fresh-process Windows Edit validation confirms audible header and Alt+Tab return
+by user listening. Passive tracing independently confirms Program deactivation,
+preview activation and restoration of container/results-list focus on both paths,
+including repeated header return after result selection. L/K controls audition
+without moving the timeline; Up after Alt+Tab with retained list focus selects the
+previous result. Windows Fairlight Sound Library is also user-confirmed working.
+macOS validation remains pending. The native docked comparison confirms
+Up/Down after a header click navigates the timeline, while clicking the result list
+then Down selects the next result. Do not change this native distinction. Validate audible
+output separately from transport movement and activation signals, and retain
+search editing, list navigation, selection and playback position.
+The expanded bridge has not been established as the cause;
+Sound Library already used this activation mechanism before the expansion.
+
 ### macOS validation
 
 Fresh-process testing of the installed shared integration confirms floating Color
@@ -174,17 +204,15 @@ and activates the audition player, restoring sound without clip reselection. No
 mute-change signal was observed in that capture. In the working docked header
 return, native focus briefly visits the preview, Program emits inactive and the
 preview emits active, then focus settles on the Sound Library container. The
-silent floating return omits that preview activation. The next investigation is
-why that native activation step is absent after reparenting, and how to preserve
-it without changing clip selection, playback position or field focus. No
-production correction is established. Do not generalize waveform-return success
-to header activation.
+silent floating return omits that preview activation. The shared correction
+described above still needs fresh-process macOS validation, including header and
+application return with result-list or search-field focus retained. Do not
+generalize waveform-return success to header activation.
 
 The passive diagnostic and its reproduction procedure are preserved in
-`tests/platforms/macos/audition-audio/README.md`. The header-click experiment was
-reverted in source; the currently installed local candidate can still contain it.
-Rebuild/reinstall from source in a fresh Resolve process before validating a new
-production correction. Existing raw traces remain local under
+`tests/platforms/macos/audition-audio/README.md`.
+Rebuild/reinstall from source in a fresh Resolve process before validating the
+production correction. Raw traces remain local under
 `build/macos/audition-audio/`; they are not shipped or committed.
 
 The remaining macOS sign-off checks are resolving the Edit audition audio issue,

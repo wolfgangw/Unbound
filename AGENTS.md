@@ -461,6 +461,19 @@ palettes and Scopes receive no additional bridge. Live lifecycle
 validation of the broader integration is tracked in
 `doc/issues/floating-pane-keyboard-routing.md`; fixture coverage is not Resolve proof.
 Sound Library's player is `m_PlayerPreview` and needs no Qt parent change.
+`auditionplayeractivation.h` separately restores Sound Library's native audio-player
+activation on Edit and Fairlight. Command routing alone can advance audition
+transport silently while Program remains the active audio player. After genuine
+host activation and native focus settlement, one queued callback briefly focuses
+the preview and restores the selected control, matching the focus visit observed
+on docked header return. Skip an already-focused preview/descendant. Preserve search
+and result-list focus, selection and playback position; do not invoke native player
+methods or send transport keys. Host hide/deactivation invalidates queued work;
+inactive pages, minimized hosts, popups/dialogs and changed window ownership exclude
+it. Reentrant docking/destruction or another focus choice during the preview visit
+must prevent restoration. Destroy the helper before docking. The general activation
+bridge still does not alter focus. Native header focus does not imply result-list
+focus: Up/Down after a docked header click can navigate the main timeline.
 Fairlight Media Pool's `previewPlayer` retains the tested Qt parent/native owner
 relationship. Windows adds `WS_EX_APPWINDOW` before first show so the owned host
 retains taskbar/Alt+Tab eligibility and grouping identity.

@@ -18,6 +18,7 @@
 #include "layoutreadiness.h"
 #include "nodescanvasbounds.h"
 #include "paneactivationbridge.h"
+#include "auditionplayeractivation.h"
 #include "paneheaderdrag.h"
 #include "paneundockdrag.h"
 #include "panecatalogue.h"
@@ -311,6 +312,8 @@ public:
             if (auto preview = host->findChild<QWidget *>(soundLibraryAudition
                     ? QStringLiteral("m_PlayerPreview") : QStringLiteral("previewPlayer"))) {
                 m_activationBridge = new PaneActivationBridge(m_root->window(), m_root, preview, this, host->objectName());
+                if(soundLibraryAudition)
+                    m_auditionActivation=new AuditionPlayerActivation(host,m_root,preview,this);
                 if (auto header = fairlightAudition ? preview->findChild<QWidget *>(QStringLiteral("framePlayerTime"), Qt::FindDirectChildrenOnly) : nullptr)
                     m_auditionHeaderDrag = new PaneHeaderDrag(header, this);
             }
@@ -564,6 +567,7 @@ private:
     }
     void stopActivationBridge()
     {
+        delete m_auditionActivation; m_auditionActivation=nullptr;
         delete m_auditionHeaderDrag; m_auditionHeaderDrag = nullptr;
         if (!m_activationBridge) return;
         m_activationBridge->stop();
@@ -672,6 +676,7 @@ private:
     ColorClipsAdapter *m_clipsAdapter=nullptr;
     ColorTimelineHeader *m_timelineHeader=nullptr;
     QPointer<PaneActivationBridge> m_activationBridge;
+    QPointer<AuditionPlayerActivation> m_auditionActivation;
     PaneHeaderDrag *m_auditionHeaderDrag = nullptr;
     QPointer<QLayout> m_layout;
     QPointer<QLayout> m_nativeLayout;
