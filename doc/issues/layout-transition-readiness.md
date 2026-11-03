@@ -5,6 +5,32 @@ The implemented presentation, restoration and cancellation contracts are in
 included in release and internal builds; macOS retains ordinary presentation without capture
 or permission requests. Visual continuity takes priority over latency.
 
+## Accepted Windows 10 translucent-menu capture failure
+
+On the Windows 10 workstation, the native layout-cover fixture fails when
+`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` is applied to the production
+layout menu. The call returns false with error 8 (`ERROR_NOT_ENOUGH_MEMORY`),
+before screenshot allocation; application foreground ownership is still correct.
+The error alone does not establish actual memory exhaustion.
+
+Controlled comparisons isolate Qt's per-pixel translucent window path:
+the ordinary popup passes, enabling `WA_TranslucentBackground` on that popup
+produces the same failure, and disabling it before showing the production menu
+makes the complete fixture pass. This is not an activation-bridge failure or
+an intermittent assertion. The user confirms working layout transitions on the
+other Windows 11 system. Behavior on other Windows 10 systems remains unverified;
+this failure does not establish a universal Windows 10 limitation.
+
+Production currently cancels presentation as `capture_unavailable` and continues
+layout recall without its cover, exposing intermediate rearrangement. The user
+accepts this workstation's failing test for now: retain the existing rendering
+and transition mechanism, including the working Windows 11 path. Do not introduce
+an opaque-menu workaround or another transition mechanism. Keep the test and
+report its failure explicitly rather than treating validation as fully passing.
+Microsoft documents capture exclusion support from Windows 10 version 2004;
+this workstation's build 19045 meets that OS requirement, but successful operation
+on another qualifying Windows 10 system remains a possibility, not a verified result.
+
 ## Validation gaps
 
 - Floating-to-floating page switches, active playback, floating Edit viewers,
