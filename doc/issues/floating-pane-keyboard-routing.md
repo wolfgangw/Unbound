@@ -76,7 +76,7 @@ Current Windows evidence:
   audition players. Its mechanism is documented in AGENTS.md under Audition players.
   Shared integration now includes the confirmed command-sensitive panes through
   catalogue policy and the normal floating-session lifecycle. Fresh-process Windows
-  lifecycle validation is partially complete below; macOS validation remains pending.
+  lifecycle validation is partially complete below; macOS coverage is listed separately.
 
 ## Integrated lifecycle coverage
 
@@ -129,6 +129,72 @@ click; Alt+Tab away and directly back to floating Program likewise retains
 Program/timeline transport without another click.
 Fairlight and other Dual Screen configurations remain separate coverage.
 macOS remains separate coverage.
+
+### macOS validation
+
+Fresh-process testing of the installed shared integration confirms floating Color
+Nodes Backspace deletes a selected temporary serial node while retaining the
+original node in a restored floating host, after docking/refloating, and after an
+Edit/Fairlight/Color round trip.
+
+Floating Edit and Fairlight Media Pool: Workspace > Active Panel Selection >
+Media Folders reaches the bin tree, arrow keys change its selected bin, and
+Backspace removes a selected disposable empty bin while retaining the original
+three bins. Edit inline bin rename also accepts text and Backspace without
+deleting the bin. These checks do not establish protection of a separately selected
+timeline clip, browser clip deletion, audition transport or continuous activation
+across subcontrol changes.
+
+Temporary nodes and bins were removed. These checks used the separate validation project
+and the existing DaVinci Resolve keyboard preset, without mapping changes.
+
+User validation confirms both Edit Program return paths with Program floating and
+Source docked: entering/exiting Cinema Viewer, and switching to another application
+and returning directly to Program. Without another click, J/K/L controls
+Program/timeline transport and leaves Source unchanged. macOS therefore passes
+these checks without the Windows-specific Cinema return workaround. Dual Screen
+repetition remains pending.
+
+User validation confirms Edit Keyframe Editor wrong-recipient protection: with a
+timeline clip selected, Delete removes a selected opacity keyframe in the floating
+editor while the timeline clip remains intact.
+
+Edit Sound Library user validation confirms J/K/L targets the focused floating
+audition player, docked Program viewer or docked Source viewer. Returning directly
+to the floating preview waveform after either viewer retains audible audition
+without clip reselection; a passive trace confirms focus returns to the preview
+player. Returning via the floating header after either viewer reproducibly leaves
+transport silent; the trace shows focus on the Sound Library container rather
+than its preview player, with the bridge notification delivered in both paths.
+Clip reselection restores sound. The exact docked header-click comparison retains
+audible playback. Preserving native header press/release is insufficient to restore
+audible return. Native signal observation shows Program remains the active player
+during a silent floating-header return; clicking the waveform deactivates Program
+and activates the audition player, restoring sound without clip reselection. No
+mute-change signal was observed in that capture. In the working docked header
+return, native focus briefly visits the preview, Program emits inactive and the
+preview emits active, then focus settles on the Sound Library container. The
+silent floating return omits that preview activation. The next investigation is
+why that native activation step is absent after reparenting, and how to preserve
+it without changing clip selection, playback position or field focus. No
+production correction is established. Do not generalize waveform-return success
+to header activation.
+
+The passive diagnostic and its reproduction procedure are preserved in
+`tests/platforms/macos/audition-audio/README.md`. The header-click experiment was
+reverted in source; the currently installed local candidate can still contain it.
+Rebuild/reinstall from source in a fresh Resolve process before validating a new
+production correction. Existing raw traces remain local under
+`build/macos/audition-audio/`; they are not shipped or committed.
+
+The remaining macOS sign-off checks are resolving the Edit audition audio issue,
+Sound Library audition versus timeline transport on Fairlight, and Color Nodes
+deletion immediately after button tearoff without another canvas click. Other combinations remain additional
+coverage rather than prerequisites for this scoped integration sign-off.
+
+Other panes and lifecycle checks remain pending. Computer Use window targeting is
+currently unreliable; ordinary input preparation must not be counted as proof of
+unassisted application, dialog or Cinema return focus.
 
 ## Resolve's documented routing model
 

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT
+cmake_minimum_required(VERSION 3.20)
+project(AuditionAudioProbe LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+get_filename_component(UNBOUND_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
+include("${UNBOUND_ROOT}/infrastructure/macos/resolve-qt.cmake")
+add_library(audition-audio SHARED probe.cpp)
+set(UNBOUND_AUDITION_PROBE_NAME audition-audio CACHE STRING "Unique name when rebuilding in a live Resolve session")
+set_target_properties(audition-audio PROPERTIES OUTPUT_NAME "${UNBOUND_AUDITION_PROBE_NAME}")
+target_link_libraries(audition-audio PRIVATE Qt5::Widgets)
+add_executable(signal-test signaltest.cpp)
+target_link_libraries(signal-test PRIVATE Qt5::Widgets)
