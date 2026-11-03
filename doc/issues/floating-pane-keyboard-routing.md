@@ -35,7 +35,7 @@ Ownership, lifecycle guards and implementation details live in
 | Area | Windows | macOS |
 | --- | --- | --- |
 | Contextual pane commands | Nodes, all Media Pools, Edit/Color keyframes, Gallery and Timeline marker deletion pass; unrelated selections retained in tested cases | Nodes, Edit/Fairlight bin deletion, Edit rename and Edit keyframe wrong-recipient protection pass |
-| Lifecycle | Startup, page/layout return, dock/refloat, tearoff, popup/dialog return, app switching, keyboard-only panel selection, minimize/restore pass on representative panes | Nodes startup, dock/refloat and page return pass; tearoff deletion without another click pending |
+| Lifecycle | Startup, page/layout return, dock/refloat, tearoff, popup/dialog return, app switching, keyboard-only panel selection, minimize/restore pass on representative panes | Nodes startup, dock/refloat, page return and deletion immediately after tearoff without another click pass |
 | Edit viewers | Source/Program selection, floating combinations, Single/Dual Viewer changes, Cinema and Alt+Tab return pass; tested Dual Screen paths pass | Program Cinema/application return with Source docked pass; broader mode and Dual Screen coverage pending |
 | Sound Library audio | Installed fix user-confirmed on Edit and Fairlight; Edit trace confirms preview activation, retained focus and list navigation after header/Alt+Tab return | Installed shared audio correction user-confirmed on Edit and Fairlight after header/application return |
 
@@ -45,7 +45,7 @@ without an added bridge.
 
 ## Remaining checks
 
-macOS sign-off: Color Nodes Delete immediately after tearoff without another click. Follow the [macOS handoff](floating-pane-keyboard-routing-macos-handoff.md).
+Scoped keyboard-routing and Sound Library audio sign-off is complete on Windows and macOS.
 
 Broader coverage: Sound Library remembered list/search focus on macOS, keyframe modes/multiple selection, Gallery albums/memories, Clips
 grade clipboard targets, viewer tools, custom mappings and remaining Dual Screen

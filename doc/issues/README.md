@@ -12,7 +12,7 @@ and remove the investigation. Git retains the history.
 - [Fairlight page shortcut ambiguity](fairlight-page-focus-and-shortcuts.md):
   German Shift+7/slash collision needs a native baseline/remapping comparison.
 - [Floating-pane keyboard routing](floating-pane-keyboard-routing.md): shared command/audio
-  activation correction and remaining validation; [macOS handoff](floating-pane-keyboard-routing-macos-handoff.md).
+  activation correction and remaining validation.
 - [Divider persistence](layout-divider-persistence.md): safe native restore and
   saved proportions/schema remain to be designed.
 - [Platform validation](platform-validation.md): outstanding native and
