@@ -7,12 +7,12 @@ and remove the investigation. Git retains the history.
 
 - [Bin windows (Fred)](../Fred-In-Progress.md): native bin-window adoption,
   identity, lifecycle and layout semantics remain under design.
-- [Dual Screen disappearance](dual-screen-floating-panels.md): user report not
-  reproduced in Resolve; a matching container-lifecycle weakness exists in fixtures.
+- [Dual Screen compatibility](dual-screen-floating-panels.md): implemented page association;
+  remaining viewer/Scopes and multi-display validation.
 - [Fairlight page shortcut ambiguity](fairlight-page-focus-and-shortcuts.md):
   German Shift+7/slash collision needs a native baseline/remapping comparison.
-- [Floating-pane keyboard routing](floating-pane-keyboard-routing.md): manual-backed
-  pane audit, confirmed command-context failures and required cross-pane validation.
+- [Floating-pane keyboard routing](floating-pane-keyboard-routing.md): shared command/audio
+  activation correction and remaining validation; [macOS handoff](floating-pane-keyboard-routing-macos-handoff.md).
 - [Divider persistence](layout-divider-persistence.md): safe native restore and
   saved proportions/schema remain to be designed.
 - [Platform validation](platform-validation.md): outstanding native and
@@ -20,6 +20,6 @@ and remove the investigation. Git retains the history.
 
 - [Layout transitions](layout-transition-readiness.md): native presentation validation
   and remaining restoration cases.
-- [Color controls](color-controls.md): mode/platform validation and lower-region reclamation.
-- [Color viewer](color-viewer.md): viewer validation and main-window space reclamation.
+- [Color controls](color-controls.md): mode/platform validation; reclamation deferred.
+- [Color viewer](color-viewer.md): viewer validation; reclamation deferred.
 - [Native Edit navigation](native-edit-navigation-latency.md): intermittent session latency.

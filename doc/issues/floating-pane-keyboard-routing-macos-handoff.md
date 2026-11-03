@@ -1,37 +1,23 @@
-# macOS keyboard-routing validation handoff
+# macOS keyboard-routing validation
 
-Read `AGENTS.md` and [Floating-pane keyboard routing](floating-pane-keyboard-routing.md).
-Build and validate the shared activation bridge on macOS in a fresh Resolve
-process. Replacing a loaded helper does not update the running session.
+Build/install the shared fix in a fresh Resolve process. Read the
+[current issue and coverage](floating-pane-keyboard-routing.md) and
+[mechanism](../../AGENTS.md#pane-command-activation-and-audition-players).
 
-Use the Windows coverage as the regression checklist, establish native docked
-baselines where needed, and record macOS results separately in the routing document.
-Include pane command routing, switching subcontrols within an active floating pane,
-page/layout return, docking/refloating, tearoff, dialog dismissal, application
-switching, minimize/restore, keyboard-only panel selection, viewer routing,
-Single/Dual Viewer mode changes, Cinema return and Dual Screen Mode.
+Remaining sign-off:
 
-Use disposable test content and clean up afterward. Verify that commands affect
-the intended recipient and leave unrelated selections intact. Preserve user
-preferences, keyboard mappings and saved layouts. Ask the user for checks that
-automation cannot reliably prove, especially keyboard-only return when automated
-key delivery would activate the target window and mask a focus failure.
+- Edit and Fairlight Sound Library: play Program/timeline, return by header and
+  application switching, then J/K/L. Repeat with result-list and search-field focus
+  remembered. Confirm audible audition, correct transport target, intact search
+  editing/list navigation, and no waveform click or clip reselection required.
+- Floating Color Nodes: tear off, then add/delete a disposable node without another
+  canvas click. Verify the unrelated original node remains.
 
-## Cinema Viewer caveat
+For broader coverage, use the issue's Windows lifecycle matrix as a checklist.
+Preserve mappings, preferences and layouts; clean up disposable test content.
+Ask the user to perform keyboard-only return if automation activates targets.
 
-The Cinema Viewer return fix is Windows-specific. Its adapter preserves native
-return focus across restoration of the main window, preventing floating Program
-transport from falling back to docked Source. Verify macOS behavior independently;
-do not copy the Windows workaround merely because it was needed there.
-
-With Program floating and Source docked, check both sequences without another
-click after returning:
-
-- Click Program, enter Cinema Viewer, exit it, then use J/K/L.
-- Click Program, switch to another application, return directly to Program, then
-  use J/K/L.
-
-Both should control Program/timeline transport. Repeat in Dual Screen Mode where
-available. Use the native macOS shortcuts/current mappings rather than assuming
-Windows key combinations. Windows user validation passes both sequences in
-Single Screen and Dual Screen configurations; that is not proof of macOS behavior.
+Cinema return already passes the tested macOS Program-floating/Source-docked cases.
+Do not copy the Windows main-restoration workaround without a native failure.
+Dual Screen repetition remains pending: Cinema exit and application return directly
+to Program, then J/K/L without a click, must target Program/timeline rather than Source.

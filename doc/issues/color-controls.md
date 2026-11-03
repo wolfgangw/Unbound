@@ -18,7 +18,8 @@ startup restoration are documented in [AGENTS.md](../../AGENTS.md).
 - Check macOS Scopes cold-start/layout restoration. Undocking, sizing, view-count
   controls, live updates, docking and page-return headers are user-validated.
 
-Lower-region reclamation and replacement-tool selection remain unsettled.
+Lower-region reclamation is deferred; retain native allocation. Broader native
+replacement-tool selection validation remains open.
 Viewer reclamation is tracked in [color-viewer.md](color-viewer.md). Fixtures cover
 ownership, constraints and cancellation but do not replace native Resolve checks.
 Public Qt size/restore diagnostics are documented in the
