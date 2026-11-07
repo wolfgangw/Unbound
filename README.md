@@ -38,11 +38,11 @@ the feature natively. I think that would be a wonderful outcome.
 ## Installation
 
 Download from [Releases](../../releases) and run the Unbound installer.
-Choose **Install**, then open DaVinci Resolve.
+Choose **Install** or **Update**, then open DaVinci Resolve.
 
 Unbound starts automatically and adds the Unbound button to supported panels.
 
-Run the installer again to update or uninstall. Uninstall always keeps your
+Run the installer again to uninstall. Uninstall always keeps your
 settings and layouts.
 
 Unbound supports Windows 10/11 (x64) and macOS. The universal Mac app includes Apple
