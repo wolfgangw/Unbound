@@ -11,12 +11,14 @@ int main() {
         const Payload first{"loader-one","helper-one","hook-one","0.3.0+test.1"}, second{"loader-two","helper-two","hook-two","0.3.0+test.2"};
         auto idle=[]{return false;};
         apply(p,&first,idle); require(matches(p,first),"Fresh install mismatch");
+        write(p.runtime()/L"UnboundHelper.dll","obsolete runtime");
         write(p.support/L"Unbound.json","saved layouts"); write(p.scripts/L"unrelated.lua","keep");
         for(int phase=0;phase<=3;++phase) {
             bool failed=false;
             try { apply(p,&second,idle,[=](int stage){if(stage==phase) throw std::runtime_error("injected failure");}); }
             catch(...) { failed=true; }
             require(failed && matches(p,first),"Failed update did not restore old runtime and hook");
+            require(read(p.runtime()/L"UnboundHelper.dll")=="obsolete runtime","Rollback lost previous runtime files");
         }
         bool blocked=false; try { apply(p,&second,[]{return true;}); } catch(...) { blocked=true; }
         require(blocked && matches(p,first),"Resolve guard failed");
@@ -24,6 +26,7 @@ int main() {
         try { apply(p,&second,[&]{return ++calls==2;}); } catch(...) {blocked=true;}
         require(blocked && matches(p,first),"Resolve launch during staging changed installation");
         apply(p,&second,idle); require(matches(p,second),"Update mismatch");
+        require(!fs::exists(p.runtime()/L"UnboundHelper.dll"),"Update retained obsolete runtime files");
         fs::remove(p.hook()); require(!matches(p,second),"Broken hook disables repair"); apply(p,&second,idle);
         write(p.support/L"settings.json","legacy");
         const auto retained=[&]{return read(p.support/L"Unbound.json")=="saved layouts" && read(p.support/L"settings.json")=="legacy";};

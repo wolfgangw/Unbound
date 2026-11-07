@@ -14,7 +14,7 @@
     BOOL valid = self.window.visible
         && exists([self.resources stringByAppendingPathComponent:@"scripts/install.sh"])
         && exists([self.resources stringByAppendingPathComponent:@"scripts/uninstall.sh"])
-        && exists([self.resources stringByAppendingPathComponent:@"payload/runtime/UnboundHelper.dylib"]);
+        && exists([self.resources stringByAppendingPathComponent:@"payload/runtime/Unbound.dylib"]);
     NSString *originalSupport = self.support;
     NSString *originalScripts = self.scripts;
     NSString *fixture = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
@@ -55,7 +55,7 @@
         versionPath: @"VERSION", buildPath: @"BUILD",
         [runtime stringByAppendingPathComponent:@"load.lua"]: @"runtime/load.lua",
         [runtime stringByAppendingPathComponent:@"UnboundLuaLoader.dylib"]: @"runtime/UnboundLuaLoader.dylib",
-        [runtime stringByAppendingPathComponent:@"UnboundHelper.dylib"]: @"runtime/UnboundHelper.dylib",
+        [runtime stringByAppendingPathComponent:@"Unbound.dylib"]: @"runtime/Unbound.dylib",
         hook: @"startup/Unbound.scriptlib"
     };
     for (NSString *path in payloadFiles) {

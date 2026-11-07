@@ -29,7 +29,7 @@ extern "C" __attribute__((visibility("default"))) int UnboundLuaStart()
             state=-3; unboundStartupLog("Lua loader could not retain its image"); return -3;
         }
         NSString *helper=[[[NSString stringWithUTF8String:own.dli_fname] stringByDeletingLastPathComponent]
-            stringByAppendingPathComponent:@"UnboundHelper.dylib"];
+            stringByAppendingPathComponent:@"Unbound.dylib"];
         unboundStartupLog("Lua request accepted; queued GUI-thread attachment");
         // Dispatch copies this block and retains its NSString capture. No Lua
         // callbacks survive the script. This image is retained independently.

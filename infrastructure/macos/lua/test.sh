@@ -8,7 +8,7 @@ export QT_QPA_PLATFORM_PLUGIN_PATH="$resolve/Contents/PlugIns/platforms"
 export QT_QPA_PLATFORM=cocoa
 python3 "$root/tests/platforms/macos/loading/lua/install_test.py"
 python3 "$root/tests/platforms/macos/architecture_test.py" "$build/stage"
-for architecture in $(lipo -archs "$build/stage/runtime/UnboundHelper.dylib"); do
+for architecture in $(lipo -archs "$build/stage/runtime/Unbound.dylib"); do
 if ! mac_test_architecture "$architecture"; then
     continue
 fi
@@ -19,7 +19,7 @@ run_native "$build/src/platforms/macos/unbound-lua-script-test" \
     "$resolve/Contents/Libraries/Fusion/libluajit-5.1.2.dylib" \
     "$root/tests/platforms/macos/loading/lua/startup/script_test.lua" "$root"
 loader="$build/stage/runtime/UnboundLuaLoader.dylib"
-helper="$build/stage/runtime/UnboundHelper.dylib"
+helper="$build/stage/runtime/Unbound.dylib"
 run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader"
 run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader" --existing-controller
 run_native "$build/src/platforms/macos/audition-activation-test"

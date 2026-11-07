@@ -36,9 +36,12 @@ while :; do
     [[ -d "$destination" ]] || { echo "Cannot create $destination" >&2; exit 1; }
     counter=$((counter+1))
 done
-cp -R "$build/stage/runtime" "$destination/"
+mkdir "$destination/runtime"
+for file in load.lua UnboundLuaLoader.dylib Unbound.dylib; do
+    cp "$build/stage/runtime/$file" "$destination/runtime/"
+done
 cp -R "$build/stage/startup" "$destination/"
-for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do
+for library in UnboundLuaLoader.dylib Unbound.dylib; do
     codesign --force --sign - "$destination/runtime/$library"
     codesign --verify --strict "$destination/runtime/$library"
 done

@@ -6,7 +6,7 @@ candidate=${1:?Usage: install.sh /absolute/path/to/Lua-candidate}
     echo 'Expected a Lua candidate with runtime/ and startup/.' >&2; exit 1;
 }
 if pgrep -x Resolve >/dev/null; then echo 'Close DaVinci Resolve normally before installing Unbound.' >&2; exit 1; fi
-for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do
+for library in UnboundLuaLoader.dylib Unbound.dylib; do
     codesign --verify --strict "$candidate/runtime/$library"
 done
 user_root=${UNBOUND_USER_HOME:-$HOME}
@@ -17,14 +17,19 @@ hook="$scripts/Unbound.scriptlib"
 mkdir -p "$support/InstallationBackups" "$scripts"
 transaction=$(mktemp -d "$support/InstallationBackups/install.XXXXXX")
 # Stage and verify everything before moving an existing installation.
-cp -R "$candidate/runtime" "$transaction/runtime"
+mkdir "$transaction/runtime"
+# Stage only current runtime files: an older build directory may still contain
+# UnboundHelper.dylib. Replacing Runtime also removes that name from installations.
+for file in load.lua UnboundLuaLoader.dylib Unbound.dylib; do
+    cp "$candidate/runtime/$file" "$transaction/runtime/"
+done
 # Install the candidate's identity with its runtime, within the same transaction.
 # Historical candidates without metadata remain installable but have no known version.
 if [[ -f "$candidate/VERSION" && -f "$candidate/BUILD" ]]; then
     cp "$candidate/VERSION" "$candidate/BUILD" "$transaction/runtime/"
 fi
 cp "$candidate/startup/Unbound.scriptlib" "$transaction/Unbound.scriptlib"
-for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do
+for library in UnboundLuaLoader.dylib Unbound.dylib; do
     codesign --verify --strict "$transaction/runtime/$library"
 done
 cmp "$candidate/runtime/load.lua" "$transaction/runtime/load.lua"

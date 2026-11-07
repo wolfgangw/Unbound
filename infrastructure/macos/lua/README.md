@@ -30,7 +30,7 @@ NOT RUN; Intel hardware validation remains outstanding even if Rosetta passes.
 Open Resolve normally. The installer places:
 
 - `runtime/` at `~/Library/Application Support/Unbound/Runtime/`, containing
-  `load.lua`, `UnboundLuaLoader.dylib` and `UnboundHelper.dylib`.
+  `load.lua`, `UnboundLuaLoader.dylib` and `Unbound.dylib`.
 - `startup/Unbound.scriptlib` at
   `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Unbound.scriptlib`.
 

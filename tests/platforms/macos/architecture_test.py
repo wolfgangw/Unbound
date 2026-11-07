@@ -9,7 +9,7 @@ import tempfile
 root = pathlib.Path(__file__).resolve().parents[3]
 stage = pathlib.Path(sys.argv[1]).resolve()
 audit = root / 'infrastructure/macos/lua/audit.sh'
-libraries = ('UnboundLuaLoader.dylib', 'UnboundHelper.dylib')
+libraries = ('UnboundLuaLoader.dylib', 'Unbound.dylib')
 architectures = subprocess.check_output(['lipo', '-archs', str(stage/'runtime'/libraries[0])], text=True).split()
 
 def check(candidate, variant, success):

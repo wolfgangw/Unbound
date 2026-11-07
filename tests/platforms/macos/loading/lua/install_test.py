@@ -32,7 +32,7 @@ class Installation(unittest.TestCase):
         self.write(self.candidate / 'VERSION', '0.3.0\n')
         self.write(self.candidate / 'BUILD', '2026.10.18.010\n')
         self.write(self.candidate / 'runtime/load.lua', 'private loader')
-        for name in ('UnboundLuaLoader.dylib', 'UnboundHelper.dylib'):
+        for name in ('UnboundLuaLoader.dylib', 'Unbound.dylib'):
             self.write(self.candidate / 'runtime' / name, 'signed fixture')
         self.write(self.candidate / 'startup/Unbound.scriptlib', 'new hook')
         self.bin = self.base / 'bin'
@@ -79,11 +79,14 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
 
     def seed_previous(self):
         self.write(self.runtime / 'load.lua', 'previous private loader')
+        self.write(self.runtime / 'UnboundHelper.dylib', 'previous runtime helper')
         self.write(self.hook, 'previous hook')
         self.write(self.scripts / 'Utility/Unbound.lua', 'previous menu launcher')
         self.write(self.scripts / 'Utility/UnboundLua/UnboundHelper.dylib', 'previous helper')
 
     def assert_installed(self):
+        self.assertEqual(self.runtime.joinpath('Unbound.dylib').read_text(), 'signed fixture')
+        self.assertFalse(self.runtime.joinpath('UnboundHelper.dylib').exists())
         self.assertEqual(self.runtime.joinpath('VERSION').read_text(), '0.3.0\n')
         self.assertEqual(self.runtime.joinpath('BUILD').read_text(), '2026.10.18.010\n')
         self.assertEqual(self.hook.read_text(), 'new hook')
@@ -94,6 +97,11 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
                          ['Unbound.scriptlib', 'Utility/Other.lua'])
 
     def test_fresh_install(self):
+        self.run_script()
+        self.assert_installed()
+
+    def test_stale_candidate_helper_is_not_installed(self):
+        self.write(self.candidate / 'runtime/UnboundHelper.dylib', 'stale build output')
         self.run_script()
         self.assert_installed()
 
@@ -134,7 +142,7 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
 
     def test_missing_helper_refuses_before_changes(self):
         self.seed_previous()
-        self.candidate.joinpath('runtime/UnboundHelper.dylib').unlink()
+        self.candidate.joinpath('runtime/Unbound.dylib').unlink()
         self.run_script(success=False)
         self.assert_previous()
 
@@ -207,6 +215,8 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         self.assertEqual(outside.joinpath('keep.txt').read_text(), 'keep')
 
     def assert_previous(self):
+        self.assertEqual(self.runtime.joinpath('UnboundHelper.dylib').read_text(), 'previous runtime helper')
+        self.assertFalse(self.runtime.joinpath('Unbound.dylib').exists())
         self.assertFalse(self.runtime.joinpath('VERSION').exists())
         self.assertFalse(self.runtime.joinpath('BUILD').exists())
         self.assertEqual(self.runtime.joinpath('load.lua').read_text(), 'previous private loader')

@@ -17,7 +17,7 @@ runtime_build=$(head -n 1 "$candidate/BUILD" | tr -d '\r\n')
 source "$root/infrastructure/macos/architectures.sh"
 mac_architectures "${UNBOUND_MAC_ARCHS:-universal}"
 "$root/infrastructure/macos/lua/audit.sh" "$candidate" "${UNBOUND_MAC_ARCHS:-universal}"
-for library in UnboundLuaLoader.dylib UnboundHelper.dylib; do codesign --verify --strict "$candidate/runtime/$library"; done
+for library in UnboundLuaLoader.dylib Unbound.dylib; do codesign --verify --strict "$candidate/runtime/$library"; done
 build="$root/build/macos/installer"
 mkdir -p "$build" "$root/release/mac/installer"
 python3 "$root/infrastructure/installer/generate.py" "$root/src/installer/dialog.json" "$build/installer-ui.generated.h"

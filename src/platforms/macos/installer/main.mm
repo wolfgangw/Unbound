@@ -133,7 +133,7 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
 - (BOOL)matchesPayload {
     NSString *runtime = [self.support stringByAppendingPathComponent:@"Runtime"];
     NSString *payload = [self.resources stringByAppendingPathComponent:@"payload"];
-    for (NSString *name in @[@"VERSION", @"BUILD", @"load.lua", @"UnboundLuaLoader.dylib", @"UnboundHelper.dylib"]) {
+    for (NSString *name in @[@"VERSION", @"BUILD", @"load.lua", @"UnboundLuaLoader.dylib", @"Unbound.dylib"]) {
         NSString *source = [@[@"VERSION", @"BUILD"] containsObject:name]
             ? name : [@"runtime" stringByAppendingPathComponent:name];
         if (!sameContents([runtime stringByAppendingPathComponent:name],

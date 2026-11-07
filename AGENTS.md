@@ -58,6 +58,8 @@ one implementation under `src/platforms/<platform>/` at compile time. Core must
 not include platform implementation paths or OS headers. Backends provide native
 window rendering, events, coordinate/DPI conversion, placement and data directories.
 Settings filenames, overrides, schema, migration and atomic saves stay shared.
+Both platforms build the `Unbound` CMake target: `Unbound.dll` on Windows and
+`Unbound.dylib` on macOS. The separate `UnboundLuaLoader` initializes that runtime.
 Narrow platform compatibility workarounds live in `src/platforms/<platform>/quirks/`,
 behind contracts in `src/platform/`. Keep ordinary native responsibilities in their
 existing modules; an unaffected platform explicitly supplies no extra workaround.
@@ -107,6 +109,9 @@ Only `Unbound.scriptlib` goes in the per-user Resolve `Support/Fusion/Scripts`
 root. Installation migrates the old Utility launcher into backups outside the
 Scripts scan tree. Install/update/uninstall require Resolve closed, never terminate
 or launch it, and always preserve settings/layouts. No settings-deletion option.
+Updates replace the private Runtime directory transactionally. macOS packages and
+installs only the current runtime files, excluding stale `UnboundHelper.dylib`
+build output; previous installations remain recoverable through rollback/backups.
 
 Installer wording, layout, display versions and presentation state belong in
 `src/installer/dialog.json` and `presentation.h`; both builds compile that definition.
