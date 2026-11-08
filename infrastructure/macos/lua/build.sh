@@ -41,6 +41,7 @@ for file in load.lua UnboundLuaLoader.dylib Unbound.dylib; do
     cp "$build/stage/runtime/$file" "$destination/runtime/"
 done
 cp -R "$build/stage/startup" "$destination/"
+cp -R "$build/stage/commands" "$destination/"
 for library in UnboundLuaLoader.dylib Unbound.dylib; do
     codesign --force --sign - "$destination/runtime/$library"
     codesign --verify --strict "$destination/runtime/$library"

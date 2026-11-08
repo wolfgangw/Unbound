@@ -43,7 +43,7 @@ sed -e "s/@VERSION@/$version/g" -e "s/@BUILD@/$(date +%Y%m%d).$counter/g" \
     -e "s/@APP_NAME@/$app_name/g" \
     -e "s/@PACKAGE_BUILD@/$name/g" \
     "$root/src/platforms/macos/installer/Info.plist.in" > "$app/Contents/Info.plist"
-cp -R "$candidate/runtime" "$candidate/startup" "$resources/payload/"
+cp -R "$candidate/runtime" "$candidate/startup" "$candidate/commands" "$resources/payload/"
 cp "$candidate/VERSION" "$candidate/BUILD" "$resources/payload/"
 cp "$root/infrastructure/macos/lua/install.sh" "$root/infrastructure/macos/lua/uninstall.sh" "$resources/scripts/"
 cp "$root/infrastructure/macos/lua/startup/enable.sh" "$root/infrastructure/macos/lua/startup/disable.sh" "$resources/scripts/startup/"

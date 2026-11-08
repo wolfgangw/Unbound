@@ -125,7 +125,8 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
 #endif
 }
 - (BOOL)installed {
-    return exists([self.support stringByAppendingPathComponent:@"Runtime"])
+    return exists([self.scripts stringByAppendingPathComponent:@"Utility/Unbound"])
+        || exists([self.support stringByAppendingPathComponent:@"Runtime"])
         || exists([self.scripts stringByAppendingPathComponent:@"Unbound.scriptlib"])
         || exists([self.scripts stringByAppendingPathComponent:@"Utility/Unbound.lua"])
         || exists([self.scripts stringByAppendingPathComponent:@"Utility/UnboundLua"]);
@@ -139,6 +140,12 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
         if (!sameContents([runtime stringByAppendingPathComponent:name],
                           [payload stringByAppendingPathComponent:source])) return NO;
     }
+    NSString *commands = [payload stringByAppendingPathComponent:@"commands"];
+    NSArray<NSString *> *names = [NSFileManager.defaultManager contentsOfDirectoryAtPath:commands error:nil];
+    if (names.count == 0) return NO;
+    for (NSString *name in names)
+        if (!sameContents([commands stringByAppendingPathComponent:name],
+            [[self.scripts stringByAppendingPathComponent:@"Utility/Unbound"] stringByAppendingPathComponent:name])) return NO;
     return sameContents([self.scripts stringByAppendingPathComponent:@"Unbound.scriptlib"],
                         [payload stringByAppendingPathComponent:@"startup/Unbound.scriptlib"]);
 }

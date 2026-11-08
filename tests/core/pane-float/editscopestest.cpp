@@ -61,8 +61,8 @@ void testEditScopes() {
             require(button && button->isChecked(),"Edit Scopes lacks a floating Unbound button");
             scopes.host()->setGeometry(120,140,660,460);scopes.flushGeometry();
             const auto geometry=scopes.host()->geometry();
-            QString saved;bool duplicate=false;
-            require(settings.saveLayout(edit.objectName(),saved,duplicate).isEmpty(),"Cannot save Edit Scopes layout");
+            QString saved;
+            require(settings.saveLayout(edit.objectName(),saved).isEmpty(),"Cannot save Edit Scopes layout");
             bool captured=false;
             departure.capture=[&] {
                 captured=true;

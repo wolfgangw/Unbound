@@ -49,6 +49,9 @@ public:
 };
 static void click(QWidget *widget) {
     require(widget,"Missing layout menu control");
+    QElapsedTimer wait;wait.start();
+    auto owner=widget->window()->parentWidget();
+    while(owner && owner->property("unboundLayoutCommandsBusy").toBool() && wait.elapsed()<3500)settle();
     // sendEvent does not perform the foreground activation of a real click.
     // Without it, docking the previously active floating host can transfer
     // focus to another application and correctly dismiss the popup.
@@ -120,22 +123,22 @@ static void storage() {
     PaneSettings settings(path);
     QFile migrated(path); require(migrated.open(QIODevice::ReadOnly),"Cannot read migrated settings");
     const auto root=QJsonDocument::fromJson(migrated.readAll()).object(); migrated.close();
-    require(root.value("version").toInt()==7 && root.value("pages").toObject()==pages,
+    require(root.value("version").toInt()==8 && root.value("pages").toObject()==pages,
         "Layout migration changed existing layouts or invented layouts");
-    QString name; bool duplicate=false;
-    require(settings.saveLayout(edit,name,duplicate).isEmpty() && name=="Edit-1" && !duplicate,"First layout naming failed");
-    require(settings.saveLayout(edit,name,duplicate).isEmpty() && duplicate && settings.layouts(edit).size()==1,
-        "Identical page configuration consumed a layout slot");
-    require(settings.saveLayout(color,name,duplicate).isEmpty() && name=="Color-1","Layout names were not page-local");
+    QString name;
+    require(settings.saveLayout(edit,name).isEmpty() && name=="Edit-1","First layout naming failed");
+    require(settings.saveLayout(edit,name).isEmpty() && name=="Edit-2" && settings.layouts(edit).size()==2,
+        "Identical page configuration did not create a new layout");
+    require(settings.saveLayout(color,name).isEmpty() && name=="Color-1","Layout names were not page-local");
     const auto first=settings.layout(edit,layoutId(settings,edit,"Edit-1"));
-    for(int i=2;i<=5;++i) {
+    for(int i=3;i<=5;++i) {
         sample.move(70+i*20,90+i*15); settings.save("frameEditPageMediaPool",sample.saveGeometry());
-        require(settings.saveLayout(edit,name,duplicate).isEmpty() && !duplicate,"Could not fill five layout slots");
+        require(settings.saveLayout(edit,name).isEmpty(),"Could not fill five layout slots");
     }
     sample.move(240,220); settings.save("frameEditPageMediaPool",sample.saveGeometry());
-    require(!settings.saveLayout(edit,name,duplicate).isEmpty() && settings.layouts(edit).size()==5,"Layout limit was not enforced");
+    require(!settings.saveLayout(edit,name).isEmpty() && settings.layouts(edit).size()==5,"Layout limit was not enforced");
     require(settings.deleteLayout(edit,layoutId(settings,edit,"Edit-3")).isEmpty(),"Cannot delete layout");
-    require(settings.saveLayout(edit,name,duplicate).isEmpty() && name=="Edit-6","Deletion reused a name or prevented saving");
+    require(settings.saveLayout(edit,name).isEmpty() && name=="Edit-6","Deletion reused a name or prevented saving");
     const auto colorBefore=settings.pageConfiguration(color);
     require(settings.activateLayout(edit,layoutId(settings,edit,"Edit-1")).isEmpty() && settings.pageConfiguration(edit)==first,
         "Layout recall did not restore the saved configuration");
@@ -157,13 +160,13 @@ static void storage() {
     QFile invalid(temporary.filePath("future.json")); require(invalid.open(QIODevice::WriteOnly),"Cannot seed future format");
     const QByteArray future="{\"version\":99,\"pages\":{}}"; invalid.write(future); invalid.close();
     PaneSettings unsupported(invalid.fileName());
-    require(!unsupported.saveLayout(edit,name,duplicate).isEmpty(),"Future settings format was overwritten by layout save");
+    require(!unsupported.saveLayout(edit,name).isEmpty(),"Future settings format was overwritten by layout save");
     require(invalid.open(QIODevice::ReadOnly) && invalid.readAll()==future,"Unsupported settings were modified"); invalid.close();
     QFile blocking(temporary.filePath("not-a-directory")); require(blocking.open(QIODevice::WriteOnly),"Cannot seed failed-write test"); blocking.close();
     PaneSettings unwritable(blocking.fileName()+"/layouts.json");
-    require(!unwritable.saveLayout(edit,name,duplicate).isEmpty() && unwritable.layouts(edit).isEmpty(),
+    require(!unwritable.saveLayout(edit,name).isEmpty() && unwritable.layouts(edit).isEmpty(),
         "Failed layout write changed the in-memory layout list");
-    std::puts("PASS: v5 migration, page-local naming, duplicate suppression, five-layout limit, delete/save, immutable recall and disk reload");
+    std::puts("PASS: v5 migration, page-local naming, identical configuration saves, five-layout limit, delete/save, immutable recall and disk reload");
 }
 static void layoutIdentity() {
     QTemporaryDir directory; const auto path=directory.filePath("identity.json");
@@ -172,8 +175,8 @@ static void layoutIdentity() {
     QStringList ids; QList<QJsonObject> configurations;
     for(int i=0;i<5;++i) {
         sample.setGeometry(50+i*20,70,400,300); settings.save("frameEditPageMediaPool",sample.saveGeometry());
-        QString name; bool duplicate=false;
-        require(settings.saveLayout(page,name,duplicate).isEmpty(),"Cannot create identity fixture");
+        QString name;
+        require(settings.saveLayout(page,name).isEmpty(),"Cannot create identity fixture");
         ids.append(settings.activeLayout(page)); configurations.append(settings.pageConfiguration(page));
     }
     const auto active=settings.activeLayout(page); const auto working=settings.pageConfiguration(page);
@@ -199,10 +202,10 @@ static void layoutIdentity() {
     QFile file(path); require(file.open(QIODevice::ReadOnly),"Cannot read identity fixture");
     auto root=QJsonDocument::fromJson(file.readAll()).object(); file.close();
     auto pages=root.value("pages").toObject(); auto state=pages.value(page).toObject();
-    require(root.value("version").toInt()==7 && state.value("presets").toArray()==reloaded.layouts(page)
+    require(root.value("version").toInt()==8 && state.value("presets").toArray()==reloaded.layouts(page)
         && state.value("activePreset").toString()==reloaded.activeLayout(page)
         && state.value("nextPresetNumber").toInt()==6 && !state.contains("layouts") && !state.contains("activeLayout"),
-        "Layout terminology changed the format-7 wire keys, identities or generated counter");
+        "Layout terminology changed the compatibility wire keys, identities or generated counter");
     auto saved=state.value("presets").toArray();
     for(int i=0;i<saved.size();++i) {
         auto item=saved[i].toObject(); item.remove("id"); item.insert("name",QString("Legacy-%1").arg(i)); saved[i]=item;
@@ -267,6 +270,9 @@ void testHostLifecycle();
 void testAuxiliaryPageContext();
 void testLayoutTransition();
 void testColorPlaybackPause();
+void testLayoutCommands();
+void testCommandFeedback();
+void testLayoutSlots();
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     LayoutTest::initialize();
@@ -274,6 +280,9 @@ int main(int argc,char **argv) {
 #if defined(UNBOUND_LAYOUT_TRANSITIONS) && defined(Q_OS_WIN)
     if(app.arguments().contains("--layout-cover-only")) { testLayoutCoverPresentation(); return 0; }
 #endif
+    if(app.arguments().contains("--commands-only")) {testLayoutCommands(); return 0;}
+    if(app.arguments().contains("--feedback-only")) {testCommandFeedback(); return 0;}
+    if(app.arguments().contains("--slots-only")) {testLayoutSlots(); return 0;}
     if(app.arguments().contains("--page-focus-only")) { testPageFocus(); return 0; }
     if(app.arguments().contains("--color-tool-selection-only")) { testColorToolSelection(); return 0; }
     if(app.arguments().contains("--edit-scopes-only")) { testEditScopes(); return 0; }
@@ -283,6 +292,8 @@ int main(int argc,char **argv) {
     if(app.arguments().contains("--window-group-only")) { testWindowGroup(); return 0; }
     if(app.arguments().contains("--auxiliary-page-context")) { testAuxiliaryPageContext(); return 0; }
     if(!app.arguments().contains("--layout-menu-only")) {
+        testLayoutCommands();
+        testLayoutSlots();
         testLayoutReadiness();
         testLayoutTransition();testColorPlaybackPause();
         testHostLifecycle();
@@ -376,7 +387,10 @@ int main(int argc,char **argv) {
         static int checkNumber=0; ++checkNumber;
         auto menu=main.findChild<PageLayoutMenu *>("unboundLayoutMenu");
         if(!menu || !menu->isVisible()) std::fprintf(stderr,"Popup check %d; menu exists=%d\n",checkNumber,menu!=nullptr);
-        require(menu && menu->isVisible(),"Layout popup did not open or closed unexpectedly"); return menu;
+        require(menu && menu->isVisible(),"Layout popup did not open or closed unexpectedly");
+        QCursor::setPos(menu->geometry().center());
+        QEvent enter(QEvent::Enter);QApplication::sendEvent(menu,&enter);
+        return menu;
     };
     context(poolButton); auto menu=popup();
     require(control(menu,"unboundLayoutSave")->text()=="Save as new Edit layout","New layout save label is incorrect");
@@ -394,8 +408,7 @@ int main(int argc,char **argv) {
     require(control(menu,"unboundLayoutRecall","Edit-1"),"Save did not update the open menu");
     require(control(menu,"unboundLayoutRecall","Edit-1")->property("activeLayout").toBool() &&
         !control(menu,"unboundLayoutUpdate"),"Saved layout is not highlighted and clean");
-    click(control(menu,"unboundLayoutSave")); popup();
-    require(main.findChild<QLabel *>("unboundLayoutStatus")->text().contains("Already saved"),"Duplicate save was not reported");
+    require(!main.findChild<QLabel *>("unboundLayoutStatus"),"Menu retains a text notification surface");
     menu->dismiss(); click(poolButton); settle();
     require(poolButton->isChecked() && pool.content->window()!=&main,"Pool did not float");
     auto floating=pool.content->window(); floating->setGeometry(120,150,440,320); settle();
@@ -519,9 +532,15 @@ int main(int argc,char **argv) {
     layoutHighlights(retainedEdit2,retainedEdit1);
     click(control(menu,"unboundLayoutDelete","Delete Edit-1")); popup();
     require(!control(menu,"unboundLayoutRecall","Edit-1"),"Delete did not update the open menu");
+    require(control(menu,"unboundLayoutRecall","Edit-2")->property("layoutSlot").toInt()==2,
+        "Deleting slot 1 renumbered slot 2 in the menu");
+    require(menu->findChildren<QLabel *>("unboundLayoutSlotNumber").size()==5,
+        "Deleting a layout removed its numbered row");
     pool.content->window()->move(350,280); settle();
     click(control(menu,"unboundLayoutSave")); popup();
     require(control(menu,"unboundLayoutRecall","Edit-3"),"Delete-then-save sequence failed without dismissal");
+    require(control(menu,"unboundLayoutRecall","Edit-3")->property("layoutSlot").toInt()==1,
+        "New layout did not reuse slot 1 in the menu");
     menu->dismiss(); pool.content->window()->move(320,260); settle();
     const auto updatedGeometry=pool.content->window()->geometry();
     context(poolButton); menu=popup();
@@ -538,8 +557,7 @@ int main(int argc,char **argv) {
     click(control(menu,"unboundLayoutRecall","Edit-3")); popup();
     require(poolButton->isChecked() && pool.content->window()->geometry()==updatedGeometry,
         "Update was not recalled or Dock all overwrote the saved layout");
-    require(!main.findChild<QLabel *>("unboundLayoutStatus")->text().contains("Recalled"),
-        "Recall still shows redundant feedback");
+    require(!main.findChild<QLabel *>("unboundLayoutStatus"),"Recall created text feedback");
     menu->dismiss(); pool.content->window()->move(340,270); settle();
     context(poolButton); menu=popup();
     require(control(menu,"unboundLayoutUpdate","Update Edit-3"),"Modified layout was not dirty before switching away");

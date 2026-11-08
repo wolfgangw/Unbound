@@ -334,6 +334,7 @@ void testColorClips() {
 #include "controller.h"
 #include "panesettings.h"
 #include "pagelayoutmenu.h"
+#include "layoutpendingwork.h"
 #include <QContextMenuEvent>
 #include <QTemporaryDir>
 
@@ -341,29 +342,29 @@ void testColorClipsStartup() {
     QTemporaryDir directory;
     qputenv("UNBOUND_SETTINGS_FILE",directory.filePath("clips-startup.json").toUtf8());
     Unbound::PaneSettings seed;
-    QString savedName; bool duplicate=false;
+    QString savedName;
     seed.saveFloating("Color/m_pFrameNodeGraph",true);
     seed.saveFloating("Color/m_pWidgetLutBrowser",true);
     seed.saveToggle("Color/m_pFrameNodeGraph",false);
     seed.saveToggle("Color/m_pWidgetLutBrowser",false);
-    require(seed.saveLayout("WStackPage_Color",savedName,duplicate).isEmpty(),"Cannot seed Nodes/LUTs layout");
+    require(seed.saveLayout("WStackPage_Color",savedName).isEmpty(),"Cannot seed Nodes/LUTs layout");
     const auto nodesLayout=seed.activeLayout("WStackPage_Color");
     seed.saveFloating("Color/m_pLightBox",true);
     seed.saveToggle("Color/m_pLightBox",false);
-    require(seed.saveLayout("WStackPage_Color",savedName,duplicate).isEmpty(),"Cannot seed Nodes/Clips layout");
+    require(seed.saveLayout("WStackPage_Color",savedName).isEmpty(),"Cannot seed Nodes/Clips layout");
     const auto nodesClipsLayout=seed.activeLayout("WStackPage_Color");
     seed.saveFloating("Color/m_pFrameNodeGraph",false);
     seed.saveFloating("Color/m_pWidgetLutBrowser",false);
     seed.saveFloating("Color/m_pLightBox",false);
     seed.saveFloating("Color/timelineFrame",true);
     seed.saveToggle("Color/timelineFrame",false);
-    require(seed.saveLayout("WStackPage_Color",savedName,duplicate).isEmpty(),"Cannot seed Timeline layout");
+    require(seed.saveLayout("WStackPage_Color",savedName).isEmpty(),"Cannot seed Timeline layout");
     const auto timelineLayout=seed.activeLayout("WStackPage_Color");
     for(const auto &name:{"m_pWidgetGallery","m_pWidgetLutBrowser","timelineFrame","m_pLightBox"}) {
         require(seed.saveFloating(QStringLiteral("Color/")+name,true).isEmpty(),"Cannot seed Color startup state");
         require(seed.saveToggle(QStringLiteral("Color/")+name,false).isEmpty(),"Cannot seed Color toggle state");
     }
-    require(seed.saveLayout("WStackPage_Color",savedName,duplicate).isEmpty(),"Cannot seed Clips layout");
+    require(seed.saveLayout("WStackPage_Color",savedName).isEmpty(),"Cannot seed Clips layout");
     const auto clipsLayout=seed.activeLayout("WStackPage_Color");
     QWidget main; main.setObjectName("UiMainWindow"); main.resize(900,700);
     QWidget page(&main); page.setObjectName("WStackPage_Color"); page.setGeometry(0,0,900,700);
@@ -425,6 +426,21 @@ void testColorClipsStartup() {
     auto menu=main.findChild<Unbound::PageLayoutMenu *>("unboundLayoutMenu");
     require(menu,"Missing Color layout menu");
     bool applied=false;
+    const auto recall=[&](const QString &id,bool &didApply) {
+        // Each scenario starts after the previous command has settled. Burst
+        // rejection is exercised separately by the command-gate fixture.
+        QElapsedTimer wait;wait.start();
+        const auto pending=[&] {
+            if(main.property("unboundLayoutCommandsBusy").toBool())return true;
+            for(auto work:Unbound::LayoutPendingWork::registry())
+                if(work->pending && work->scope && (work->scope==&main || work->scope->isVisible()))return true;
+            return false;
+        };
+        while(pending() && wait.elapsed()<3500)settle();
+        const auto error=menu->recall(id,didApply);
+        if(!error.isEmpty())std::fprintf(stderr,"Recall: %s\n",qPrintable(error));
+        return error;
+    };
     {
         // Dock all must perform the same native Color mode transaction as an
         // ordinary layout recall, including when startup inherited Lightbox.
@@ -458,43 +474,43 @@ void testColorClipsStartup() {
         stop.click(); mode.click(); settle(); require(mode.isChecked(),"Native Lightbox could not open after Dock all");
         mode.click(); for(int i=0;i<8;++i) settle();
         require(!mode.isChecked() && player.isVisible(),"Native Lightbox could not close after Dock all");
-        require(menu->recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall floating layout after Dock all and Lightbox toggle");
+        require(recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall floating layout after Dock all and Lightbox toggle");
         for(int i=0;i<8;++i) settle();
         for(const auto &name:{"m_pWidgetGallery","m_pWidgetLutBrowser","timelineFrame","m_pLightBox"})
             require(floating(name) && floating(name)->isVisible(),"Recall after Dock all/Lightbox toggle lost a floating pane");
     }
-    require(menu->recall(nodesLayout,applied).isEmpty() && applied,"Cannot recall Nodes/LUTs layout");
+    require(recall(nodesLayout,applied).isEmpty() && applied,"Cannot recall Nodes/LUTs layout");
     for(int i=0;i<8;++i) settle();
     require(floating("m_pFrameNodeGraph") && floating("m_pWidgetLutBrowser"),"Leaving floating Clips restored LUTs but lost Nodes");
     require(!floating("m_pLightBox"),"Incoming layout left Clips floating");
     require(!mode.isChecked() && player.isVisible(),"Ordinary layout restored Lightbox instead of the Color viewer");
-    require(menu->recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall Clips layout");
+    require(recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall Clips layout");
     for(int i=0;i<8;++i) settle();
     for(const auto &name:{"m_pWidgetGallery","m_pWidgetLutBrowser","timelineFrame","m_pLightBox"})
         require(floating(name) && floating(name)->isVisible(),"Return to Clips layout lost a host");
     auto retained=floating("m_pLightBox");
-    require(menu->recall(nodesClipsLayout,applied).isEmpty() && applied,"Cannot recall Nodes with retained Clips");
+    require(recall(nodesClipsLayout,applied).isEmpty() && applied,"Cannot recall Nodes with retained Clips");
     for(int i=0;i<8;++i) settle();
     require(floating("m_pLightBox")==retained && floating("m_pFrameNodeGraph")
         && floating("m_pWidgetLutBrowser") && mode.isChecked(),"Retained Clips blocked incoming Nodes");
-    require(menu->recall(nodesLayout,applied).isEmpty() && applied,"Cannot repeat ordinary layout recall");
+    require(recall(nodesLayout,applied).isEmpty() && applied,"Cannot repeat ordinary layout recall");
     for(int i=0;i<8;++i) settle();
     require(!floating("m_pLightBox") && floating("m_pFrameNodeGraph") && floating("m_pWidgetLutBrowser"),
         "Repeated Clips-to-ordinary recall lost a host");
     require(!mode.isChecked() && player.isVisible(),"Repeated ordinary recall left native Lightbox active");
-    require(menu->recall(timelineLayout,applied).isEmpty() && applied,"Cannot recall Timeline-only layout");
+    require(recall(timelineLayout,applied).isEmpty() && applied,"Cannot recall Timeline-only layout");
     for(int i=0;i<8;++i) settle();
     require(floating("timelineFrame") && !floating("m_pLightBox") && !mode.isChecked() && player.isVisible(),
         "Timeline-only layout did not restore normal Color presentation");
-    require(menu->recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall Clips with retained Timeline");
+    require(recall(clipsLayout,applied).isEmpty() && applied,"Cannot recall Clips with retained Timeline");
     for(int i=0;i<8;++i) settle();
     Unbound::PaneSettings recalled;
     require(!recalled.toggle("Color/timelineFrame"),
         "Temporary Clips initialization saved Timeline as a user visibility change");
-    require(menu->recall(timelineLayout,applied).isEmpty() && applied,"Cannot return to Timeline-only layout");
+    require(recall(timelineLayout,applied).isEmpty() && applied,"Cannot return to Timeline-only layout");
     for(int i=0;i<8;++i) settle();
     mode.click(); settle();
-    require(menu->recall(timelineLayout,applied).isEmpty(),"Cannot reselect current ordinary layout");
+    require(recall(timelineLayout,applied).isEmpty(),"Cannot reselect current ordinary layout");
     for(int i=0;i<8;++i) settle();
     require(!mode.isChecked() && player.isVisible(),"Reselecting ordinary layout retained native Lightbox");
     // Playback assistance is optional. None of these transport states may
@@ -512,22 +528,22 @@ void testColorClipsStartup() {
         play.setChecked(scenario>=2);reverse.setChecked(scenario==2);
         // Case 4 leaves Play checked when Stop is clicked: native Stop is not
         // acknowledged, even if the button toggles its own checked state.
-        require(menu->recall(clipsLayout,applied).isEmpty() && applied,
+        require(recall(clipsLayout,applied).isEmpty() && applied,
             "Playback workaround refused incoming Clips layout");
         for(int i=0;i<8;++i)settle();
         require(floating("m_pLightBox") && mode.isChecked(),"Optional pause prevented Clips entry");
         auto retainedClips=floating("m_pLightBox");
-        require(menu->recall(nodesClipsLayout,applied).isEmpty() && applied,
+        require(recall(nodesClipsLayout,applied).isEmpty() && applied,
             "Playback workaround refused retained Clips layout");
         for(int i=0;i<8;++i)settle();
         require(floating("m_pLightBox")==retainedClips && floating("m_pFrameNodeGraph"),
             "Optional pause prevented retained Clips recall");
-        require(menu->recall(timelineLayout,applied).isEmpty() && applied,
+        require(recall(timelineLayout,applied).isEmpty() && applied,
             "Playback workaround refused outgoing Clips layout");
         for(int i=0;i<8;++i)settle();
         require(!floating("m_pLightBox") && !mode.isChecked(),"Optional pause prevented Clips docking");
         mode.click();settle();
-        require(menu->recall(timelineLayout,applied).isEmpty(),"Playback workaround refused clean active layout");
+        require(recall(timelineLayout,applied).isEmpty(),"Playback workaround refused clean active layout");
         for(int i=0;i<8;++i)settle();
         require(!mode.isChecked(),"Optional pause prevented clean active layout restoration");
         require(inventedResumes==0,"Unknown/idle transport caused an unowned playback restart");

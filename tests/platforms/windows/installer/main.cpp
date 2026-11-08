@@ -8,12 +8,12 @@ int main() {
     if(fs::exists(root)) return 1;
     try {
         Paths p{root/L"Local User/Unbound",root/L"Roaming User/Scripts"};
-        const Payload first{"loader-one","helper-one","hook-one","0.3.0+test.1"}, second{"loader-two","helper-two","hook-two","0.3.0+test.2"};
+        const Payload first{"loader-one","helper-one","hook-one","0.3.0+test.1",{{L"Layout 1.lua","command-one"}}}, second{"loader-two","helper-two","hook-two","0.3.0+test.2",{{L"Layout 1.lua","command-two"}}};
         auto idle=[]{return false;};
         apply(p,&first,idle); require(matches(p,first),"Fresh install mismatch");
         write(p.runtime()/L"UnboundHelper.dll","obsolete runtime");
         write(p.support/L"Unbound.json","saved layouts"); write(p.scripts/L"unrelated.lua","keep");
-        for(int phase=0;phase<=3;++phase) {
+        for(int phase=0;phase<=4;++phase) {
             bool failed=false;
             try { apply(p,&second,idle,[=](int stage){if(stage==phase) throw std::runtime_error("injected failure");}); }
             catch(...) { failed=true; }
@@ -27,10 +27,11 @@ int main() {
         require(blocked && matches(p,first),"Resolve launch during staging changed installation");
         apply(p,&second,idle); require(matches(p,second),"Update mismatch");
         require(!fs::exists(p.runtime()/L"UnboundHelper.dll"),"Update retained obsolete runtime files");
+        fs::remove(p.commands()/L"Layout 1.lua"); require(!matches(p,second),"Missing command disables repair"); apply(p,&second,idle);
         fs::remove(p.hook()); require(!matches(p,second),"Broken hook disables repair"); apply(p,&second,idle);
         write(p.support/L"settings.json","legacy");
         const auto retained=[&]{return read(p.support/L"Unbound.json")=="saved layouts" && read(p.support/L"settings.json")=="legacy";};
-        apply(p,nullptr,idle); require(!installed(p) && retained(),"Uninstall removed settings");
+        apply(p,nullptr,idle); require(!installed(p) && !fs::exists(p.commands()) && retained(),"Uninstall removed settings or retained commands");
         apply(p,&first,idle); require(matches(p,first) && retained(),"Reinstall lost settings");
         apply(p,nullptr,idle);
         apply(p,nullptr,idle);

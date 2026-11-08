@@ -14,8 +14,8 @@ void testWindowGroup() {
     const QString key="frameEditPageMediaPool",page="WStackPage_Conform";
     require(!settings.keepAtop(key),"Legacy missing pin flag is not false");
     settings.saveFloating(key,true);
-    QString name; bool duplicate=false;
-    settings.saveLayout(page,name,duplicate);
+    QString name;
+    settings.saveLayout(page,name);
     const auto id=settings.activeLayout(page);
     require(settings.saveKeepAtop(key,true).isEmpty() && settings.layoutDirty(page,id),"Pin did not dirty layout");
     require(PaneSettings(path).keepAtop(key),"Pin did not survive settings reload");
@@ -26,8 +26,8 @@ void testWindowGroup() {
     require(settings.keepAtop(key),"Recall lost saved pin preference");
     settings.saveFloating(key,false);
     require(settings.keepAtop(key),"Docking discarded pin preference");
-    // A pre-feature format-7 file must load without any rewrite, then change
-    // only the requested working pane when pinning is first used.
+    // Slot migration preserves a pre-pinning snapshot. First pinning changes
+    // only the requested working pane after that migration.
     const auto legacyPath=directory.filePath("legacy.json");
     const QJsonObject pane{{"floating",true},{"toolbarButtonChecked",false},
         {"window",QJsonObject{{"clientRect",rectangleJson(QRect(-400,80,640,480))},
@@ -46,8 +46,9 @@ void testWindowGroup() {
     PaneSettings migrated(legacyPath);
     require(migrated.readError().isEmpty() && !migrated.keepAtop(key)
         && !migrated.layoutDirty(page,legacyId) && !migrated.geometry(key).isEmpty(),"Legacy settings changed on load");
-    require(legacyFile.open(QIODevice::ReadOnly) && legacyFile.readAll()==bytes,"Loading rewrote legacy settings");
-    legacyFile.close();
+    require(legacyFile.open(QIODevice::ReadOnly),"Cannot read migrated pin fixture");
+    const auto migratedRoot=QJsonDocument::fromJson(legacyFile.readAll()).object();legacyFile.close();
+    require(migrated.layoutAtSlot(page,1).value("id").toString()==legacyId,"Slot migration changed pin identity");
     require(migrated.saveKeepAtop(key,true).isEmpty(),"Cannot pin legacy pane");
     require(legacyFile.open(QIODevice::ReadOnly),"Cannot read updated legacy settings");
     auto changed=QJsonDocument::fromJson(legacyFile.readAll()).object(); legacyFile.close();
@@ -55,7 +56,7 @@ void testWindowGroup() {
     auto panes=savedPage["panes"].toObject(); auto savedPane=panes[key].toObject();
     require(savedPane.take("keepAtop").toBool(),"Pin flag missing from legacy working pane");
     panes[key]=savedPane; savedPage["panes"]=panes; pages[page]=savedPage; changed["pages"]=pages;
-    require(changed==legacy,"Pinning changed legacy geometry, toggles, layouts or identity");
+    require(changed==migratedRoot,"Pinning changed legacy geometry, toggles, layouts or identity");
     require(migrated.activateLayout(page,legacyId).isEmpty() && !migrated.keepAtop(key)
         && migrated.pageConfiguration(page)==configuration,"Legacy layout recall did not clear pin and preserve placement");
     const auto unsavedPath=directory.filePath("no-layout.json");

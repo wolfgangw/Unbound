@@ -7,10 +7,12 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <map>
 #include <stdexcept>
 namespace Installation {
 namespace fs=std::filesystem;
 struct Paths { fs::path support, scripts; fs::path runtime() const { return support/L"Runtime"; }
+    fs::path commands() const { return scripts/L"Utility/Unbound"; }
     fs::path hook() const { return scripts/L"Unbound.scriptlib"; } };
 inline bool resolveRunning() {
     auto snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
@@ -27,7 +29,7 @@ inline fs::path environment(const wchar_t *name) {
 }
 inline Paths userPaths() { return {environment(L"LOCALAPPDATA")/L"Unbound",
     environment(L"APPDATA")/L"Blackmagic Design/DaVinci Resolve/Support/Fusion/Scripts"}; }
-inline bool installed(const Paths &p) { return fs::exists(p.runtime()) || fs::exists(p.hook()); }
+inline bool installed(const Paths &p) { return fs::exists(p.runtime()) || fs::exists(p.hook()) || fs::exists(p.commands()); }
 inline std::string read(const fs::path &path) { std::ifstream stream(path,std::ios::binary); return {std::istreambuf_iterator<char>(stream),{}}; }
 inline void write(const fs::path &path,const std::string &bytes) {
     std::ofstream stream(path,std::ios::binary|std::ios::trunc);
@@ -42,8 +44,10 @@ inline void rejectLinks(fs::path path) {
     }
 }
 // The executable embeds these exact files; no downloads, shell or Qt dependency.
-struct Payload { std::string loader,helper,hook,version; };
+struct Payload { std::string loader,helper,hook,version; std::map<std::wstring,std::string> commands; };
 inline bool matches(const Paths &p,const Payload &payload) {
+    for(const auto &command:payload.commands)
+        if(read(p.commands()/command.first)!=command.second)return false;
     return read(p.runtime()/L"VERSION")==payload.version
         && read(p.runtime()/L"Unbound.dll")==payload.helper
         && read(p.runtime()/L"UnboundLuaLoader.dll")==payload.loader
@@ -56,9 +60,9 @@ inline void apply(const Paths &p,const Payload *payload,
     const std::function<void(int)> &checkpoint=[](int){})
 {
     if(running()) throw std::runtime_error("Close DaVinci Resolve normally before changing Unbound.");
-    rejectLinks(p.support); rejectLinks(p.scripts); rejectLinks(p.runtime()); rejectLinks(p.hook());
+    rejectLinks(p.support); rejectLinks(p.scripts); rejectLinks(p.runtime()); rejectLinks(p.hook()); rejectLinks(p.commands());
     fs::create_directories(p.support);
-    if(payload) fs::create_directories(p.scripts);
+    if(payload) fs::create_directories(p.commands().parent_path());
     const auto transaction=p.support/(L"transaction-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
     if(!fs::create_directory(transaction)) throw std::runtime_error("Another installation transaction exists.");
     std::vector<std::pair<fs::path,fs::path>> previous;
@@ -72,6 +76,12 @@ inline void apply(const Paths &p,const Payload *payload,
             write(transaction/L"new-runtime/Unbound.dll",payload->helper);
             write(transaction/L"new-runtime/VERSION",payload->version);
             write(transaction/L"new-hook",payload->hook);
+            fs::create_directory(transaction/L"new-commands");
+            for(const auto &command:payload->commands) {
+                const fs::path filename(command.first);
+                if(filename.filename()!=filename || filename.extension()!=L".lua")throw std::runtime_error("Invalid command filename.");
+                write(transaction/L"new-commands"/filename,command.second);
+            }
         }
         checkpoint(0);
         if(running()) throw std::runtime_error("DaVinci Resolve started during preparation; existing files were left in place.");
@@ -81,10 +91,11 @@ inline void apply(const Paths &p,const Payload *payload,
             const auto backup=transaction/std::to_wstring(previous.size());
             fs::rename(original,backup); previous.emplace_back(original,backup);
         };
-        save(p.hook()); save(p.runtime()); checkpoint(1);
+        save(p.hook()); save(p.runtime()); save(p.commands()); checkpoint(1);
         if(payload) {
             fs::rename(transaction/L"new-runtime",p.runtime()); published.push_back(p.runtime()); checkpoint(2);
             fs::rename(transaction/L"new-hook",p.hook()); published.push_back(p.hook()); checkpoint(3);
+            fs::rename(transaction/L"new-commands",p.commands()); published.push_back(p.commands()); checkpoint(4);
         }
     } catch(...) {
         const auto failure=std::current_exception(); bool recovered=true;

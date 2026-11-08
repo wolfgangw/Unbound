@@ -92,7 +92,7 @@ under each platform's tests. Audition-activation fixtures run on both backends.
 Resolve's per-user Lua startup hook invokes the private loader once and returns
 silently. The Qt-free loader validates the host and queues attachment on the Qt GUI
 thread, reusing one controller on repeated requests. There is no external injection,
-service, persistent Lua loop or visible Scripts-menu launcher. Resolve's internal
+service, persistent Lua loop or visible startup launcher. Resolve's internal
 Lua exposes global `ffi` and `os.getenv`, but not `require`, `package`, `debug` or `io`.
 Use Resolve's Qt runtime; do not replace it or re-sign the Resolve application.
 
@@ -112,6 +112,57 @@ or launch it, and always preserve settings/layouts. No settings-deletion option.
 Updates replace the private Runtime directory transactionally. macOS packages and
 installs only the current runtime files, excluding stale `UnboundHelper.dylib`
 build output; previous installations remain recoverable through rollback/backups.
+
+### Script commands
+
+`src/scripts/commands.json` defines stable script filenames, command identifiers
+and arguments. `infrastructure/scripts/generate.py` generates platform-specific
+entry scripts installed in `Scripts/Utility/Unbound`, grouped natively in Workspace
+> Scripts and Keyboard Customization. No shortcuts or keyboard presets are assigned
+or changed. Installers replace/remove this managed folder alongside Runtime;
+other Utility scripts remain untouched, and failures restore the previous files.
+
+Workspace scripts execute outside Resolve. They use the existing Fusion scripting
+connection and public `fusion:Execute(...)` to call
+`UnboundExecuteCommand(version, command, argumentsJson)` inside Resolve, in the
+already-loaded Unbound library, without initializing another copy. No Unbound IPC
+server, sockets, polling or persistent script process is introduced. The shared
+C ABI accepts version 1 and strict JSON arguments; status 1 means queued, 2 busy,
+and -1 through -4 mean unavailable runtime, unsupported version, unknown command
+or invalid arguments respectively. Strings are copied before returning; no Lua
+callbacks survive. Atomic admission permits one queued request. GUI-thread delivery
+discards requests invalidated by page/app context changes or a newer menu operation.
+
+`layout.activate` takes a stable `slot` from 1 through 5. Deletion leaves a gap;
+Save as new fills the lowest empty slot. Renaming/updating never moves a layout.
+The menu always shows five rows with muted, fixed-width slot numbers and blank,
+disabled name areas for empty slots; omit the layout-count status line.
+`layout.dockAll`, `layout.save` and `layout.saveNew` take empty objects. Save updates the active layout; Save as new preserves the menu's
+generated naming; every successful Save as new creates a distinct layout in the
+lowest free slot, even when its configuration matches an existing layout. Shared controller operations serve menu
+and scripts. Save feedback is one 933 ms glow pulse on currently visible
+Unbound buttons: muted green (`#80c797`) for save/save-as success and lightened
+playhead red (`#f36a5f`) for an empty slot or full slots. Reuse the docking warning's
+sine fade, muted stroke and halo (58% peak alpha). Docking warnings use the same
+lightened red and halo brightness, retaining their repeating 1400 ms rhythm.
+Existing docking failures take precedence, including
+acknowledged ones. Hiding or application departure cancels feedback; no replay,
+window activation or background polling. Successful recall,
+no active layout, unsupported pages and busy requests are silent. Real storage/
+restoration errors from scripts retain existing reporting. Menu actions use the same
+button feedback: saves pulse green, failures red; recall/delete/pinning changes
+speak for themselves. No transient status text appears in the menu. Docking-failure
+guidance remains available there.
+
+`LayoutCommandGate` rejects reentrant/overlapping operations without replay. It
+observes structural widget events during settlement (150 ms quiet, three-second
+observation cap), checks controller and `LayoutPendingWork` queued work at every
+admission, and blocks script admission while an operation settles. Pending native
+corrections have the same three-second admission bound; after it, a new command
+may supersede them through the existing restoration lifecycle. Pending-work
+accounting is shared on both platforms independently of transition presentation.
+Modal dialogs, native popups, app departure and minimized main windows suppress
+script execution. It never forwards or intercepts keyboard events.
 
 Installer wording, layout, display versions and presentation state belong in
 `src/installer/dialog.json` and `presentation.h`; both builds compile that definition.
@@ -589,8 +640,10 @@ files never rewrites them; first use changes only the working pane.
 The main-owned Qt tool QFrame sits outside Qt's transient popup stack. Anchor below
 the invoking button, clamp to work area, retain UUID-keyed rows and coalesce updates.
 Save/recall/update/delete stay open. Outside interaction, Escape, actual OS application
-departure, close or owner hide/minimize dismiss; hover and transient Qt deactivation
-do not. Explicit visibility intent prevents native tool-window sweeps from flashing
+departure, close or owner hide/minimize dismiss immediately without consuming outside
+clicks. Pointer departure starts a two-second dismissal timer; re-entry cancels it and the next departure gets the full delay. Opening outside
+the pointer starts the same grace period. Transient Qt deactivation does not dismiss.
+Explicit visibility intent prevents native tool-window sweeps from flashing
 or reopening the menu. Observe native departure only for menu lifetime (Windows
 foreground events; Cocoa app resignation/menu tracking). Growing status rows reclamp
 without reopening. `WindowInteractionEvent` precedes user move/resize, including
@@ -662,8 +715,13 @@ Settings are per user, across projects. Windows uses
 `~/Library/Application Support/Unbound/Unbound.json`.
 `UNBOUND_SETTINGS_FILE` overrides either location. Edit JSON only with Resolve
 closed, because in-memory state and autosave otherwise overwrite external edits.
-Format 7 uses readable JSON and atomic writes. Unsupported/corrupt files remain
+Format 8 uses readable JSON and atomic writes. Unsupported/corrupt files remain
 unchanged; malformed layouts are rejected rather than recalled as empty state.
+Older files acquire slots 1-5 in existing order, preserving IDs, snapshots, active
+identity and generated-name counters. Before migrating any file with layouts,
+retain its original bytes in `<settings-file>.pre-v8` (never overwrite an existing
+backup); backup failure stops migration. Older Unbound versions reject format 8;
+the backup permits explicit rollback with Resolve closed.
 
 `pages` is keyed by the page's Resolve object name: `WStackPage_Conform`,
 `WStackPage_Color`, `WStackPage_Audio`, `WStackPage_Browse`, `WStackPage_Cut`,
@@ -672,8 +730,9 @@ unchanged; malformed layouts are rejected rather than recalled as empty state.
 - `mainWindow`: per-page native placement.
 - `panes`: objects keyed by the catalogue's persistence name, each containing
   `floating`, optional `toolbarButtonChecked` and `keepAtop`, and `window` geometry.
-- `presets`: up to five layout objects with stable UUID `id`, display `name`, and
-  `configuration` containing only a `mainWindow`/`panes` snapshot.
+- `presets`: up to five layout objects with stable UUID `id`, unique integer `slot`
+  (1-5), display `name`, and `configuration` containing only a `mainWindow`/`panes`
+  snapshot. Empty slots have no object; removing one never renumbers the rest.
 - `activePreset`: active layout UUID; manual changes preserve it, deletion of the
   active layout or Dock all clears it. It is not part of snapshots.
 - `nextPresetNumber`: next generated name suffix; deletion does not reuse numbers.
@@ -724,7 +783,7 @@ Formats 1-6 migrate to 7 without creating layouts or changing arrangements.
 Name-based layouts receive UUIDs and the active name maps to an ID; names,
 snapshots and counters remain intact. Obsolete pre-format-4 `Color/m_pLightBox`
 records are excluded. Layout validation requires unique IDs, not unique labels.
-Direct JSON equality suppresses duplicate new layouts; no hashes are stored.
+Identical configurations may occupy separate slots with independent identities.
 Explicit updates may overwrite an existing layout regardless of duplication.
 
 Recall captures pending geometry/toggles before comparing snapshots, docks only
@@ -893,7 +952,7 @@ method replacement, screen capture or polling is used.
 
 The additional Color toolbar row reserves space for native traffic-light buttons
 when they overlap its allocation. The Cocoa adapter measures visible standard
-window-button bounds in logical screen coordinates and adjusts only the row’s
+window-button bounds in logical screen coordinates and adjusts only the rowâ€™s
 left margin, retaining its original padding. Scoped layout/geometry/window-state
 events refresh clearance; non-overlapping rows and Windows keep original spacing.
 Docking removes the adapter and restores the original margins. No saved geometry

@@ -2,7 +2,7 @@
 # Install/update automatic Lua activation, preserving settings.
 set -euo pipefail
 candidate=${1:?Usage: install.sh /absolute/path/to/Lua-candidate}
-[[ "$candidate" == /* && -f "$candidate/runtime/load.lua" && -f "$candidate/startup/Unbound.scriptlib" ]] || {
+[[ "$candidate" == /* && -f "$candidate/runtime/load.lua" && -f "$candidate/startup/Unbound.scriptlib" && -d "$candidate/commands" ]] || {
     echo 'Expected a Lua candidate with runtime/ and startup/.' >&2; exit 1;
 }
 if pgrep -x Resolve >/dev/null; then echo 'Close DaVinci Resolve normally before installing Unbound.' >&2; exit 1; fi
@@ -14,7 +14,8 @@ support="$user_root/Library/Application Support/Unbound"
 scripts="$user_root/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts"
 runtime="$support/Runtime"
 hook="$scripts/Unbound.scriptlib"
-mkdir -p "$support/InstallationBackups" "$scripts"
+commands="$scripts/Utility/Unbound"
+mkdir -p "$support/InstallationBackups" "$scripts/Utility"
 transaction=$(mktemp -d "$support/InstallationBackups/install.XXXXXX")
 # Stage and verify everything before moving an existing installation.
 mkdir "$transaction/runtime"
@@ -29,6 +30,7 @@ if [[ -f "$candidate/VERSION" && -f "$candidate/BUILD" ]]; then
     cp "$candidate/VERSION" "$candidate/BUILD" "$transaction/runtime/"
 fi
 cp "$candidate/startup/Unbound.scriptlib" "$transaction/Unbound.scriptlib"
+cp -R "$candidate/commands" "$transaction/commands"
 for library in UnboundLuaLoader.dylib Unbound.dylib; do
     codesign --verify --strict "$transaction/runtime/$library"
 done
@@ -69,6 +71,7 @@ save_previous() {
 }
 save_previous "$hook" previous-Unbound.scriptlib
 save_previous "$runtime" previous-runtime
+save_previous "$commands" previous-commands
 # Migrate the old menu-based installation out of Resolve's scan tree entirely.
 save_previous "$scripts/Utility/Unbound.lua" previous-Unbound.lua
 save_previous "$scripts/Utility/UnboundLua" previous-UnboundLua
@@ -76,5 +79,7 @@ mv "$transaction/runtime" "$runtime"
 published[published_count]="$runtime"; published_count=$((published_count+1))
 mv "$transaction/Unbound.scriptlib" "$hook"
 published[published_count]="$hook"; published_count=$((published_count+1))
+mv "$transaction/commands" "$commands"
+published[published_count]="$commands"; published_count=$((published_count+1))
 committed=1
 printf 'Installed automatic Unbound startup. Open DaVinci Resolve normally.\nBackup: %s\n' "$transaction"

@@ -62,6 +62,11 @@
         NSData *contents = [NSData dataWithContentsOfFile:[payload stringByAppendingPathComponent:payloadFiles[path]]];
         valid = [contents writeToFile:path atomically:YES] && valid;
     }
+    NSString *commandDestination = [self.scripts stringByAppendingPathComponent:@"Utility/Unbound"];
+    valid = [files createDirectoryAtPath:[commandDestination stringByDeletingLastPathComponent]
+        withIntermediateDirectories:YES attributes:nil error:nil] && valid;
+    valid = [files copyItemAtPath:[payload stringByAppendingPathComponent:@"commands"]
+        toPath:commandDestination error:nil] && valid;
     [self refresh:nil];
     valid = valid && !self.installButton.enabled && self.uninstallButton.enabled == !resolveRunning();
     // Each required file independently controls repair availability, even when

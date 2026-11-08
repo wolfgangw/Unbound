@@ -39,6 +39,7 @@ stage_removal() {
 }
 stage_removal "$scripts/Unbound.scriptlib" hook
 stage_removal "$support/Runtime" runtime
+stage_removal "$scripts/Utility/Unbound" commands
 stage_removal "$scripts/Utility/Unbound.lua" legacy-loader
 stage_removal "$scripts/Utility/UnboundLua" legacy-runtime
 stage_removal "$support/InstallationBackups" installation-backups

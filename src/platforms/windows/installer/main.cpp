@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "installation.h"
+#include "commands.generated.h"
 #include "processmonitor.h"
 #include "../../../installer/presentation.h"
 #include <commctrl.h>
@@ -193,7 +194,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int show) {
     auto mutex=CreateMutexW(nullptr,FALSE,L"Local\\UnboundInstaller");
     if(!mutex || GetLastError()==ERROR_ALREADY_EXISTS) { MessageBoxW(nullptr,L"The Unbound installer is already open.",L"Unbound",MB_OK); return 1; }
     try {
-        paths=Installation::userPaths(); payload={resource(201),resource(202),resource(203),resource(204)};
+        paths=Installation::userPaths(); payload={resource(201),resource(202),resource(203),resource(204),unboundCommandScripts()};
         INITCOMMONCONTROLSEX common{sizeof(common),ICC_STANDARD_CLASSES}; InitCommonControlsEx(&common);
         WNDCLASSW type{}; type.hInstance=instance; type.lpfnWndProc=windowProc; type.lpszClassName=L"UnboundInstaller";
         type.hCursor=LoadCursorW(nullptr,IDC_ARROW); type.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1)); type.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_BTNFACE+1);

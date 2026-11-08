@@ -33,6 +33,9 @@ Open Resolve normally. The installer places:
   `load.lua`, `UnboundLuaLoader.dylib` and `Unbound.dylib`.
 - `startup/Unbound.scriptlib` at
   `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Unbound.scriptlib`.
+- `commands/` at `Scripts/Utility/Unbound/` under that same Resolve user directory,
+  providing eight commands in Workspace > Scripts and Keyboard Customization.
+  This managed folder participates in update, rollback and uninstall.
 
 The hook runs the private loader once and returns. Successful startup is silent;
 there is no persistent Lua loop or additional UI. The native loader validates Qt,

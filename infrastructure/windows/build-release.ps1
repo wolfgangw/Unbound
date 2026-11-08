@@ -76,6 +76,7 @@ try {
     Invoke-Checked (Join-Path $build 'Release\UnboundViewerTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundCinemaTests.exe') @()
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @()
+    Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--feedback-only')
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
     $test = Join-Path $testBuild 'Release\pane-float-smoke.exe'
@@ -100,12 +101,13 @@ try {
     $env:QT_QPA_PLATFORM = 'windows'
     try {
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-cover-only')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--feedback-only')
         # Keep each native process inside the watchdog as fixture coverage grows.
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--components-only')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-menu-only')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--index-header-drag')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
-        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup') -TimeoutSeconds 120
         Invoke-UnboundNativeTest $test @('--audition-taskbar-native')
         Invoke-UnboundNativeTest $test @('--main-placement-test')
         Invoke-UnboundNativeTest $test @('--snap-native')

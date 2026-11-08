@@ -1,0 +1,10 @@
+[
+  {"label":"Layout 1", "command":"layout.activate", "arguments":{"slot":1}},
+  {"label":"Layout 2", "command":"layout.activate", "arguments":{"slot":2}},
+  {"label":"Layout 3", "command":"layout.activate", "arguments":{"slot":3}},
+  {"label":"Layout 4", "command":"layout.activate", "arguments":{"slot":4}},
+  {"label":"Layout 5", "command":"layout.activate", "arguments":{"slot":5}},
+  {"label":"Dock all", "command":"layout.dockAll", "arguments":{}},
+  {"label":"Save layout", "command":"layout.save", "arguments":{}},
+  {"label":"Save as new layout", "command":"layout.saveNew", "arguments":{}}
+]

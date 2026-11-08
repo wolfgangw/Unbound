@@ -17,8 +17,8 @@
 namespace Unbound {
 class PaneSettings
 {
-    // Format 7 wire names stay stable across the terminology change, so existing
-    // installations can read and write the same layouts without a migration.
+    // Keep existing wire keys and UUID identities. Format 8 adds stable slot
+    // numbers; older readers must reject it rather than silently renumber slots.
     static constexpr const char *LayoutsKey="presets";
     static constexpr const char *ActiveLayoutKey="activePreset";
     static constexpr const char *NextLayoutNumberKey="nextPresetNumber";
@@ -44,9 +44,9 @@ public:
         file.close();
         const auto root=document.object();
         const int version=root.value("version").toInt();
-        if(error.error!=QJsonParseError::NoError || !document.isObject() || version<1 || version>7
+        if(error.error!=QJsonParseError::NoError || !document.isObject() || version<1 || version>8
             || !(version>=4 ? root.value("pages").isObject() : root.value("panes").isObject())
-            || (version>=6 && !validLayouts(root.value("pages").toObject(),version>=7))) {
+            || (version>=6 && !validLayouts(root.value("pages").toObject(),version>=7,version>=8))) {
             m_readError=QStringLiteral("Unbound settings are invalid or unsupported: %1. The file was left unchanged.").arg(m_path); return;
         }
         if(version>=4) {
@@ -71,7 +71,17 @@ public:
                 m_pages=converted;
             }
             if(version<7) m_pages=withLayoutIds(m_pages);
-            if(version<7 || !previousPath.isEmpty()) {
+            if(version<8) {
+                bool hasLayouts=false;
+                for(auto page:m_pages)if(!page.toObject().value(LayoutsKey).toArray().isEmpty())hasLayouts=true;
+                // Preserve the pre-slot file for rollback to an older Unbound.
+                const auto backup=file.fileName()+".pre-v8";
+                if(hasLayouts && !QFile::exists(backup) && !QFile::copy(file.fileName(),backup)) {
+                    m_readError=QStringLiteral("Cannot back up Unbound settings: %1").arg(backup);return;
+                }
+                m_pages=withLayoutSlots(m_pages);
+            }
+            if(version<8 || !previousPath.isEmpty()) {
                 m_readError=write(m_pages);
                 if(m_readError.isEmpty() && !previousPath.isEmpty()) QFile::remove(previousPath);
             }
@@ -131,6 +141,15 @@ public:
         return result;
     }
     QJsonArray layouts(const QString &page) const { return m_pages.value(page).toObject().value(LayoutsKey).toArray(); }
+    QJsonObject layoutAtSlot(const QString &page,int slot) const {
+        if(slot<1 || slot>5)return {};
+        for(const auto &value:layouts(page))if(value.toObject().value("slot").toInt()==slot)return value.toObject();
+        return {};
+    }
+    int firstEmptyLayoutSlot(const QString &page) const {
+        for(int slot=1;slot<=5;++slot)if(layoutAtSlot(page,slot).isEmpty())return slot;
+        return 0;
+    }
     QJsonObject layout(const QString &page,const QString &id) const {
         for(const auto &value:layouts(page)) if(value.toObject().value("id").toString()==id)
             return value.toObject().value("configuration").toObject();
@@ -179,19 +198,13 @@ public:
         }
         return QStringLiteral("The panel layout no longer exists.");
     }
-    QString saveLayout(const QString &page,QString &name,bool &duplicate) {
+    QString saveLayout(const QString &page,QString &name) {
         if(!m_readError.isEmpty()) return m_readError;
         if(pageLabel(page).isEmpty()) return QStringLiteral("This page does not support panel layouts.");
         const auto configuration=pageConfiguration(page);
         auto saved=layouts(page);
-        duplicate=false;
-        for(const auto &value:saved) if(value.toObject().value("configuration").toObject()==configuration) {
-            const auto item=value.toObject(); name=item.value("name").toString(); duplicate=true;
-            auto updated=m_pages; auto state=updated.value(page).toObject();
-            state.insert(ActiveLayoutKey,item.value("id")); updated.insert(page,state);
-            return updated==m_pages ? QString() : write(updated);
-        }
-        if(saved.size()>=5) return QStringLiteral("Five layouts are saved. Delete one to make room.");
+        const auto slot=firstEmptyLayoutSlot(page);
+        if(!slot) return QStringLiteral("All layout slots are occupied");
         auto updated=m_pages;
         auto state=updated.value(page).toObject();
         int number=qMax(1,state.value(NextLayoutNumberKey).toInt(1));
@@ -199,7 +212,9 @@ public:
         for(const auto &value:saved) names.insert(value.toObject().value("name").toString());
         do { name=pageLabel(page)+"-"+QString::number(number++); } while(names.contains(name));
         const auto id=QUuid::createUuid().toString(QUuid::WithoutBraces);
-        saved.append(QJsonObject{{"id",id},{"name",name},{"configuration",configuration}});
+        int position=0;
+        while(position<saved.size() && saved[position].toObject().value("slot").toInt()<slot)++position;
+        saved.insert(position,QJsonObject{{"id",id},{"slot",slot},{"name",name},{"configuration",configuration}});
         state.insert(LayoutsKey,saved); state.insert(NextLayoutNumberKey,number); state.insert(ActiveLayoutKey,id);
         updated.insert(page,state); return write(updated);
     }
@@ -242,12 +257,25 @@ private:
         }
         return pages;
     }
-    static bool validLayouts(const QJsonObject &pages,bool stableIds) {
+    static QJsonObject withLayoutSlots(QJsonObject pages) {
+        for(auto page=pages.begin();page!=pages.end();++page) {
+            auto state=page.value().toObject();
+            if(!state.contains(LayoutsKey))continue;
+            auto saved=state.value(LayoutsKey).toArray();
+            for(int i=0;i<saved.size();++i) {
+                auto item=saved[i].toObject();item.insert("slot",i+1);saved[i]=item;
+            }
+            state.insert(LayoutsKey,saved);page.value()=state;
+        }
+        return pages;
+    }
+    static bool validLayouts(const QJsonObject &pages,bool stableIds,bool stableSlots) {
         for(auto page:pages) {
             const auto state=page.toObject();
             if(!state.contains(LayoutsKey)) continue;
             if(!state.value(LayoutsKey).isArray() || state.value(LayoutsKey).toArray().size()>5) return false;
             QSet<QString> identities;
+            QSet<int> occupiedSlots;
             for(const auto &value:state.value(LayoutsKey).toArray()) {
                 if(!value.isObject()) return false;
                 const auto item=value.toObject(); const auto name=item.value("name").toString();
@@ -255,6 +283,11 @@ private:
                 if(name.trimmed().isEmpty() || identity.isEmpty() || identities.contains(identity) ||
                     !item.value("configuration").isObject()) return false;
                 identities.insert(identity);
+                if(stableSlots) {
+                    const auto number=item.value("slot");const int slot=number.toInt();
+                    if(!number.isDouble() || number.toDouble()!=slot || slot<1 || slot>5 || occupiedSlots.contains(slot))return false;
+                    occupiedSlots.insert(slot);
+                }
                 const auto configuration=item.value("configuration").toObject();
                 if(!configuration.value("panes").isObject() ||
                     (configuration.contains("mainWindow") && !configuration.value("mainWindow").isObject())) return false;
@@ -314,7 +347,7 @@ private:
     {
         if(!QDir().mkpath(QFileInfo(m_path).absolutePath())) return QStringLiteral("Cannot create Unbound settings directory: %1").arg(m_path);
         QSaveFile file(m_path);
-        const auto bytes=QJsonDocument(QJsonObject{{"version",7},{"pages",pages}}).toJson();
+        const auto bytes=QJsonDocument(QJsonObject{{"version",8},{"pages",pages}}).toJson();
         if(!file.open(QIODevice::WriteOnly) || file.write(bytes)!=bytes.size() || !file.commit())
             return QStringLiteral("Cannot save Unbound settings: %1 (%2)").arg(m_path,file.errorString());
         m_pages=pages; return {};

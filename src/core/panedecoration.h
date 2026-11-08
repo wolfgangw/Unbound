@@ -55,6 +55,10 @@ public:
         m_pulse.setStartValue(0.0); m_pulse.setKeyValueAt(.5,1.0); m_pulse.setEndValue(0.0);
         m_pulse.setEasingCurve(QEasingCurve::InOutSine);
         connect(&m_pulse,&QVariantAnimation::valueChanged,this,[this](const QVariant &value) { m_glow=value.toReal(); update(); });
+        m_feedback.setDuration(933);
+        m_feedback.setStartValue(0.0); m_feedback.setKeyValueAt(.5,1.0); m_feedback.setEndValue(0.0);
+        m_feedback.setEasingCurve(QEasingCurve::InOutSine);
+        connect(&m_feedback,&QVariantAnimation::valueChanged,this,[this](const QVariant &value) { m_feedbackGlow=value.toReal(); update(); });
         connect(qApp,&QGuiApplication::applicationStateChanged,this,[this] { updatePulse(); });
     }
     ~UndockButton() override { finishMove(true); }
@@ -63,6 +67,13 @@ public:
     QString dockingFailure() const { return m_failure; }
     bool dockingWarningPending() const { return !m_failure.isEmpty() && !m_acknowledged; }
     bool dockingWarningAnimating() const { return m_pulse.state()==QAbstractAnimation::Running; }
+    bool feedbackAnimating() const { return m_feedback.state()==QAbstractAnimation::Running; }
+    void pulseFeedback(bool success) {
+        if(!m_failure.isEmpty() || !isVisible() || window()->isMinimized() ||
+            QGuiApplication::applicationState()!=Qt::ApplicationActive)return;
+        m_feedbackColor=QColor(success ? "#80c797" : "#f36a5f");
+        m_feedback.stop(); m_feedback.start();
+    }
     void setFloatingState(bool floating) {
         setChecked(floating); setAccessibleName(floating ? "Dock" : "Undock"); updateTooltip();
     }
@@ -147,13 +158,14 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
-        if(!m_failure.isEmpty()) {
-            const qreal amount=m_acknowledged ? 0.0 : m_glow;
-            const QColor red("#ed4b3f"), muted("#848484");
+        if(!m_failure.isEmpty() || feedbackAnimating()) {
+            const qreal amount=!m_failure.isEmpty() ? (m_acknowledged ? 0.0 : m_glow) : m_feedbackGlow;
+            const QColor red=!m_failure.isEmpty() ? QColor("#f36a5f") : m_feedbackColor;
+            const QColor muted("#848484");
             const auto mix=[amount](int a,int b) { return qRound(a+(b-a)*amount); };
             const QColor stroke(mix(muted.red(),red.red()),mix(muted.green(),red.green()),mix(muted.blue(),red.blue()));
             QRadialGradient glow(QRectF(rect()).center(),width()*.65);
-            QColor halo=red; halo.setAlphaF(.48*amount); glow.setColorAt(0,halo);
+            QColor halo=red; halo.setAlphaF(.58*amount); glow.setColorAt(0,halo);
             halo.setAlpha(0); glow.setColorAt(1,halo); painter.fillRect(rect(),glow);
             UndockIconEngine glyph(stroke); glyph.paint(&painter,rect(),QIcon::Normal,QIcon::Off);
             return;
@@ -170,6 +182,9 @@ private:
             "DaVinci Resolve couldn't make room for this panel. It remains floating. Right-click for details.");
     }
     void updatePulse() {
+        if(!m_failure.isEmpty() || !isVisible() || QGuiApplication::applicationState()!=Qt::ApplicationActive) {
+            m_feedback.stop(); m_feedbackGlow=0; update();
+        }
         const bool animate=dockingWarningPending() && isVisible() && QGuiApplication::applicationState()==Qt::ApplicationActive;
         if(animate && m_pulse.state()!=QAbstractAnimation::Running) m_pulse.start();
         else if(!animate) { m_pulse.stop(); m_glow=0; }
@@ -178,6 +193,9 @@ private:
     bool m_acknowledged=false;
     qreal m_glow=0;
     QVariantAnimation m_pulse;
+    QVariantAnimation m_feedback;
+    qreal m_feedbackGlow=0;
+    QColor m_feedbackColor;
     void finishMove(bool cancel)
     {
         const auto host = m_dragHost;

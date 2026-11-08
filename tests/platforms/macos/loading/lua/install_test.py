@@ -35,6 +35,7 @@ class Installation(unittest.TestCase):
         for name in ('UnboundLuaLoader.dylib', 'Unbound.dylib'):
             self.write(self.candidate / 'runtime' / name, 'signed fixture')
         self.write(self.candidate / 'startup/Unbound.scriptlib', 'new hook')
+        self.write(self.candidate / 'commands/Layout 1.lua', 'new command')
         self.bin = self.base / 'bin'
         self.bin.mkdir()
         self.mock('pgrep', 'import os, sys\nsys.exit(0 if os.getenv("FIXTURE_RESOLVE_RUNNING") else 1)')
@@ -79,6 +80,7 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
 
     def seed_previous(self):
         self.write(self.runtime / 'load.lua', 'previous private loader')
+        self.write(self.scripts / 'Utility/Unbound/Layout 1.lua', 'previous command')
         self.write(self.runtime / 'UnboundHelper.dylib', 'previous runtime helper')
         self.write(self.hook, 'previous hook')
         self.write(self.scripts / 'Utility/Unbound.lua', 'previous menu launcher')
@@ -90,11 +92,12 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         self.assertEqual(self.runtime.joinpath('VERSION').read_text(), '0.3.0\n')
         self.assertEqual(self.runtime.joinpath('BUILD').read_text(), '2026.10.18.010\n')
         self.assertEqual(self.hook.read_text(), 'new hook')
+        self.assertEqual(self.scripts.joinpath('Utility/Unbound/Layout 1.lua').read_text(), 'new command')
         self.assertEqual(self.runtime.joinpath('load.lua').read_text(), 'private loader')
         self.assertFalse(self.scripts.joinpath('Utility/Unbound.lua').exists())
         self.assertFalse(self.scripts.joinpath('Utility/UnboundLua').exists())
         self.assertEqual(sorted(p.relative_to(self.scripts).as_posix() for p in self.scripts.rglob('*') if p.is_file()),
-                         ['Unbound.scriptlib', 'Utility/Other.lua'])
+                         ['Unbound.scriptlib', 'Utility/Other.lua', 'Utility/Unbound/Layout 1.lua'])
 
     def test_fresh_install(self):
         self.run_script()
@@ -127,6 +130,7 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         self.assertEqual(self.runtime.joinpath('load.lua').read_text(), 'updated loader')
         self.run_script(STARTUP / 'enable.sh')
         self.assertEqual(self.hook.read_text(), 'new hook')
+        self.assertEqual(self.scripts.joinpath('Utility/Unbound/Layout 1.lua').read_text(), 'new command')
         self.assertFalse(self.scripts.joinpath('Utility/Unbound.lua').exists())
 
     def test_resolve_running_refuses_before_changes(self):
@@ -221,6 +225,7 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         self.assertFalse(self.runtime.joinpath('BUILD').exists())
         self.assertEqual(self.runtime.joinpath('load.lua').read_text(), 'previous private loader')
         self.assertEqual(self.hook.read_text(), 'previous hook')
+        self.assertEqual(self.scripts.joinpath('Utility/Unbound/Layout 1.lua').read_text(), 'previous command')
         self.assertEqual(self.scripts.joinpath('Utility/Unbound.lua').read_text(), 'previous menu launcher')
         self.assertEqual(self.scripts.joinpath('Utility/UnboundLua/UnboundHelper.dylib').read_text(), 'previous helper')
 

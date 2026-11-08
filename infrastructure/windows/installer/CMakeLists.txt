@@ -8,6 +8,11 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${UNBOUND_ROOT}/infrastructure/installer/generate.py"
     "${UNBOUND_ROOT}/src/installer/dialog.json" "${CMAKE_CURRENT_BINARY_DIR}/installer-ui.generated.h"
     COMMAND_ERROR_IS_FATAL ANY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${UNBOUND_ROOT}/src/scripts/commands.json" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py"
+    --platform windows --output "${CMAKE_CURRENT_BINARY_DIR}/commands"
+    --header "${CMAKE_CURRENT_BINARY_DIR}/commands.generated.h" COMMAND_ERROR_IS_FATAL ANY)
 include("${UNBOUND_ROOT}/infrastructure/windows/version.cmake")
 set(UNBOUND_FILE_TYPE VFT_APP)
 set(UNBOUND_INSTALLER_NAME "Unbound ${UNBOUND_MAJOR}.${UNBOUND_MINOR}.${UNBOUND_PATCH}")
@@ -50,3 +55,5 @@ target_include_directories(UnboundInstallTool PRIVATE "${UNBOUND_ROOT}/src/platf
 target_compile_definitions(UnboundInstallTool PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 set_property(TARGET UnboundInstallTool PROPERTY MSVC_RUNTIME_LIBRARY MultiThreaded)
 target_link_options(UnboundInstaller PRIVATE "/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='amd64' publicKeyToken='6595b64144ccf1df' language='*'")
+
+target_include_directories(UnboundInstallTool PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")

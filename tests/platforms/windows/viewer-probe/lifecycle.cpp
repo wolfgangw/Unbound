@@ -304,8 +304,8 @@ int main(int argc,char **argv)
     app.processEvents(); app.processEvents(); app.processEvents();
     require(program->window()!=&main && source->window()!=&main,"Saved floating viewers were not restored");
     require(program->window()->geometry()==programRect && source->window()->geometry()==sourceRect,"Startup did not recall independent viewer geometry");
-    QString layoutName; bool duplicate=false;
-    require(reloaded.saveLayout("WStackPage_Conform",layoutName,duplicate).isEmpty(),"Cannot save viewer layout");
+    QString layoutName;
+    require(reloaded.saveLayout("WStackPage_Conform",layoutName).isEmpty(),"Cannot save viewer layout");
     const auto programHost=program->window(),sourceHost=source->window();
     programHost->move(250,200); sourceHost->move(450,260); app.processEvents();
     experiment->restoreLayout(); app.processEvents(); app.processEvents();

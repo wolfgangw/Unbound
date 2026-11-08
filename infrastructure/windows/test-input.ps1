@@ -1,7 +1,7 @@
 # Native fixtures may enter Windows mouse capture/clip paths. Run them in a
 # bounded child process, and restore desktop cursor freedom even on test failure.
 function Invoke-UnboundNativeTest {
-    param([string]$Program, [string[]]$Arguments)
+    param([string]$Program, [string[]]$Arguments, [int]$TimeoutSeconds = 30)
     if (!('Unbound.TestInputRecovery' -as [type])) {
         Add-Type -TypeDefinition @'
 using System;
@@ -27,14 +27,15 @@ namespace Unbound {
         # Retain the process handle: Windows PowerShell otherwise may lose the
         # exit code when a short-lived Start-Process child exits before waiting.
         $null = $fixture.Handle
-        if (!$fixture.WaitForExit(30000)) {
+        if (!$fixture.WaitForExit($TimeoutSeconds * 1000)) {
             Stop-Process -Id $fixture.Id -ErrorAction SilentlyContinue
-            throw "Native fixture exceeded 30 seconds: $Program $Arguments"
+            $fixture.WaitForExit()
+            throw "Native fixture exceeded $TimeoutSeconds seconds: $Program $Arguments"
         }
         $fixture.WaitForExit()
         if ($fixture.ExitCode -ne 0) { throw "Native fixture failed with exit code $($fixture.ExitCode): $Program $Arguments" }
     } finally {
-        if ($fixture -and !$fixture.HasExited) { Stop-Process -Id $fixture.Id -ErrorAction SilentlyContinue }
+        if ($fixture -and !$fixture.HasExited) { Stop-Process -Id $fixture.Id -ErrorAction SilentlyContinue; $fixture.WaitForExit() }
         [void][Unbound.TestInputRecovery]::ClipCursor([IntPtr]::Zero)
         foreach ($log in @($stdout, $stderr)) {
             if (Test-Path -LiteralPath $log) {

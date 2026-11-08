@@ -17,3 +17,9 @@ if(UNBOUND_MAC_TESTS)
     add_executable(unbound-lua-script-test
         "${UNBOUND_ROOT}/tests/platforms/macos/loading/lua/startup/interpreter.cpp")
 endif()
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${UNBOUND_ROOT}/src/scripts/commands.json" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py"
+    --platform macos --output "${CMAKE_BINARY_DIR}/stage/commands" COMMAND_ERROR_IS_FATAL ANY)

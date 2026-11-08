@@ -17,3 +17,9 @@ Check `%LOCALAPPDATA%/Unbound/lua-bootstrap.log` for the new process's completed
 controller attachment, then verify header buttons, docking, layouts, page changes
 and Fusion controls. A console capability probe or fixture pass alone does not
 establish automatic startup. Windows Free and Studio require separate validation.
+
+`python tests/platforms/windows/loading/lua/command_script_test.py <Unbound.dll>`
+runs all generated Workspace commands in Resolve's LuaJIT with separate command
+and native environments. It checks delivery through `Fusion.Execute`, connection
+variants, repeated calls and safe rejection without a Qt application. The mocked
+transport does not replace live shortcut validation in Resolve.

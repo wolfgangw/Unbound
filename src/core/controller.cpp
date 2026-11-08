@@ -10,6 +10,9 @@
 #include "panesettings.h"
 #include "windowintegration.h"
 #include "controller.h"
+#include "commandapi.h"
+#include "layoutcommandgate.h"
+#include <QThread>
 #include "mainwindowplacement.h"
 #include "sidebarfloatsession.h"
 #include "panedecoration.h"
@@ -45,6 +48,7 @@ public:
     Controller() : QObject(qApp)
     {
         setObjectName(QStringLiteral("UnboundPaneController"));
+        m_commandGate.pending=[this] {return commandWorkPending();};
         m_mainPlacement.error = [this](const QString &message) { settingsError(message); };
         m_names = Catalogue::sidebarNames();
         m_pageTransition.hasFloating=[this](const QString &page) {
@@ -86,6 +90,46 @@ public:
         qDeleteAll(m_decorations);
         qDeleteAll(m_sessions);
     }
+    void executeCommand(const Unbound::CommandRequest &request) {
+        if(!m_window || !Unbound::nativeApplicationActive() || QApplication::activeModalWidget()
+            || QApplication::activePopupWidget() || m_window->isMinimized())return;
+        const auto page=currentPage();
+        bool supported=false;
+        for(const auto &entry:Catalogue::pages())if(entry.objectName==page)supported=entry.supported;
+        if(!supported)return;
+        const QPointer<Controller> alive=this;
+        int feedback=0; // -1: unavailable action, +1: saved
+        bool admitted=false;
+        const auto message=m_commandGate.run(m_window,[&]() -> QString {
+            admitted=true;
+            if(request.name=="layout.activate") {
+                const auto item=m_settings.layoutAtSlot(page,request.slot);
+                if(item.isEmpty()) {feedback=-1;return {};}
+                bool applied=false;
+                return recallLayout(page,item.value("id").toString(),applied);
+            }
+            if(request.name=="layout.dockAll")return dockAll(page);
+            if(request.name=="layout.save") {
+                const auto id=m_settings.activeLayout(page);
+                if(id.isEmpty())return {};
+                const auto error=updateSavedLayout(page,id);
+                if(error.isEmpty())feedback=1;
+                return error;
+            }
+            if(m_settings.layouts(page).size()>=5) {
+                feedback=-1;
+                return {};
+            }
+            QString name;
+            const auto error=saveNewLayout(page,name);
+            if(error.isEmpty())feedback=1;
+            return error;
+        });
+        if(!alive)return;
+        if(m_layoutMenu && m_layoutMenu->page()==page)m_layoutMenu->refreshDockingWarning();
+        if(admitted && !message.isEmpty())error(message);
+        if(feedback)commandFeedback(feedback>0);
+    }
 protected:
     bool eventFilter(QObject *object, QEvent *event) override
     {
@@ -97,6 +141,10 @@ protected:
                 });
             return true;
         }
+        if(event->type()==QEvent::ApplicationDeactivate
+            || ((event->type()==QEvent::Show || event->type()==QEvent::Hide)
+                && (!Catalogue::pageForRoot(object->objectName()).isEmpty() || object==m_window)))
+            ++Unbound::commandContext();
         switch (event->type()) {
         case QEvent::ChildAdded:
         case QEvent::ChildPolished:
@@ -130,6 +178,36 @@ protected:
         return false;
     }
 private:
+    bool commandWorkPending() const {
+        const auto page=currentPage();
+        for(const auto &name:m_initializingNative)
+            if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)return true;
+        // Discovery reconciles the latest intent on the GUI thread; it can safely
+        // follow a new command. It is not an in-flight pane mutation.
+        // Saved toggle intentions can await unavailable native controls indefinitely;
+        // only queued work, not those dormant intentions, blocks new commands.
+        for(auto work:Unbound::LayoutPendingWork::registry())if(work!=&m_discoveryWork && work->pending && work->scope) {
+            auto scope=work->scope.data();
+            if(scope==m_window || scope->isVisible())return true;
+        }
+        return false;
+    }
+    void commandFeedback(bool success) {
+        // Action-scoped inventory only: inactive pages' buttons are hidden.
+        // No timers, discovery scans or window activation between actions.
+        for(auto widget:QApplication::allWidgets())
+            if(auto button=dynamic_cast<Unbound::UndockButton *>(widget))
+                button->pulseFeedback(success);
+    }
+    QString saveNewLayout(const QString &page,QString &name) {
+        if(m_settings.layouts(page).size()>=5)return QStringLiteral("All layout slots are occupied");
+        const auto error=capturePage(page);
+        return error.isEmpty() ? m_settings.saveLayout(page,name) : error;
+    }
+    QString updateSavedLayout(const QString &page,const QString &id) {
+        const auto error=capturePage(page);
+        return error.isEmpty() ? m_settings.updateLayout(page,id) : error;
+    }
     QWidget *panePage(QWidget *pane) const {return Unbound::panePageContext(pane,m_window);}
     QString currentPage() const {
         if(!m_window) return {};
@@ -186,24 +264,24 @@ private:
             return false;
         });
         m_layoutMenu=menu;
+        menu->feedback=[this](bool success) {commandFeedback(success);};
         const QPointer<Unbound::UndockButton> warningButton=dynamic_cast<Unbound::UndockButton *>(button);
         menu->dockingWarning=[warningButton] { return warningButton ? warningButton->dockingFailure() : QString(); };
-        menu->save=[this,page](QString &name,bool &duplicate) {
-            const auto error=capturePage(page);
-            return error.isEmpty() ? m_settings.saveLayout(page,name,duplicate) : error;
+        menu->save=[this,page](QString &name) {
+            return m_commandGate.run(m_window,[&] {return saveNewLayout(page,name);});
         };
-        menu->recall=[this,page](const QString &id,bool &applied) { return recallLayout(page,id,applied); };
-        menu->remove=[this,page](const QString &id) { return m_settings.deleteLayout(page,id); };
+        menu->recall=[this,page](const QString &id,bool &applied) { return m_commandGate.run(m_window,[&] {return recallLayout(page,id,applied);}); };
+        menu->remove=[this,page](const QString &id) { return m_commandGate.run(m_window,[&] {return m_settings.deleteLayout(page,id);}); };
         menu->update=[this,page](const QString &id) {
-            const auto error=capturePage(page);
-            return error.isEmpty() ? m_settings.updateLayout(page,id) : error;
+            return m_commandGate.run(m_window,[&] {return updateSavedLayout(page,id);});
         };
-        menu->rename=[this,page](const QString &id,const QString &name) { return m_settings.renameLayout(page,id,name); };
-        menu->dockAll=[this,page] { return dockAll(page); };
+        menu->rename=[this,page](const QString &id,const QString &name) { return m_commandGate.run(m_window,[&] {return m_settings.renameLayout(page,id,name);}); };
+        menu->dockAll=[this,page] { return m_commandGate.run(m_window,[&] {return dockAll(page);}); };
         if(const auto pane=Unbound::PaneCatalogue::find(name)) {
             const auto key=pane->settingsKey();
             menu->setPaneContext(key,[this,name] { return floatingHost(name)!=nullptr; });
             menu->setKeepAtop=[this,name,key](bool value) {
+                if(m_commandGate.busy())return QStringLiteral("A layout change is still in progress. Please try again.");
                 auto host=floatingHost(name);
                 if(!host) return QStringLiteral("Undock this pane before changing its stacking preference.");
                 const auto error=m_settings.saveKeepAtop(key,value);
@@ -808,6 +886,7 @@ private:
     QPointer<Unbound::EditScopes> m_editScopes;
     QPointer<Unbound::ColorToolSelection> m_colorTools;
     QPointer<QWidget> m_editPlayers;
+    Unbound::LayoutCommandGate m_commandGate;
     QPointer<Unbound::PageLayoutMenu> m_layoutMenu;
     QSet<QWidget *> m_pages;
     QMap<QString,QPointer<QWidget>> m_candidates;
@@ -853,4 +932,30 @@ bool Unbound::startController()
         return 0;
     }
     return 1;
+}
+
+// Strings are borrowed only during this call; the queued request owns its data.
+extern "C" Q_DECL_EXPORT int UnboundExecuteCommand(unsigned int version,const char *command,const char *argumentsJson)
+{
+    using namespace Unbound;
+    auto app=qobject_cast<QApplication *>(QCoreApplication::instance());
+    if(!app || QCoreApplication::closingDown())return CommandUnavailable;
+    auto bounded=[](const char *text,int maximum) {
+        if(!text)return QByteArray();
+        int length=0;while(length<=maximum && text[length])++length;
+        return length>maximum ? QByteArray() : QByteArray(text,length);
+    };
+    CommandRequest request;
+    const auto result=parseCommand(version,bounded(command,64),bounded(argumentsJson,1024),request);
+    if(result!=CommandAccepted)return result;
+    if(commandOperationActive() || commandQueued().exchange(true))return CommandBusy;
+    if(commandOperationActive()) {commandQueued()=false;return CommandBusy;}
+    const auto context=commandContext().load();
+    if(!QMetaObject::invokeMethod(app,[app,request,context] {
+        commandQueued()=false;
+        if(QCoreApplication::closingDown() || context!=commandContext().load())return;
+        if(auto controller=dynamic_cast<Controller *>(app->findChild<QObject *>(QStringLiteral("UnboundPaneController"))))
+            controller->executeCommand(request);
+    },Qt::QueuedConnection)) {commandQueued()=false;return CommandUnavailable;}
+    return CommandAccepted;
 }

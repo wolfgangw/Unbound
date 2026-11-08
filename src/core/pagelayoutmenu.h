@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include <QFrame>
+#include <QCursor>
 #include <QCheckBox>
 #include <QScreen>
 #include <QVBoxLayout>
@@ -31,6 +32,7 @@
 #include "panesettings.h"
 #include "windowinteraction.h"
 #include "nativemenutracking.h"
+#include "panepopupsurface.h"
 namespace Unbound {
 class LayoutActionIcon final : public QIconEngine {
 public:
@@ -150,7 +152,8 @@ protected:
 };
 class PageLayoutMenu final : public QFrame {
 public:
-    std::function<QString(QString &,bool &)> save;
+    std::function<QString(QString &)> save;
+    std::function<void(bool)> feedback;
     std::function<QString(const QString &,bool &)> recall;
     std::function<QString(const QString &)> remove;
     std::function<QString(const QString &)> update;
@@ -166,12 +169,18 @@ public:
     }
     PageLayoutMenu(PaneSettings &settings,QString page,QWidget *parent,std::function<bool()> hasFloating={})
         : QFrame(parent),m_settings(settings),m_page(std::move(page)),m_hasFloating(std::move(hasFloating)) {
-        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        setWindowFlags(panePopupFlags());
         setObjectName("unboundLayoutMenu");
         setWindowTitle(PaneSettings::pageLabel(m_page)+" panel configurations");
         setAttribute(Qt::WA_TranslucentBackground);
         setAttribute(Qt::WA_QuitOnClose,false);
         setFocusPolicy(Qt::StrongFocus);
+        m_hoverDismiss.setSingleShot(true);
+        m_hoverDismiss.setInterval(PanePopupDismissDelayMs);
+        connect(&m_hoverDismiss,&QTimer::timeout,this,[this] {
+            // Native layout changes can produce transient leave events.
+            if(isVisible() && !geometry().contains(QCursor::pos())) dismiss();
+        });
         m_layout=new QVBoxLayout(this); m_layout->setContentsMargins(6,6,6,6); m_layout->setSpacing(0);
         m_dockingWarning=new QLabel(this); m_dockingWarning->setObjectName("unboundDockingWarning");
         m_dockingWarning->setTextFormat(Qt::PlainText); m_dockingWarning->setWordWrap(true);
@@ -206,9 +215,8 @@ public:
         auto separator=new QFrame(this); separator->setFixedHeight(1);
         separator->setStyleSheet("background: #444444; border: none;");
         m_layout->addSpacing(4); addWidget(separator); m_layout->addSpacing(4);
-        m_status=new QLabel(this); m_status->setObjectName("unboundLayoutStatus");
-        m_status->setTextFormat(Qt::PlainText); m_status->setWordWrap(true); m_status->setMaximumWidth(300);
-        addWidget(m_status);
+        m_rowEnd=new QWidget(this); m_rowEnd->hide();
+        addWidget(m_rowEnd);
         m_atopSeparator=new QFrame(this); m_atopSeparator->setFixedHeight(1);
         m_atopSeparator->setStyleSheet("background: #444444; border: none;");
         m_layout->addSpacing(4); addWidget(m_atopSeparator); m_layout->addSpacing(4);
@@ -219,9 +227,9 @@ public:
         });
         connect(m_save,&QPushButton::clicked,this,[this] {
             if(!save) return;
-            QString name; bool duplicate=false;
-            const auto error=save(name,duplicate);
-            afterAction(error.isEmpty() ? (duplicate ? "Already saved as " : "Saved as ")+name : error);
+            QString name;
+            const auto error=save(name);
+            afterAction(error,true);
         });
         refresh();
     }
@@ -260,8 +268,11 @@ public:
         m_open=true;
         move(target); show(); raise();
         setFocus(Qt::PopupFocusReason);
+        m_hoverDismiss.stop();
+        if(!geometry().contains(QCursor::pos())) m_hoverDismiss.start();
     }
     void dismiss() {
+        m_hoverDismiss.stop();
         m_open=false;
         QFrame::setVisible(false);
     }
@@ -279,6 +290,14 @@ public:
         afterAction({});
     }
 protected:
+    void enterEvent(QEvent *event) override {
+        m_hoverDismiss.stop();
+        QFrame::enterEvent(event);
+    }
+    void leaveEvent(QEvent *event) override {
+        if(isVisible()) m_hoverDismiss.start();
+        QFrame::leaveEvent(event);
+    }
     void closeEvent(QCloseEvent *event) override {
         dismiss(); event->accept();
     }
@@ -298,15 +317,14 @@ protected:
     void paintEvent(QPaintEvent *) override {
         // Paint the translucent tool surface explicitly; QFrame's default
         // NoFrame style need not paint a stylesheet background on Windows.
-        QPainter painter(this); painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(QPen(QColor("#555555"),1)); painter.setBrush(m_background);
-        painter.drawRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5),4,4);
+        QPainter painter(this); paintPanePopupSurface(painter,rect(),m_background);
     }
     void showEvent(QShowEvent *event) override {
         m_nativeMenuTracking=observeNativeMenuTracking([this] { dismiss(); });
         qApp->installEventFilter(this); QFrame::showEvent(event);
     }
     void hideEvent(QHideEvent *event) override {
+        m_hoverDismiss.stop();
         m_nativeMenuTracking.reset();
         m_openingButtons=Qt::NoButton;
         m_recalling=false;
@@ -395,17 +413,16 @@ private:
         }
     }
     void addWidget(QWidget *widget) { m_layout->addWidget(widget); }
-    void afterAction(QString message) {
+    void afterAction(const QString &error,bool saved=false) {
+        if(feedback && (!error.isEmpty() || saved)) feedback(error.isEmpty());
         // Recall and its completion can request refresh in the same event turn.
         // Commit one update, preserving the existing rows.
-        if(!message.isEmpty()) m_message=message;
         if(m_refreshQueued) return;
         m_refreshQueued=true;
         QTimer::singleShot(0,this,[this] {
             m_refreshQueued=false;
             refresh();
-            if(!m_message.isEmpty()) m_status->setText(m_message);
-            m_message.clear(); adjustSize();
+            adjustSize();
         });
     }
     struct LayoutRow {
@@ -414,6 +431,7 @@ private:
         QToolButton *update=nullptr,*trash=nullptr;
         QStackedWidget *nameArea=nullptr;
         LayoutNameEdit *editor=nullptr;
+        QLabel *number=nullptr;
     };
     void beginRename(const QString &id) {
         if(!m_rows.contains(id)) return;
@@ -437,7 +455,7 @@ private:
         const auto &row=m_rows[id];
         if(submit) {
             const auto error=rename ? rename(id,row.editor->text()) : m_settings.renameLayout(m_page,id,row.editor->text());
-            if(!error.isEmpty()) { m_status->setText(error); row.editor->setFocus(); return; }
+            if(!error.isEmpty()) { if(feedback)feedback(false); row.editor->setFocus(); return; }
         }
         m_editing.clear();
         const bool focused=row.editor->hasFocus();
@@ -449,6 +467,10 @@ private:
         constexpr int highlightHeight=30;
         auto row=new QWidget(this); auto layout=new QHBoxLayout(row);
         layout->setContentsMargins(0,2,0,2); layout->setSpacing(5);
+        auto number=new QLabel(row);number->setObjectName("unboundLayoutSlotNumber");
+        number->setFixedWidth(24);number->setAlignment(Qt::AlignCenter);
+        number->setStyleSheet("color: #777777; padding: 0px; background: transparent;");
+        layout->addWidget(number);
         auto nameArea=new QStackedWidget(row); nameArea->setFixedHeight(highlightHeight); layout->addWidget(nameArea,1);
         auto load=new LayoutNameButton(nameArea); load->setObjectName("unboundLayoutRecall"); load->setAutoDefault(false);
         load->setFixedHeight(highlightHeight);
@@ -467,7 +489,7 @@ private:
         trash->setProperty("layoutId",id);
         trash->setIcon(QIcon(new LayoutActionIcon)); trash->setIconSize(QSize(18,18)); trash->setFixedSize(highlightHeight,highlightHeight);
         layout->addWidget(trash);
-        m_layout->insertWidget(m_layout->indexOf(m_status),row);
+        m_layout->insertWidget(m_layout->indexOf(m_rowEnd),row);
         connect(load,&QPushButton::clicked,this,[this,id] {
             m_recalling=true;
             bool applied=false;
@@ -478,14 +500,13 @@ private:
         });
         connect(updateButton,&QToolButton::clicked,this,[this,id] {
             const auto error=update ? update(id) : m_settings.updateLayout(m_page,id);
-            afterAction(error);
+            afterAction(error,true);
         });
         connect(trash,&QToolButton::clicked,this,[this,id] {
-            const auto name=m_settings.layoutName(m_page,id);
             const auto error=remove ? remove(id) : m_settings.deleteLayout(m_page,id);
-            afterAction(error.isEmpty() ? "Deleted "+name : error);
+            afterAction(error);
         });
-        return {row,load,updateButton,trash,nameArea,editor};
+        return {row,load,updateButton,trash,nameArea,editor,number};
     }
     void refresh() {
         // Keep rows stable and update their styling in a single paint pass.
@@ -500,18 +521,36 @@ private:
         m_dock->setEnabled(floating);
         const auto entries=m_settings.layouts(m_page);
         QSet<QString> ids;
-        for(const auto &value:entries) ids.insert(value.toObject().value("id").toString());
+        for(int slot=1;slot<=5;++slot) {
+            const auto item=m_settings.layoutAtSlot(m_page,slot);
+            ids.insert(item.isEmpty() ? QStringLiteral("empty-slot-%1").arg(slot) : item.value("id").toString());
+        }
         for(auto it=m_rows.begin();it!=m_rows.end();) {
             if(ids.contains(it.key())) { ++it; continue; }
             if(m_editing==it.key()) m_editing.clear();
             auto widget=it.value().widget; m_layout->removeWidget(widget); widget->hide();
             widget->deleteLater(); it=m_rows.erase(it);
         }
-        for(const auto &value:entries) {
-            const auto item=value.toObject(); const auto id=item.value("id").toString();
+        for(int slot=1;slot<=5;++slot) {
+            const auto item=m_settings.layoutAtSlot(m_page,slot);
+            const bool occupied=!item.isEmpty();
+            const auto id=occupied ? item.value("id").toString() : QStringLiteral("empty-slot-%1").arg(slot);
             const auto name=item.value("name").toString();
             if(!m_rows.contains(id)) m_rows.insert(id,makeRow(id));
             const auto &row=m_rows[id];
+            // Reinsert in slot order while retaining unchanged row/editor objects.
+            m_layout->removeWidget(row.widget);
+            m_layout->insertWidget(m_layout->indexOf(m_rowEnd),row.widget);
+            row.widget->setProperty("layoutSlot",slot);
+            row.number->setText(QString::number(slot));
+            row.number->setAccessibleName(QStringLiteral("Layout slot %1").arg(slot));
+            row.load->setEnabled(occupied);row.trash->setVisible(occupied);
+            row.load->setProperty("layoutSlot",slot);
+            if(!occupied) {
+                row.load->setText({});row.load->setToolTip({});row.update->hide();
+                row.load->setAccessibleName(QStringLiteral("Layout slot %1 is empty").arg(slot));
+                continue;
+            }
             auto label=name; label.replace("&","&&"); row.load->setText(label);
             row.load->setAccessibleName("Recall "+name); row.load->setToolTip(name.toHtmlEscaped()+"<br/>Hold 1 second to rename");
             row.editor->setAccessibleName("Layout name: "+name);
@@ -526,14 +565,13 @@ private:
         }
         m_save->setEnabled(entries.size()<5);
         m_save->setToolTip(entries.size()<5 ? QStringLiteral("Create a new layout. Use the save icon beside the active layout to update it.") : QStringLiteral("Delete a layout to make room."));
-        m_status->setText(entries.isEmpty() ? "No saved layouts" : QStringLiteral("%1 / 5 layouts").arg(entries.size()));
         if(painting) setUpdatesEnabled(true);
     }
     QColor m_background;
     PaneSettings &m_settings;
     QString m_page;
     QPushButton *m_save=nullptr;
-    QLabel *m_status=nullptr;
+    QWidget *m_rowEnd=nullptr;
     QLabel *m_dockingWarning=nullptr;
     QPushButton *m_dock=nullptr;
     QCheckBox *m_atop=nullptr;
@@ -543,9 +581,10 @@ private:
     QVBoxLayout *m_layout=nullptr;
     std::function<bool()> m_hasFloating;
     QMap<QString,LayoutRow> m_rows;
-    QString m_message,m_editing;
+    QString m_editing;
     Qt::MouseButtons m_openingButtons=Qt::NoButton;
     QRect m_openingArea;
+    QTimer m_hoverDismiss;
     bool m_recalling=false,m_refreshQueued=false,m_open=false;
 };
 }

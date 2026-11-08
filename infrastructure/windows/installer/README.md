@@ -36,8 +36,10 @@ match. Only state changes post a UI notification; stable checks read no installe
 files or settings and request no repaint. Closing the installer stops the worker.
 The private runtime lives under `%LOCALAPPDATA%/Unbound/Runtime`. Only
 `Unbound.scriptlib` goes into `%APPDATA%/Blackmagic Design/DaVinci Resolve/Support/Fusion/Scripts`.
-No service, scheduled task, registry startup entry or visible Scripts menu item
-is installed. The installer uses Windows APIs directly and needs no Qt runtime
+Eight command scripts go in `Scripts/Utility/Unbound`, exposed by Resolve's Scripts
+menu and Keyboard Customization. This managed folder is replaced/removed alongside
+Runtime, with rollback on failure. No service, scheduled task or registry startup
+entry is installed. The installer uses Windows APIs directly and needs no Qt runtime
 or development toolchain. Current installers are unsigned; see the
 [README](../../../README.md#compatibility) for the per-app SmartScreen exception.
 
