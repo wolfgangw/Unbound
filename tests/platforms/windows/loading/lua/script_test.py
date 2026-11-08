@@ -35,6 +35,14 @@ local function startup()
 ''' + hook + '''
 end
 startup()
+assert(#messages==0, 'External script process must skip silently')
+local nativeffi=ffi
+ffi=setmetatable({C=setmetatable({GetModuleFileNameW=function(_,buffer,_)
+    local name='C:/Fixture/Resolve.exe'
+    for i=1,#name do buffer[i-1]=name:byte(i) end
+    buffer[#name]=0; return #name
+end},{__index=nativeffi.C})},{__index=nativeffi})
+startup()
 assert(#messages==1 and messages[1]:find('startup rejected',1,true), 'Unicode load or host rejection failed')
 messages={}; ffi=nil; startup(); assert(#messages==0, 'Non-FFI context did not skip silently')
 '''
@@ -45,4 +53,4 @@ messages={}; ffi=nil; startup(); assert(#messages==0, 'Non-FFI context did not s
     lua.lua_close(state)
     if result:
         raise RuntimeError(failure)
-print('PASS: actual Windows LuaJIT startup, Unicode runtime path, contained host rejection and non-FFI context')
+print('PASS: actual Windows LuaJIT startup, Unicode runtime path, silent external-host skip, real rejection diagnostics and non-FFI context')

@@ -12,6 +12,8 @@ local function run(options)
     env.print = function(message) messages[#messages + 1] = message end
     env.os = { getenv = function(name) assert(name == "HOME"); return home end }
     env.ffi = {
+        C = {getprogname = function() return options.external and "fuscript" or "Resolve" end},
+        string = function(value) return value end,
         cdef = function(_) end,
         load = function(path)
             assert(path == runtime .. "/UnboundLuaLoader.dylib")
@@ -27,7 +29,7 @@ local function run(options)
     if options.noffi then env.ffi = nil end
     if options.incompleteffi then env.ffi.load = nil end
     if options.nohome then env.os = nil end
-    local skipped = options.noffi or options.incompleteffi
+    local skipped = options.noffi or options.incompleteffi or options.external
     -- debug, io, require and package are intentionally absent, as in Resolve.
     assert(pcall(setfenv(assert(loadfile(startup)), env)), "Startup failure escaped into Resolve")
     if options.missing or skipped or options.nohome then assert(starts == 0)
@@ -41,7 +43,7 @@ local function run(options)
     end
     if skipped then
         -- Skipping an auxiliary context must not disable later capable startup.
-        env.ffi = {cdef = function(_) end, load = function(_)
+        env.ffi = {C={getprogname=function() return "Resolve" end}, string=function(v) return v end, cdef = function(_) end, load = function(_)
             return {UnboundLuaStart = function() starts = starts + 1; return 1 end}
         end}
         assert(pcall(setfenv(assert(loadfile(startup)), env)))
@@ -54,6 +56,7 @@ run({result = 3})
 run({result = -1})
 run({result = -2})
 run({missing = true})
+run({external = true})
 run({noffi = true})
 run({incompleteffi = true})
 run({nohome = true})

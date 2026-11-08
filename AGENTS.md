@@ -89,8 +89,10 @@ under each platform's tests. Audition-activation fixtures run on both backends.
 
 ## Startup and installation
 
-Resolve's per-user Lua startup hook invokes the private loader once and returns
-silently. The Qt-free loader validates the host and queues attachment on the Qt GUI
+Resolve's per-user Lua startup hook checks the process identity through public OS
+APIs, invokes the private loader only inside Resolve and returns silently. Workspace
+script hosts also evaluate script libraries; they skip startup without loading native
+Unbound libraries or producing console/log errors. The Qt-free loader validates the host and queues attachment on the Qt GUI
 thread, reusing one controller on repeated requests. There is no external injection,
 service, persistent Lua loop or visible startup launcher. Resolve's internal
 Lua exposes global `ffi` and `os.getenv`, but not `require`, `package`, `debug` or `io`.

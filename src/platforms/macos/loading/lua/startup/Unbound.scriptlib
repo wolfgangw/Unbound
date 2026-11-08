@@ -4,6 +4,9 @@
 -- Those contexts cannot attach Unbound; the FFI-enabled invocation owns startup.
 if not (ffi and ffi.cdef and ffi.load) then return end
 local ok, failure = pcall(function()
+    -- Workspace script hosts evaluate this hook too, without Resolve's GUI.
+    ffi.cdef[[const char *getprogname(void);]]
+    if ffi.string(ffi.C.getprogname()) ~= "Resolve" then return end
     local home = assert(os and os.getenv and os.getenv("HOME"), "Cannot locate the user home directory")
     local start = assert(loadfile(home .. "/Library/Application Support/Unbound/Runtime/load.lua"))
     start()
