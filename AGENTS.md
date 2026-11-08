@@ -578,7 +578,11 @@ constraints and restore stack policy/minimum on docking.
 `UiWaveformWindow`, opened through `btnUndock` or adopted if already open. Discover
 as QWidget (Windows QDialog, macOS QWidget). Leave the single docked scope in its
 slot without a placeholder. Retain native renderer registration, single/dual/quad
-controls and settings; clear only explicit window minimum. Docking invokes `btnHide`
+controls and settings; clear only explicit window minimum. Decorate only the outer
+Scopes header as soon as the native window is adopted, including before floating
+state is published; individual scope-type headers never receive Unbound buttons.
+Internal scope layout/types/settings remain native global state shared across pages;
+only window visibility, placement and Unbound layout membership are page-specific. Docking invokes `btnHide`
 while visible, then restores parent/flags/geometry/minimum. Close/Escape/Hide defer
 session docking; page hiding retains floating intent.
 
@@ -962,7 +966,7 @@ method replacement, screen capture or polling is used.
 
 The additional Color toolbar row reserves space for native traffic-light buttons
 when they overlap its allocation. The Cocoa adapter measures visible standard
-window-button bounds in logical screen coordinates and adjusts only the row’s
+window-button bounds in logical screen coordinates and adjusts only the rowâ€™s
 left margin, retaining its original padding. Scoped layout/geometry/window-state
 events refresh clearance; non-overlapping rows and Windows keep original spacing.
 Docking removes the adapter and restores the original margins. No saved geometry

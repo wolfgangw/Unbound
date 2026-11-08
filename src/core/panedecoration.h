@@ -373,7 +373,10 @@ private:
                 } else b->show();
                 m_native=true;
             };
-            if(m_floating && m_pane->objectName()==QLatin1String("scopesWidget") && root->objectName()==QLatin1String("UiWaveformWindow")) {
+            // Adoption publishes the native window before setFloating(true).
+            // Its per-scope rows are never independent Unbound panes, including
+            // during that handover and native scope-layout reconstruction.
+            if(m_pane->objectName()==QLatin1String("scopesWidget") && root->objectName()==QLatin1String("UiWaveformWindow")) {
                 auto anchor=root->findChild<QAbstractButton *>("btnWaveformViewerOptions");
                 auto header=anchor ? anchor->parentWidget() : nullptr;
                 auto row=header ? qobject_cast<QBoxLayout *>(header->layout()) : nullptr;

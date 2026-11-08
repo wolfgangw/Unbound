@@ -228,6 +228,14 @@ void testColorControls() {
         auto nativeOptions=new QPushButton("Options");nativeOptions->setObjectName("btnWaveformViewerOptions");titleRow->addWidget(nativeOptions);
         auto scopeExpand=new QPushButton("Expand scope");scopeExpand->setObjectName("btnUndock");titleRow->addWidget(scopeExpand);
         auto renderer=new QWidget;renderer->setMinimumSize(300,200);layout->addWidget(renderer);
+        auto rendererLayout=new QVBoxLayout(renderer);
+        for(int i=0;i<4;++i) {
+            auto scope=new QWidget;scope->setObjectName("UiWaveformViewerItem");rendererLayout->addWidget(scope);
+            auto scopeLayout=new QVBoxLayout(scope);
+            auto scopeHeader=new QWidget;scopeHeader->setObjectName("headerFrame");scopeLayout->addWidget(scopeHeader);
+            auto scopeRow=new QHBoxLayout(scopeHeader);
+            auto scopeOptions=new QPushButton("Options");scopeOptions->setObjectName("btnWaveformViewerItemOptions");scopeRow->addWidget(scopeOptions);
+        }
         bool registered=false;
         QObject::connect(expand,&QPushButton::clicked,&dialog,[&]{registered=true;dialog.show();stack->setCurrentWidget(other);});
         QObject::connect(hide,&QPushButton::clicked,&dialog,[&]{
@@ -249,6 +257,8 @@ void testColorControls() {
         require(dialog.minimumSize().isEmpty() && host->minimumWidth()>=300,"Native Scopes minimum was not delegated to children");
         auto buttons=title->findChildren<QToolButton *>("resolvePaneUndockButton");
         require(buttons.size()==1 && buttons.first()->isChecked(),"Native Scopes header lacks the active Unbound button");
+        require(dialog.findChildren<QToolButton *>("resolvePaneUndockButton").size()==1,
+            "Native Scopes handover decorated individual scope headers");
         stack->setCurrentWidget(other);LayoutTest::settle();
         require(registered && renderer->isVisible(),"Changing native tool stopped independent Scopes");
         page.hide();LayoutTest::settle();
