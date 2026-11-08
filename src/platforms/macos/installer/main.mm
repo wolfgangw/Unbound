@@ -95,6 +95,7 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
     separator.boxType=NSBoxSeparator;
     [view addSubview:separator];
     self.status = label(@"", frame(InstallerUI::rects::status), InstallerUI::fonts::status);
+    self.status.alignment = NSTextAlignmentRight;
     self.status.textColor = NSColor.secondaryLabelColor;
     [view addSubview:self.status];
     self.installButton = [NSButton buttonWithTitle:@"" target:self action:@selector(install:)];
@@ -161,9 +162,8 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
         encoding:NSUTF8StringEncoding error:nil] stringByTrimmingCharactersInSet:whitespace];
     BOOL sameBuild = installed && [self matchesPayload];
     const auto ui=InstallerUI::present({bool(installed),bool(running),bool(sameBuild)},
-        InstallerUI::version(utf8(version),utf8(build)),
-        InstallerUI::version(utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]),
-            utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"])));
+        utf8(version),utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]),
+        utf8(build),utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"]));
     buttonText(self.installButton,ui.install); buttonText(self.uninstallButton,ui.uninstall);
     self.installButton.enabled=ui.installEnabled; self.uninstallButton.enabled=ui.uninstallEnabled;
     self.status.stringValue=string(ui.status);
@@ -189,7 +189,12 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
     if (uninstall ? !self.uninstallButton.enabled : !self.installButton.enabled) return;
     // Use the same installed-state check as the controls, before files change.
     BOOL installed = self.installed;
-    const InstallerUI::Operation op{bool(uninstall),bool(installed)};
+    NSString *runtime = [self.support stringByAppendingPathComponent:@"Runtime"];
+    NSString *installedVersion = [NSString stringWithContentsOfFile:[runtime stringByAppendingPathComponent:@"VERSION"] encoding:NSUTF8StringEncoding error:nil];
+    NSString *installedBuild = [NSString stringWithContentsOfFile:[runtime stringByAppendingPathComponent:@"BUILD"] encoding:NSUTF8StringEncoding error:nil];
+    const InstallerUI::Operation op{bool(uninstall),bool(installed),InstallerUI::repairVersion(
+        utf8(installedVersion),utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]),
+        utf8(installedBuild),utf8([NSBundle.mainBundle objectForInfoDictionaryKey:@"UnboundRuntimeBuild"]))};
     self.busy = YES;
     self.installButton.enabled = self.uninstallButton.enabled = NO;
     self.status.stringValue=string(op.progress());

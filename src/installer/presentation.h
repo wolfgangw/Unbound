@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "installer-ui.generated.h"
+#include "versionorder.h"
 #include <regex>
 #include <string>
 
@@ -27,32 +28,39 @@ inline std::string version(std::string value,std::string build={}) {
     }
     return value.empty() ? text::unknownVersion : value;
 }
+inline bool repairVersion(const std::string &installed,const std::string &bundled,
+                          const std::string &installedBuild={},const std::string &bundledBuild={}) {
+    return !trim(installed).empty() && version(installed,installedBuild)==version(bundled,bundledBuild);
+}
 struct State { bool installed, running, sameBuild; };
 struct Presentation {
     std::string install, uninstall;
     const char *status;
     bool installEnabled, uninstallEnabled;
 };
-inline Presentation present(State s,const std::string &installedVersion,const std::string &bundledVersion) {
-    return {std::string(s.installed ? text::update : text::install)+"\n"+bundledVersion,
+inline Presentation present(State s,const std::string &installedVersion,const std::string &bundledVersion,
+                            const std::string &installedBuild={},const std::string &bundledBuild={}) {
+    const bool newer=s.installed && newerVersion(installedVersion,bundledVersion,installedBuild,bundledBuild);
+    return {std::string(!s.installed || s.sameBuild || newer ? text::install : repairVersion(installedVersion,bundledVersion,installedBuild,bundledBuild) ? text::repair : text::update)+"\n"+version(bundledVersion,bundledBuild),
         std::string(text::uninstall)
-            +(s.installed ? "\n"+installedVersion : ""),
-        s.running ? text::running : s.installed ? text::installed : text::ready,
-        !s.running && !s.sameBuild, !s.running && s.installed};
+            +(s.installed ? "\n"+version(installedVersion,installedBuild) : ""),
+        s.running ? text::running : newer ? text::newerInstalled : s.installed ? text::installed : text::ready,
+        !s.running && !s.sameBuild && !newer, !s.running && s.installed && !newer};
 }
 struct Operation {
     bool uninstall, installed;
+    bool repair=false;
     const char *progress() const {
         return uninstall ? text::uninstalling
-            : installed ? text::updating : text::installing;
+            : repair ? text::repairing : installed ? text::updating : text::installing;
     }
     const char *success() const {
         return uninstall ? text::removedSuccess
-            : installed ? text::updatedSuccess : text::installedSuccess;
+            : repair ? text::repairedSuccess : installed ? text::updatedSuccess : text::installedSuccess;
     }
     const char *failure() const {
         return uninstall ? text::uninstallFailed
-            : installed ? text::updateFailed : text::installFailed;
+            : repair ? text::repairFailed : installed ? text::updateFailed : text::installFailed;
     }
     const char *confirmationTitle() const { return text::confirmUninstall; }
     const char *confirmationText() const {

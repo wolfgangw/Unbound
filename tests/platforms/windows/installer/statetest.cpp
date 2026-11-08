@@ -18,10 +18,30 @@ static void presentationTests() {
     require(InstallerUI::version("")==InstallerUI::text::unknownVersion,"Unknown installed version");
     for(bool installed:{false,true}) for(bool running:{false,true}) for(bool same:{false,true}) {
         auto ui=InstallerUI::present({installed,running,same},"old","new");
-        require(ui.install==(installed ? "Update\nnew" : "Install\nnew"),"Shared install label/version");
+        require(ui.install==(installed && !same ? "Update\nnew" : "Install\nnew"),"Shared install label/version");
         require(ui.uninstall==(installed ? "Uninstall\nold" : "Uninstall"),"Shared removal label/version");
         require(ui.installEnabled==(!running && !same) && ui.uninstallEnabled==(!running && installed),"Shared action availability");
     }
+    require(InstallerUI::newerVersion("0.7.0","0.6.2"),"Release downgrade not detected");
+    require(!InstallerUI::newerVersion("0.6.2","0.7.0"),"Upgrade rejected");
+    require(!InstallerUI::newerVersion("0.7.0","0.7.0"),"Same-version repair rejected");
+    require(InstallerUI::newerVersion("0.10.0","0.9.0"),"Version comparison was lexical");
+    require(InstallerUI::newerVersion("0.7.0","0.7.0-rc.2") &&
+        InstallerUI::newerVersion("0.7.0-rc.10","0.7.0-rc.2"),"Prerelease ordering failed");
+    require(InstallerUI::newerVersion("0.6.2+internal.20261108.10","0.6.2+internal.20261108.2"),"Internal counter ordering failed");
+    require(InstallerUI::newerVersion("0.6.2","0.6.2","2026.11.08.010","2026.11.08.002"),"Mac internal ordering failed");
+    require(InstallerUI::newerVersion("0.6.2+internal.20261108.1","0.6.2") &&
+        !InstallerUI::newerVersion("0.6.2+internal.20261108.1","0.7.0"),"Internal/release ordering failed");
+    require(!InstallerUI::newerVersion("unknown","0.7.0"),"Unknown metadata blocked repair");
+    const auto older=InstallerUI::present({true,false,false},"0.7.0","0.6.2");
+    require(!older.installEnabled && !older.uninstallEnabled && older.install=="Install\n0.6.2" &&
+        std::string(older.status)==InstallerUI::text::newerInstalled,"Older installer offers update");
+    const auto repair=InstallerUI::present({true,false,false},"0.7.0","0.7.0");
+    require(repair.installEnabled && repair.install=="Repair\n0.7.0","Same-version repair label");
+    const auto intact=InstallerUI::present({true,false,true},"0.7.0","0.7.0");
+    require(!intact.installEnabled && intact.install=="Install\n0.7.0" && intact.uninstallEnabled,
+        "Intact installation must show disabled Install beside enabled Uninstall");
+    require(std::string(InstallerUI::Operation{false,true,true}.progress())=="Repairing...","Repair progress wording");
     require(std::string(InstallerUI::Operation{false,false}.success())==InstallerUI::text::installedSuccess,"Installation feedback");
     require(std::string(InstallerUI::Operation{true,true}.success())==InstallerUI::text::removedSuccess,"Uninstall feedback");
 }

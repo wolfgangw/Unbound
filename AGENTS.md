@@ -166,7 +166,15 @@ script execution. It never forwards or intercepts keyboard events.
 
 Installer wording, layout, display versions and presentation state belong in
 `src/installer/dialog.json` and `presentation.h`; both builds compile that definition.
-Install/Update is the shared primary action. macOS uses native default-button
+Install/Update/Repair is the shared primary action. A known newer installed version
+disables both actions; retain the Install label and direct the user to the newer
+installer in the right-aligned status line. Compare raw semantic
+versions (including prerelease precedence), then internal build date/counter for the
+same base version; internal iterations follow their unchanged base release. macOS
+uses its separate BUILD field. An intact matching payload shows disabled Install beside enabled Uninstall,
+including immediately after installation. Repair appears only for the same version
+with missing/different payload files; unknown metadata does not block repair. Existing older installer binaries
+cannot acquire this guard retroactively. macOS uses native default-button
 emphasis; Windows paints the enabled primary button with system highlight colors,
 including hover and pressed feedback, without a keyboard-focus outline. Its visible
 bounds, small rounded corners and thin grey border match the secondary button. Disabled and high-contrast
@@ -952,7 +960,7 @@ method replacement, screen capture or polling is used.
 
 The additional Color toolbar row reserves space for native traffic-light buttons
 when they overlap its allocation. The Cocoa adapter measures visible standard
-window-button bounds in logical screen coordinates and adjusts only the rowâ€™s
+window-button bounds in logical screen coordinates and adjusts only the row’s
 left margin, retaining its original padding. Scoped layout/geometry/window-state
 events refresh clearance; non-overlapping rows and Windows keep original spacing.
 Docking removes the adapter and restores the original margins. No saved geometry

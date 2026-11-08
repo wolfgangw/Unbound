@@ -42,7 +42,7 @@ std::string resource(int id) {
 void refresh(bool running) {
     const bool installed=Installation::installed(paths);
     const auto ui=InstallerUI::present({installed,running,Installation::matches(paths,payload)},
-        InstallerUI::version(Installation::read(paths.runtime()/L"VERSION")),InstallerUI::version(payload.version));
+        Installation::read(paths.runtime()/L"VERSION"),payload.version);
     text(statusLabel,ui.status); text(installButton,ui.install); text(uninstallButton,ui.uninstall);
     EnableWindow(installButton,ui.installEnabled); EnableWindow(uninstallButton,ui.uninstallEnabled);
     lastResolveRunning=running;
@@ -51,7 +51,8 @@ void refresh() { refresh(resolveRunning()); }
 void operation(HWND window,bool uninstall) {
     refresh();
     if(!IsWindowEnabled(uninstall ? uninstallButton : installButton)) return;
-    const InstallerUI::Operation op{uninstall,Installation::installed(paths)};
+    const InstallerUI::Operation op{uninstall,Installation::installed(paths),
+        InstallerUI::repairVersion(Installation::read(paths.runtime()/L"VERSION"),payload.version)};
     if(uninstall && MessageBoxW(window,wide(op.confirmationText()).c_str(),
         wide(op.confirmationTitle()).c_str(),MB_OKCANCEL|MB_ICONQUESTION)!=IDOK) return;
     Installation::apply(paths,uninstall ? nullptr : &payload);
@@ -165,7 +166,7 @@ LRESULT CALLBACK windowProc(HWND window,UINT message,WPARAM w,LPARAM l) {
             installButton=control(window,L"BUTTON","",(InstallerUI::primaryAction==InstallerUI::Action::Install ? BS_OWNERDRAW : BS_PUSHBUTTON)|BS_MULTILINE|WS_TABSTOP,InstallerUI::rects::install,101);
             SetWindowSubclass(InstallerUI::primaryAction==InstallerUI::Action::Install ? installButton : uninstallButton,primaryButtonProc,1,0);
             control(window,L"STATIC","",SS_ETCHEDHORZ,InstallerUI::rects::separator);
-            statusLabel=control(window,L"STATIC","",0,InstallerUI::rects::status);
+            statusLabel=control(window,L"STATIC","",SS_RIGHT,InstallerUI::rects::status);
             SendMessageW(statusLabel,WM_SETFONT,reinterpret_cast<WPARAM>(statusFont),TRUE);
             refresh();
             processMonitor.start(window,resolveStatusChanged,lastResolveRunning
