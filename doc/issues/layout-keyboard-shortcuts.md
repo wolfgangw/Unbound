@@ -1,8 +1,9 @@
 # Layout keyboard shortcuts
 
 Status: all eight actions confirmed on Windows through Resolve's native scripting
-connection. Stable slots are user-validated. Button-pulse feedback and menu hover dismissal
-await live validation. Remaining coverage below.
+connection. Fresh-process Studio route selection, menu actions, assigned shortcuts,
+rapid layout requests and page-change behavior are confirmed. Stable slots and
+button-pulse feedback are user-validated. Remaining coverage below.
 
 Resolve discovers `Scripts/Utility/Unbound/*.lua` as one Unbound submenu in
 Workspace > Scripts and Keyboard Customization. Searching Unbound finds contained
@@ -20,12 +21,10 @@ interface and concurrency guard are documented in
 
 ## Remaining validation
 
-- Fresh Windows install/restart: menu commands and assigned shortcuts with the
-  Unbound menu closed, from docked/floating panes and text fields. Preserve native
+- Check shortcuts specifically from docked/floating panes and text fields. Preserve native
   shortcut precedence, focus and transport routing.
-- Rapid repeats and mixed commands during restoration: no overlapping changes,
-  deferred action backlog or saved intermediate layout. Check menu/shortcut mixing,
-  page/app changes, modal dialogs and busy/unavailable feedback.
+- Beyond confirmed rapid layout requests and page changes, check menu/shortcut
+  mixing, saves during restoration, app changes and modal dialogs.
 - Single green save pulse/red empty-or-full pulse on visible buttons only; preserve
   docking warnings and cancel on hide/app departure. Menu saves use the same pulses,
   with no status text; Save as new must create a new slot even when unchanged. Menu hover expiry and immediate

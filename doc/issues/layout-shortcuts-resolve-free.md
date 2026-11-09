@@ -21,12 +21,15 @@ The arm64 fixture suite and installer checks pass. Shared tests cover generated
 commands for both platforms, edition routing, native action discovery, menu
 rebuilding, removed actions, duplicate prevention and loader teardown.
 
-## Windows handoff
+## Windows Studio validation
 
-- Confirm Studio startup selects the script route and all eight commands retain
-  their existing menu/shortcut behavior, without duplicate execution.
-- Check recall, Dock all, Save and Save as new, including rapid repeats and page
-  changes. Existing modal/popup, inactive-application and settlement guards apply.
+Fresh-process startup confirms the Studio script route. The user confirms menu
+actions and assigned shortcuts work, rapid layout commands remain stable without
+delayed replay, and page changes produce the expected page-local results.
+The Windows automated build checks also pass, including narrowed menu observation.
+
+## Remaining platform coverage
+
 - Windows Free fallback behavior remains unvalidated; test it if available.
 - Native Intel Mac execution remains unvalidated.
 
