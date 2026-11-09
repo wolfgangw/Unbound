@@ -20,6 +20,8 @@ Right-click on any of the Unbound buttons to manage layouts. Each Resolve page h
 of layouts. Hold a layout name for one second to rename it. Layouts are saved and restored
 between sessions.
 
+In DaVinci Resolve's Keyboard Customization, search for Unbound to set keyboard shortcuts.
+
 <img width="3359" height="1391" alt="Unbound - Color page - Color controls 06" src="https://github.com/user-attachments/assets/2e883927-c87c-424d-bdef-bb3282ca276a" />
 
 <img width="2480" height="1379" alt="Unbound - 9by16" src="https://github.com/user-attachments/assets/9ae5b1f9-e502-4c1b-8296-a63eb7048936" />
