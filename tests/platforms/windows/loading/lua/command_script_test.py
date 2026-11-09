@@ -38,7 +38,7 @@ local calls = 0
 local app = {Execute=function(self, payload)
     calls = calls + 1
     local native = assert(loadstring(payload))
-    setfenv(native, {ffi=nativeffi, assert=assert})
+    setfenv(native, {ffi=nativeffi, assert=assert, pcall=pcall})
     local ok, err = pcall(native)
     assert(not ok and tostring(err):find('Unbound command rejected (-1).', 1, true), tostring(err))
 end}

@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include "startuplog.h"
 static std::atomic<int> state{0};
+static std::atomic<int> resolveEdition{-1};
 static void *retainedLoader=nullptr, *retainedHelper=nullptr;
 // 0 idle, 1 queued, 2 attached, 3 already active; negative values are failures.
 extern "C" __attribute__((visibility("default"))) int UnboundLuaStatus() { return state.load(); }
@@ -36,6 +37,9 @@ extern "C" __attribute__((visibility("default"))) int UnboundLuaStart()
         dispatch_async(dispatch_get_main_queue(),^{
             retainedHelper=dlopen(helper.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);
             if (!retainedHelper) { state=-4; unboundStartupLog(dlerror()); return; }
+            auto configure=reinterpret_cast<void (*)(int)>(dlsym(retainedHelper,"UnboundSetResolveEdition"));
+            if(configure) configure(resolveEdition);
+            unboundStartupLog(resolveEdition==0 ? "Shortcut route: Free native actions" : resolveEdition==1 ? "Shortcut route: Studio scripts" : "Shortcut route: unknown edition; scripts retained");
             auto attach=reinterpret_cast<int (*)()>(dlsym(retainedHelper,"UnboundLuaAttach"));
             const int result=attach ? attach() : 0;
             if (result==1) { state=2; unboundStartupLog("Lua loader attached shared Unbound controller"); }
@@ -44,4 +48,10 @@ extern "C" __attribute__((visibility("default"))) int UnboundLuaStart()
         });
         return 1;
     }
+}
+
+extern "C" __attribute__((visibility("default"))) int UnboundLuaStartForEdition(int edition)
+{
+    if(state.load()==0) resolveEdition=edition;
+    return UnboundLuaStart();
 }

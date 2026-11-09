@@ -124,6 +124,23 @@ entry scripts installed in `Scripts/Utility/Unbound`, grouped natively in Worksp
 or changed. Installers replace/remove this managed folder alongside Runtime;
 other Utility scripts remain untouched, and failures restore the previous files.
 
+Startup queries `resolve:IsStudio()` (or the Resolve object from Fusion) once and
+passes the edition through the native loader before controller construction.
+Confirmed Free creates the shared `ScriptCommandFallback`; Studio and unknown
+edition retain script delivery. The startup log records the selected route.
+Unknown is never treated as Free and no capability polling is performed.
+
+On Free, the fallback observes existing `QAction::triggered` signals under the
+named Workspace root and its managed Unbound submenu. The complete label/command
+set comes from `src/scripts/commands.json`, also used to generate the scripts.
+Menu construction/show events update connections; removed actions are rejected,
+rebuilt actions are connected once, and destruction cleans up references. No
+positional action identifiers, keyboard interception, native action disabling or
+IPC. Requests enter the same shared command ABI and guards. Generated Lua payloads
+return silently on confirmed Free so native action delivery cannot execute twice;
+Studio retains its existing FFI command path. Live validation status remains in
+`doc/issues/layout-shortcuts-resolve-free.md` while this fallback is being validated.
+
 Workspace scripts execute outside Resolve. They use the existing Fusion scripting
 connection and public `fusion:Execute(...)` to call
 `UnboundExecuteCommand(version, command, argumentsJson)` inside Resolve, in the

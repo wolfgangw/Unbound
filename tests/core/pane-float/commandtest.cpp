@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "commandapi.h"
+#include "scriptcommandfallback.h"
 #include "layoutcommandgate.h"
 #include "layoutadapter.h"
 #include <QEventLoop>
@@ -9,6 +10,30 @@
 void testLayoutCommands() {
     using namespace Unbound;
     using LayoutTest::require;
+    // Native hierarchy can be rebuilt without changing labels or shortcut assignments.
+    {
+        QMenu workspace;workspace.setObjectName("workspace");
+        auto scripts=workspace.addMenu("Scripts");
+        auto managed=scripts->addMenu("Unbound");
+        for(const auto &command:scriptCommands)managed->addAction(command.label);
+        int delivered=0;CommandRequest parsed;
+        ScriptCommandFallback fallback(&workspace,[&](const ScriptCommand &command) {
+            require(parseCommand(1,command.command,command.arguments,parsed)==CommandAccepted,"Catalogue command invalid");
+            ++delivered;
+        });
+        for(auto action:managed->actions())action->trigger();
+        require(delivered==8,"Native command catalogue dispatch incomplete");
+        auto unrelated=scripts->addAction("Dock all");unrelated->trigger();
+        require(delivered==8,"Unrelated action dispatched");
+        auto old=managed->actions().first();managed->removeAction(old);
+        old->trigger();require(delivered==8,"Removed action retained dispatch");
+        delete managed;
+        managed=scripts->addMenu("Unbound");
+        for(const auto &command:scriptCommands)managed->addAction(command.label);
+        QCoreApplication::processEvents();QCoreApplication::processEvents();
+        for(auto action:managed->actions())action->trigger();
+        require(delivered==16,"Rebuilt menu duplicated or lost dispatch");
+    }
     CommandRequest request;
     require(parseCommand(1,"layout.activate","{\"slot\":5}",request)==CommandAccepted && request.slot==5,"Slot admission");
     for(const auto &json:{"{}","{\"slot\":0}","{\"slot\":6}","{\"slot\":1.5}","{\"slot\":\"1\"}","{\"slot\":1,\"x\":2}","[]","bad"})

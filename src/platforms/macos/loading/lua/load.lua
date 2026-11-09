@@ -4,9 +4,16 @@ local directory = assert(os and os.getenv and os.getenv("HOME"), "Cannot locate 
     .. "/Library/Application Support/Unbound/Runtime"
 local ffi = ffi or (require and require("ffi"))
 assert(ffi and ffi.cdef and ffi.load, "Unbound requires native FFI in Resolve's internal Lua runtime")
-ffi.cdef[[int UnboundLuaStart(void); int UnboundLuaStatus(void);]]
+ffi.cdef[[int UnboundLuaStartForEdition(int); int UnboundLuaStatus(void);]]
 local loader = ffi.load(directory .. "/UnboundLuaLoader.dylib")
-local result = loader.UnboundLuaStart()
+local edition = -1
+local known, studio = pcall(function()
+    local host = resolve or ((fusion or fu) and (fusion or fu):GetResolve())
+    return host and host:IsStudio()
+end)
+if known and studio == true then edition = 1
+elseif known and studio == false then edition = 0 end
+local result = loader.UnboundLuaStartForEdition(edition)
 if result < 0 then
     error("Unbound could not start (" .. result .. "). See ~/Library/Logs/Unbound/lua-bootstrap.log")
 end

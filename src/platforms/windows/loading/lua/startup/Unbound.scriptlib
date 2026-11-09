@@ -36,9 +36,16 @@ local ok, failure = pcall(function()
     for i = 1, #suffix do path[length+i-1] = suffix:byte(i) end
     local library = ffi.C.LoadLibraryExW(path, nil, 0x1100)
     assert(library ~= nil, "Cannot load Unbound runtime")
-    local entry = ffi.C.GetProcAddress(library, "UnboundLuaStart")
+    local entry = ffi.C.GetProcAddress(library, "UnboundLuaStartForEdition")
     if entry == nil then ffi.C.FreeLibrary(library); error("Invalid Unbound loader") end
-    local result = ffi.cast("int (*)(void)", entry)()
+    local edition = -1
+    local known, studio = pcall(function()
+        local host = resolve or ((fusion or fu) and (fusion or fu):GetResolve())
+        return host and host:IsStudio()
+    end)
+    if known and studio == true then edition = 1
+    elseif known and studio == false then edition = 0 end
+    local result = ffi.cast("int (*)(int)", entry)(edition)
     ffi.C.FreeLibrary(library)
     assert(result >= 0, "Unbound startup rejected (" .. result .. "); see Unbound/lua-bootstrap.log")
 end)

@@ -9,6 +9,7 @@ local runtime = home .. "/Library/Application Support/Unbound/Runtime"
 local function run(options)
     local starts, loads, messages = 0, 0, {}
     local env = { assert = assert, error = error, pcall = pcall, tostring = tostring }
+    if options.studio ~= nil then env.resolve = {IsStudio=function() return options.studio end} end
     env.print = function(message) messages[#messages + 1] = message end
     env.os = { getenv = function(name) assert(name == "HOME"); return home end }
     env.ffi = {
@@ -17,7 +18,7 @@ local function run(options)
         cdef = function(_) end,
         load = function(path)
             assert(path == runtime .. "/UnboundLuaLoader.dylib")
-            return { UnboundLuaStart = function() starts = starts + 1; return options.result or 1 end }
+            return { UnboundLuaStartForEdition = function(edition) starts = starts + 1; assert(edition == (options.studio == true and 1 or options.studio == false and 0 or -1)); return options.result or 1 end }
         end,
     }
     env.loadfile = function(path)
@@ -44,13 +45,15 @@ local function run(options)
     if skipped then
         -- Skipping an auxiliary context must not disable later capable startup.
         env.ffi = {C={getprogname=function() return "Resolve" end}, string=function(v) return v end, cdef = function(_) end, load = function(_)
-            return {UnboundLuaStart = function() starts = starts + 1; return 1 end}
+            return {UnboundLuaStartForEdition = function(edition) starts = starts + 1; return 1 end}
         end}
         assert(pcall(setfenv(assert(loadfile(startup)), env)))
         assert(starts == 1 and loads == 1 and #messages == 0)
     end
 end
 run({})
+run({studio=true})
+run({studio=false})
 run({result = 2})
 run({result = 3})
 run({result = -1})

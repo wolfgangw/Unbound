@@ -18,3 +18,14 @@ function(unbound_link_core target backend)
     target_sources(${target} PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/controller.cpp")
     target_link_libraries(${target} PRIVATE ${backend})
 endfunction()
+
+# One command catalogue drives native Free dispatch and installed Studio scripts.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_LIST_DIR}/../scripts/commands.json"
+    "${CMAKE_CURRENT_LIST_DIR}/../../infrastructure/scripts/generate.py")
+execute_process(COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_LIST_DIR}/../../infrastructure/scripts/generate.py"
+    --catalogue-header "${CMAKE_CURRENT_BINARY_DIR}/scriptcommands.generated.h"
+    COMMAND_ERROR_IS_FATAL ANY)
+target_include_directories(UnboundCoreHeaders INTERFACE "${CMAKE_CURRENT_BINARY_DIR}")

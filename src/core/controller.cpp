@@ -11,6 +11,7 @@
 #include "windowintegration.h"
 #include "controller.h"
 #include "commandapi.h"
+#include "scriptcommandfallback.h"
 #include "layoutcommandgate.h"
 #include <QThread>
 #include "mainwindowplacement.h"
@@ -29,6 +30,7 @@
 #include "panepagecontext.h"
 
 namespace {
+std::atomic<int> resolveEdition{-1};
 namespace Catalogue = Unbound::PaneCatalogue;
 bool preservesNativeLayout(const QString &name) {
     const auto pane=Catalogue::find(name);
@@ -73,6 +75,7 @@ public:
                 else if(auto auxiliary=window->findChild<QWidget *>(page.auxiliaryWindow))indexBranch(auxiliary);
             }
         discover();
+        if(resolveEdition.load()==0) new Unbound::ScriptCommandFallback(this);
     }
     ~Controller() override
     {
@@ -958,4 +961,11 @@ extern "C" Q_DECL_EXPORT int UnboundExecuteCommand(unsigned int version,const ch
             controller->executeCommand(request);
     },Qt::QueuedConnection)) {commandQueued()=false;return CommandUnavailable;}
     return CommandAccepted;
+}
+
+// Called by the Qt-free loader before controller construction. Unknown edition
+// retains the existing script route; only confirmed Free enables the fallback.
+extern "C" Q_DECL_EXPORT void UnboundSetResolveEdition(int edition)
+{
+    resolveEdition=edition;
 }

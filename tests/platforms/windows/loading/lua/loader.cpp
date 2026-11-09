@@ -14,14 +14,16 @@ int main(int argc,char **argv) {
     auto module=LoadLibraryW(reinterpret_cast<LPCWSTR>(QString::fromLocal8Bit(argv[1]).utf16()));
     require(module,"Cannot load loader");
     auto start=reinterpret_cast<int (*)()>(GetProcAddress(module,"UnboundLuaStart"));
+    auto startEdition=reinterpret_cast<int (*)(int)>(GetProcAddress(module,"UnboundLuaStartForEdition"));
     auto status=reinterpret_cast<int (*)()>(GetProcAddress(module,"UnboundLuaStatus"));
-    require(start && status,"Missing exports");
+    require(start && startEdition && status,"Missing exports");
     require(start()==-1 && status()==0,"Accepted without Qt app or prevented retry");
     QApplication app(argc,argv);
+    const bool studio=app.arguments().contains("--studio");
     QObject sentinel(&app);
     const bool existing=app.arguments().contains("--existing");
     if(existing) sentinel.setObjectName("UnboundPaneController");
-    int result=0; std::thread worker([&] {result=start();}); worker.join();
+    int result=0; std::thread worker([&] {result=startEdition(studio ? 1 : 0);}); worker.join();
     require(result==1 && status()==1,"Worker entry not queued");
     require(start()==1,"Duplicate queued start changed state");
     FreeLibrary(module);
@@ -31,5 +33,6 @@ int main(int argc,char **argv) {
     require(status()==(existing ? 3 : 2),"GUI-thread attachment failed");
     require(start()==status(),"Duplicate completion changed state");
     require(app.findChildren<QObject *>("UnboundPaneController").size()==1,"Missing/duplicate controller");
+    require(bool(app.findChild<QObject *>("UnboundScriptCommandFallback"))==(!existing && !studio),"Incorrect edition routing");
     puts("PASS: Windows Lua loader validates host, queues worker entry, retains libraries and attaches once");
 }

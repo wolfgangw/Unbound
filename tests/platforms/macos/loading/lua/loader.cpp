@@ -13,15 +13,17 @@ int main(int argc,char **argv)
     require(argc>=2,"Expected loader path");
     void *library=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL); require(library,dlerror());
     auto start=reinterpret_cast<int (*)()>(dlsym(library,"UnboundLuaStart"));
+    auto startEdition=reinterpret_cast<int (*)(int)>(dlsym(library,"UnboundLuaStartForEdition"));
     auto status=reinterpret_cast<int (*)()>(dlsym(library,"UnboundLuaStatus"));
-    require(start && status,"Missing Lua loader exports");
+    require(start && startEdition && status,"Missing Lua loader exports");
     require(start()==-1 && status()==0,"Accepted startup without an application or prevented retry");
     QApplication app(argc,argv);
+    const bool studio=app.arguments().contains("--studio");
     const bool existing=app.arguments().contains("--existing-controller");
     QObject sentinel(&app);
     if(existing) sentinel.setObjectName("UnboundPaneController");
     int result=0;
-    std::thread worker([&] { result=start(); }); worker.join();
+    std::thread worker([&] { result=startEdition(studio ? 1 : 0); }); worker.join();
     require(result==1 && status()==1,"Worker request was not queued");
     require(start()==1,"Duplicate queued request changed state");
     dlclose(library); // Pending callback must survive the caller releasing its handle.
@@ -33,5 +35,6 @@ int main(int argc,char **argv)
     require(status()==(existing ? 3 : 2),"Main-thread attachment failed");
     require(start()==status(),"Duplicate completed request changed state");
     require(app.findChildren<QObject *>("UnboundPaneController").size()==1,"Missing or duplicate controller");
+    require(bool(app.findChild<QObject *>("UnboundScriptCommandFallback"))==(!existing && !studio),"Incorrect edition routing");
     puts("PASS: Lua native loader validates Qt, queues worker entry to GUI thread, retains callbacks, starts once and respects existing controllers");
 }

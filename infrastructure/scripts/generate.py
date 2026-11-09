@@ -5,9 +5,10 @@ import json
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--platform', choices=['windows', 'macos'], required=True)
-parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--platform', choices=['windows', 'macos'], default='macos')
+parser.add_argument('--output', type=Path)
 parser.add_argument('--header', type=Path)
+parser.add_argument('--catalogue-header', type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 commands = json.loads((root / 'src/scripts/commands.json').read_text())
@@ -39,12 +40,27 @@ if entry == nil then
     error("Please update Unbound to use its script commands.")
 end
 '''
+if args.catalogue_header:
+    header = '#pragma once\nnamespace Unbound {\nstruct ScriptCommand { const char *label; const char *command; const char *arguments; };\ninline constexpr ScriptCommand scriptCommands[] = {\n'
+    for command in commands:
+        values = [command['label'], command['command'], json.dumps(command['arguments'], separators=(',', ':'))]
+        header += '    {' + ','.join(json.dumps(value) for value in values) + '},\n'
+    header += '};\n}\n'
+    args.catalogue_header.write_text(header, encoding='utf-8')
+if not args.output:
+    if args.catalogue_header:
+        raise SystemExit(0)
+    parser.error('--output or --catalogue-header is required')
 args.output.mkdir(parents=True, exist_ok=True)
 entries = []
 for command in commands:
     name = command['label'] + '.lua'
     arguments = json.dumps(command['arguments'], separators=(',', ':'))
     body = '-- SPDX-License-Identifier: MIT\n-- Generated Unbound command; shortcut assignment belongs to Resolve.\n'
+    body += 'local known, studio = pcall(function()\n'
+    body += '    local host = resolve or ((fusion or fu) and (fusion or fu):GetResolve())\n'
+    body += '    return host and host:IsStudio()\nend)\n'
+    body += 'if known and studio == false then return end\n'
     body += 'local ffi = ffi or (require and require("ffi"))\n'
     body += 'assert(ffi, "Unbound commands require Resolve Lua FFI.")\n'
     body += windows if args.platform == 'windows' else macos

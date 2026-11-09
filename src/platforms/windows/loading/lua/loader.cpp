@@ -6,6 +6,7 @@
 #include <string>
 #include "startuplog.h"
 static std::atomic<int> state{0};
+static std::atomic<int> resolveEdition{-1};
 extern "C" __declspec(dllexport) int UnboundLuaStatus() { return state.load(); }
 extern "C" __declspec(dllexport) int UnboundLuaStart()
 {
@@ -28,10 +29,19 @@ extern "C" __declspec(dllexport) int UnboundLuaStart()
     auto helper=LoadLibraryExW(helperPath.c_str(),nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if(!helper) { state=-4; startupLog("Cannot load adjacent Unbound.dll",GetLastError()); return -4; }
+    auto configure=reinterpret_cast<void (*)(int)>(GetProcAddress(helper,"UnboundSetResolveEdition"));
+    if(configure) configure(resolveEdition);
+    startupLog(resolveEdition==0 ? "Shortcut route: Free native actions" : resolveEdition==1 ? "Shortcut route: Studio scripts" : "Shortcut route: unknown edition; scripts retained");
     auto attach=reinterpret_cast<int (*)(void (*)(int))>(GetProcAddress(helper,"UnboundLuaAttach"));
     if(!attach || !attach([](int result) { state=result; })) {
         state=-5; startupLog("Helper rejected queued attachment"); return -5;
     }
     startupLog("Lua request accepted; attachment queued");
     return state.load();
+}
+
+extern "C" __declspec(dllexport) int UnboundLuaStartForEdition(int edition)
+{
+    if(state.load()==0) resolveEdition=edition;
+    return UnboundLuaStart();
 }

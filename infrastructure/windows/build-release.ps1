@@ -70,6 +70,7 @@ try {
     $env:UNBOUND_LOG_FILE = Join-Path $build 'lua-fixture.log'
     try {
         Invoke-Checked (Join-Path $build 'Release\UnboundLuaLoaderTests.exe') @((Join-Path $build 'Release\UnboundLuaLoader.dll'))
+        Invoke-Checked (Join-Path $build 'Release\UnboundLuaLoaderTests.exe') @((Join-Path $build 'Release\UnboundLuaLoader.dll'), '--studio')
         Invoke-Checked (Join-Path $build 'Release\UnboundLuaLoaderTests.exe') @((Join-Path $build 'Release\UnboundLuaLoader.dll'), '--existing')
         Invoke-Checked (Join-Path $build 'Release\UnboundInstallerTests.exe') @()
     } finally { Remove-Item Env:UNBOUND_LOG_FILE -ErrorAction SilentlyContinue }

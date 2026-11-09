@@ -18,9 +18,13 @@ run_native() { /usr/bin/arch "-$architecture" "$@"; }
 run_native "$build/src/platforms/macos/unbound-lua-script-test" \
     "$resolve/Contents/Libraries/Fusion/libluajit-5.1.2.dylib" \
     "$root/tests/platforms/macos/loading/lua/startup/script_test.lua" "$root"
+python3 "$root/tests/core/scripts/command_test.py" \
+    "$resolve/Contents/Libraries/Fusion/libluajit-5.1.2.dylib" \
+    /usr/bin/arch "-$architecture" "$build/src/platforms/macos/unbound-lua-script-test"
 loader="$build/stage/runtime/UnboundLuaLoader.dylib"
 helper="$build/stage/runtime/Unbound.dylib"
 run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader"
+run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader" --studio
 run_native "$build/src/platforms/macos/unbound-lua-loader-test" "$loader" --existing-controller
 run_native "$build/src/platforms/macos/audition-activation-test"
 run_native "$build/src/platforms/macos/scopes-header-refresh-test"
