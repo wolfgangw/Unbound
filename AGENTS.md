@@ -974,6 +974,17 @@ after Cinema exit so content appears without requiring a main-window resize.
 
 ### Cocoa windowing
 
+When an Unbound host hides, `quirks/keywindowfocus.mm` coalesces one queued check
+for lost Qt activation. Cocoa can retain Resolve's main window as key while Qt
+clears its active window and focus during host teardown, preventing native
+shortcuts from matching. Only if Qt has no active window/focused control and the
+application is active, with no modal/popup, synchronize Qt through
+`QApplication::setActiveWindow` to the already-key, visible group member. Preserve
+its remembered control. Never raise or activate a different native window, choose
+a new control, intercept keys or poll. Newer activation and observer destruction
+cancel the need for correction. Immediate layout shortcuts after Dock all are
+user-validated on macOS without an intervening focus click. Windows is unchanged.
+
 Cocoa pins use `NSFloatingWindowLevel` while the active native key window belongs
 to the Resolve group. The shared policy still selects pins and their MRU order.
 A visible Unbound layout menu receives the next level above those pins. Native

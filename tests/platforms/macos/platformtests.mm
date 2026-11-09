@@ -2,6 +2,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include "windowpresentation.h"
+#include "quirks/keywindowfocus.h"
 #include "resizeinput.h"
 #include "windowcontrolclearance.h"
 #include "panegridguide.h"
@@ -806,7 +807,41 @@ static bool runMacGridTest(QApplication &app) {
     puts("PASS: Cocoa grid work-area coverage, native transparency, click-through, window level, focus, fades, reference refresh and disposal");
     return true;
 }
+static bool runMacKeyFocusTest(QApplication &app) {
+    if(!app.arguments().contains("--mac-key-focus-test"))return false;
+    auto settle=[] {QEventLoop loop;QTimer::singleShot(40,&loop,&QEventLoop::quit);loop.exec();};
+    QWidget main;QLineEdit editor(&main);main.resize(400,200);editor.setGeometry(10,10,200,30);
+    Unbound::WindowGroupActivation group;group.setWindow(&main);
+    main.show();editor.show();main.activateWindow();settle();
+    NSWindow *native=reinterpret_cast<NSView *>(main.winId()).window;
+    [NSApp activateIgnoringOtherApps:YES];[native makeKeyAndOrderFront:nil];
+    QApplication::setActiveWindow(&main);editor.setFocus();settle();
+    Unbound::PaneFloatingWindow host;host.resize(200,100);host.show();settle();
+    // Model Resolve's observed mismatch: Cocoa main stays key while the host
+    // owns Qt activation. Hiding that host clears Qt without a Cocoa key change.
+    [native makeKeyAndOrderFront:nil];QApplication::setActiveWindow(&host);
+    host.hide();settle();
+    check(NSApp.keyWindow==native && QApplication::activeWindow()==&main,
+        "Host hide did not synchronize Qt with the unchanged Cocoa key window");
+    check(QApplication::focusWidget()==&editor,"Native main remembered focus was not restored");
+    Unbound::CocoaKeyWindowFocus recovery([&](QWidget *w){return w==&main;});
+    QWidget other;other.show();settle();
+    recovery.hostHidden();QApplication::setActiveWindow(&other);settle();
+    check(QApplication::activeWindow()==&other,"Recovery stole a newer activation");
+    [native makeKeyAndOrderFront:nil];QApplication::setActiveWindow(nullptr);
+    Unbound::CocoaKeyWindowFocus unrelated([](QWidget *){return false;});
+    unrelated.hostHidden();settle();
+    check(!QApplication::activeWindow(),"Recovery activated an unrelated native key window");
+    auto cancelled=new Unbound::CocoaKeyWindowFocus([&](QWidget *w){return w==&main;});
+    cancelled->hostHidden();delete cancelled;settle();
+    check(!QApplication::activeWindow(),"Destroyed observer retained queued focus work");
+    QApplication::setActiveWindow(&main);
+    std::puts("PASS: Cocoa retained-key focus recovery after host hide, remembered control, newer activation, unrelated windows and queued teardown");
+    return true;
+}
+
 bool runPlatformWindowTests(QApplication &app) {
+    if(runMacKeyFocusTest(app))return true;
     if(runMacGridTest(app))return true;
     if(runMacPresentationTest(app))return true;
     if(runMacResizeInputTest(app))return true;

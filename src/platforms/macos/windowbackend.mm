@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #import <AppKit/AppKit.h>
 #include "windowbackend.h"
+#include "quirks/keywindowfocus.h"
 #include "panesnap.h"
 #include "panegridsnap.h"
 #include "panegridguide.h"
@@ -426,6 +427,7 @@ WindowGroupActivation::WindowGroupActivation() : PaneWindowGroup(
     [this](QWidget *selected,const QList<QWidget *> &pins) { return raiseGroup(selected,pins); },
     [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderOut:nil]; },
     [](QWidget *widget) { if(auto window=nativeWindow(widget)) [window orderFront:nil]; }) {
+    m_keyFocus=std::make_unique<CocoaKeyWindowFocus>([this](QWidget *window) {return member(window);});
     m_levels=std::make_unique<CocoaGroupLevels>([this](bool departing) {
         if(departing) m_levels->apply({});
         else {refreshLevels(); schedule();}
@@ -457,6 +459,9 @@ void WindowGroupActivation::refreshLevels() {
 }
 bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
     const bool result=PaneWindowGroup::eventFilter(object,event);
+    if(event->type()==QEvent::Hide)if(auto window=qobject_cast<QWidget *>(object))
+        if(window->isWindow() && window->property("unboundFloatingWindow").toBool()
+            && member(window))m_keyFocus->hostHidden();
     switch(event->type()) {
     case QEvent::WindowActivate: case QEvent::Show: case QEvent::Hide:
     case QEvent::WindowStateChange: case QEvent::DynamicPropertyChange:

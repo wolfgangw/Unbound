@@ -14,6 +14,7 @@ private:
     std::unique_ptr<MacWindowInteraction> m_interaction;
 };
 class CocoaGroupLevels;
+class CocoaKeyWindowFocus;
 class WindowGroupActivation : public PaneWindowGroup {
 public:
     WindowGroupActivation();
@@ -21,6 +22,7 @@ public:
     void setWindow(QWidget *window);
 private:
     std::unique_ptr<CocoaGroupLevels> m_levels;
+    std::unique_ptr<CocoaKeyWindowFocus> m_keyFocus;
     bool m_updatingLevels=false;
     void refreshLevels();
     bool eventFilter(QObject *,QEvent *) override;
