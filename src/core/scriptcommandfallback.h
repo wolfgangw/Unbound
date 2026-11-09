@@ -28,6 +28,7 @@ public:
     ~ScriptCommandFallback() override {
         if(qApp)qApp->removeEventFilter(this);
         for(const auto &connection:m_connections) QObject::disconnect(connection);
+        for(const auto &connection:m_menus) QObject::disconnect(connection);
     }
 private:
     void observe(QObject *object) {
@@ -63,6 +64,23 @@ private:
         return result;
     }
     void refresh() {
+        // Follow QAction menu links: native menus need not share QObject parents.
+        // Watch Workspace's immediate sections to discover a lazily added Scripts
+        // group, then only the managed Unbound submenu below those sections.
+        QSet<QMenu *> menus=m_roots;
+        for(auto root:m_roots)for(auto section:root->actions())if(auto scripts=section->menu()) {
+            menus.insert(scripts);
+            for(auto group:scripts->actions())if(auto menu=group->menu())
+                if(menu->title()==QLatin1String("Unbound"))menus.insert(menu);
+        }
+        for(auto it=m_menus.begin();it!=m_menus.end();) {
+            if(!menus.contains(it.key())) {QObject::disconnect(it.value());it=m_menus.erase(it);}
+            else ++it;
+        }
+        for(auto menu:menus)if(!m_menus.contains(menu))
+            m_menus.insert(menu,connect(menu,&QObject::destroyed,this,[this,menu] {
+                m_menus.remove(menu);schedule();
+            }));
         const auto actions=inventory();
         for(auto it=m_connections.begin();it!=m_connections.end();) {
             if(!actions.contains(it.key())) {QObject::disconnect(it.value());it=m_connections.erase(it);}
@@ -93,7 +111,10 @@ private:
         switch(event->type()) {
         case QEvent::ActionAdded: case QEvent::ActionRemoved: case QEvent::ActionChanged:
         case QEvent::Show: case QEvent::ChildPolished:
-            if(qobject_cast<QMenu *>(object)) {
+            if(auto menu=qobject_cast<QMenu *>(object)) {
+                // Only root discovery is application-wide. Unrelated menus must
+                // not queue work or inventory our command hierarchy.
+                if(menu->objectName()!=QLatin1String("workspace") && !m_menus.contains(menu))break;
                 observe(object);
                 if(event->type()==QEvent::Show)refresh();
                 else schedule();
@@ -105,6 +126,7 @@ private:
     }
     Dispatch m_dispatch;
     QSet<QMenu *> m_roots;
+    QMap<QMenu *,QMetaObject::Connection> m_menus;
     QSet<QAction *> m_observed;
     QMap<QAction *,QMetaObject::Connection> m_connections;
     bool m_queued=false;

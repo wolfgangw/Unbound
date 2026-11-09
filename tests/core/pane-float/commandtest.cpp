@@ -21,6 +21,24 @@ void testLayoutCommands() {
             require(parseCommand(1,command.command,command.arguments,parsed)==CommandAccepted,"Catalogue command invalid");
             ++delivered;
         });
+        struct QueuedRefreshCounter : QObject {
+            int calls=0;
+            bool eventFilter(QObject *,QEvent *event) override {
+                if(event->type()==QEvent::MetaCall)++calls;
+                return false;
+            }
+        } counter;
+        fallback.installEventFilter(&counter);
+        QMenu unrelatedMenu;
+        auto unrelatedSection=workspace.addMenu("Unrelated section");
+        auto unrelatedNested=unrelatedSection->addMenu("Other commands");
+        QCoreApplication::processEvents();QCoreApplication::processEvents();counter.calls=0;
+        for(auto menu:{&unrelatedMenu,unrelatedNested}) {
+            menu->addAction("Unrelated command");
+            QEvent show(QEvent::Show);QCoreApplication::sendEvent(menu,&show);
+        }
+        QCoreApplication::processEvents();QCoreApplication::processEvents();
+        require(counter.calls==0,"Unrelated menus scheduled fallback discovery");
         for(auto action:managed->actions())action->trigger();
         require(delivered==8,"Native command catalogue dispatch incomplete");
         auto unrelated=scripts->addAction("Dock all");unrelated->trigger();
@@ -29,10 +47,18 @@ void testLayoutCommands() {
         old->trigger();require(delivered==8,"Removed action retained dispatch");
         delete managed;
         managed=scripts->addMenu("Unbound");
+        // Discovery must retain incomplete/lazily populated managed menus.
+        QCoreApplication::processEvents();QCoreApplication::processEvents();
         for(const auto &command:scriptCommands)managed->addAction(command.label);
         QCoreApplication::processEvents();QCoreApplication::processEvents();
         for(auto action:managed->actions())action->trigger();
         require(delivered==16,"Rebuilt menu duplicated or lost dispatch");
+        scripts->removeAction(managed->menuAction());
+        QCoreApplication::processEvents();QCoreApplication::processEvents();counter.calls=0;
+        managed->addAction("Detached command");
+        managed->actions().first()->trigger();
+        QCoreApplication::processEvents();QCoreApplication::processEvents();
+        require(delivered==16 && counter.calls==0,"Detached submenu retained observation or dispatch");
     }
     CommandRequest request;
     require(parseCommand(1,"layout.activate","{\"slot\":5}",request)==CommandAccepted && request.slot==5,"Slot admission");

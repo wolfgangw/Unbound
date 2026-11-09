@@ -133,7 +133,10 @@ Unknown is never treated as Free and no capability polling is performed.
 On Free, the fallback observes existing `QAction::triggered` signals under the
 named Workspace root and its managed Unbound submenu. The complete label/command
 set comes from `src/scripts/commands.json`, also used to generate the scripts.
-Menu construction/show events update connections; removed actions are rejected,
+Only Workspace root discovery is application-wide. Menu construction/show events
+in its immediate sections and managed Unbound submenu update connections; unrelated
+menus do not schedule command discovery. Follow QAction menu links rather than
+QObject parenting, and stop observing detached submenus. Removed actions are rejected,
 rebuilt actions are connected once, and destruction cleans up references. No
 positional action identifiers, keyboard interception, native action disabling or
 IPC. Requests enter the same shared command ABI and guards. Generated Lua payloads
