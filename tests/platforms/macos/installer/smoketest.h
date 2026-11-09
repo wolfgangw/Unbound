@@ -70,7 +70,7 @@
     [self refresh:nil];
     valid = valid && !self.installButton.enabled && self.uninstallButton.enabled == !resolveRunning();
     // Each required file independently controls repair availability, even when
-    // version/build metadata still matches. Restoring it disables Update again.
+    // version/build metadata still matches. Restoring it disables the primary action again.
     for (NSString *path in payloadFiles) {
         NSData *contents = [NSData dataWithContentsOfFile:path];
         if (!contents.length) { valid = NO; continue; }
@@ -81,7 +81,11 @@
         [self refresh:nil];
         valid = valid && !self.installButton.enabled;
         NSMutableData *changed = [contents mutableCopy];
-        ((unsigned char *)changed.mutableBytes)[0] ^= 1; // Same length, different contents.
+        // Metadata corruption must be unparseable: changing a digit can create
+        // a genuinely newer version, which correctly blocks both actions.
+        if ([path isEqualToString:versionPath] || [path isEqualToString:buildPath])
+            ((unsigned char *)changed.mutableBytes)[0] = '?';
+        else ((unsigned char *)changed.mutableBytes)[0] ^= 1; // Same length, different contents.
         valid = [changed writeToFile:path atomically:YES] && valid;
         [self refresh:nil];
         valid = valid && self.installButton.enabled;
@@ -93,6 +97,13 @@
         [self refresh:nil];
         valid = valid && !self.installButton.enabled && self.uninstallButton.enabled;
     }
+    valid = [@"99999.0.0\n" writeToFile:versionPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
+    [self refresh:nil];
+    valid = valid && !self.installButton.enabled && !self.uninstallButton.enabled;
+    valid = [version writeToFile:versionPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
+    valid = [@"9999.12.31.999\n" writeToFile:buildPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
+    [self refresh:nil];
+    valid = valid && !self.installButton.enabled && !self.uninstallButton.enabled;
     valid = [@"different-build\n" writeToFile:buildPath atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
     [self refresh:nil];
     valid = valid && self.installButton.enabled == !resolveRunning(); // Same release, different internal build.
@@ -111,6 +122,9 @@
     [self refresh:nil];
     valid = valid && self.installButton.enabled && self.uninstallButton.enabled; // Orphaned startup hook.
     valid = [files removeItemAtPath:hook error:nil] && valid;
+    [self refresh:nil];
+    valid = valid && self.installButton.enabled && self.uninstallButton.enabled; // Orphaned command scripts.
+    valid = [files removeItemAtPath:commandDestination error:nil] && valid;
     NSString *settings = [self.support stringByAppendingPathComponent:@"Unbound.json"];
     valid = [@"{}" writeToFile:settings atomically:YES encoding:NSUTF8StringEncoding error:nil] && valid;
     [self refresh:nil];

@@ -54,7 +54,7 @@ static bool runMacLayoutTest(QApplication &app) {
     auto settle=[] { QEventLoop loop; QTimer::singleShot(30,&loop,&QEventLoop::quit); loop.exec(); };
     settle();
     Unbound::PageLayoutMenu menu(settings,page,&main,[] { return false; });
-    menu.save=[&](QString &name,bool &duplicate) { return settings.saveLayout(page,name,duplicate); };
+    menu.save=[&](QString &name) { return settings.saveLayout(page,name); };
     menu.update=[&](const QString &id) { return settings.updateLayout(page,id); };
     menu.remove=[&](const QString &id) { return settings.deleteLayout(page,id); };
     menu.rename=[&](const QString &id,const QString &name) { return settings.renameLayout(page,id,name); };
@@ -115,23 +115,26 @@ static bool runMacLayoutTest(QApplication &app) {
     save->click(); settle();
     check(menu.isVisible() && settings.layouts(page).size()==1,"Saving dismissed layout popout");
     const auto id=settings.activeLayout(page);
-    auto load=static_cast<Unbound::LayoutNameButton *>(menu.findChild<QPushButton *>("unboundLayoutRecall"));
+    auto layoutControl=[&](const char *name)->QWidget * {
+        for(auto widget:menu.findChildren<QWidget *>(name))
+            if(widget->property("layoutId").toString()==id) return widget;
+        return nullptr;
+    };
+    auto load=static_cast<Unbound::LayoutNameButton *>(layoutControl("unboundLayoutRecall"));
     check(load && load->property("activeLayout").toBool(),"Active layout not highlighted");
-    save->click(); settle();
-    check(settings.layouts(page).size()==1,"Identical layout duplicated");
     check(settings.saveFloating("frameEditPageMediaPool",true).isEmpty(),"Cannot change fixture state");
     // Cancelling inline rename refreshes current state without replacing rows.
     load->renameRequested(); settle();
-    auto cancelled=static_cast<Unbound::LayoutNameEdit *>(menu.findChild<QLineEdit *>("unboundLayoutNameEdit"));
+    auto cancelled=static_cast<Unbound::LayoutNameEdit *>(layoutControl("unboundLayoutNameEdit"));
     check(cancelled && cancelled->isVisible(),"Inline rename did not open");
     cancelled->finish(false); settle();
-    auto update=menu.findChild<QToolButton *>("unboundLayoutUpdate");
-    check(update && update->isVisible() && static_cast<Unbound::LayoutNameButton *>(menu.findChild<QPushButton *>("unboundLayoutRecall"))==load,"Dirty update or retained row missing");
+    auto update=static_cast<QToolButton *>(layoutControl("unboundLayoutUpdate"));
+    check(update && update->isVisible() && static_cast<Unbound::LayoutNameButton *>(layoutControl("unboundLayoutRecall"))==load,"Dirty update or retained row missing");
     update->click(); settle();
     check(menu.isVisible() && !settings.layoutDirty(page,id),"Layout update failed or dismissed popout");
     // Use the same long-press callback as the shared button's one-second timer.
     load->renameRequested(); settle();
-    auto editor=static_cast<Unbound::LayoutNameEdit *>(menu.findChild<QLineEdit *>("unboundLayoutNameEdit"));
+    auto editor=static_cast<Unbound::LayoutNameEdit *>(layoutControl("unboundLayoutNameEdit"));
     check(editor && editor->isVisible() && editor->hasFocus(),"Inline editor lacks Cocoa keyboard focus");
     editor->setText("Mac layout");
     QKeyEvent enter(QEvent::KeyPress,Qt::Key_Return,Qt::NoModifier);
@@ -143,6 +146,9 @@ static bool runMacLayoutTest(QApplication &app) {
     Unbound::WindowInteractionEvent::notify(&main); settle();
     check(!menu.isVisible(),"User window gesture did not dismiss popout");
     menu.popup(QPoint(180,180)); settle();
+    save->click(); settle();
+    check(settings.layouts(page).size()==2 && settings.activeLayout(page)!=id
+        && settings.layoutName(page,id)=="Mac layout","Save as new did not preserve distinct layout identities");
     QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);
     QApplication::sendEvent(&menu,&escape); settle();
     check(!menu.isVisible(),"Escape did not dismiss popout");
@@ -274,9 +280,9 @@ static bool runMacPlacementTest(QApplication &app) {
             check(edgeWindow.geometry()==other,"Restoring edge-aligned main placement changed another page");
         }
         edgePages->setCurrentWidget(edgeEdit); app.processEvents(); edgePlacement.flush();
-        QString name; bool duplicate=false;
+        QString name;
         const auto page=edgeEdit->objectName();
-        check(edgeSettings.saveLayout(page,name,duplicate).isEmpty() && !duplicate,"Cannot save edge layout");
+        check(edgeSettings.saveLayout(page,name).isEmpty(),"Cannot save edge layout");
         const auto id=edgeSettings.activeLayout(page);
         edgeWindow.setGeometry(other); app.processEvents(); edgePlacement.flush();
         check(edgeSettings.activateLayout(page,id).isEmpty(),"Cannot recall edge layout");
