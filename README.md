@@ -7,8 +7,7 @@ Unbound lets you undock and rearrange DaVinci Resolve panels and viewers.
 It supports a range of panels and viewers on the Edit, Color and Fairlight pages (more to come).
 You can arrange them across your displays, resize them, snap them alongside one another.
 
-An Unbound button in each supported panel header (look for the button next to the ellipsis
-button) lets you undock/dock.
+An Unbound button in each supported panel header lets you undock/dock.
 
 <img width="97" height="51" alt="Unbound - Button" src="https://github.com/user-attachments/assets/b275e6b3-60ac-4c85-81d0-7ead4d02579e" /> <img width="32" height="32" alt="unbound-64" src="https://github.com/user-attachments/assets/1be1d772-15ea-407d-9ace-058a1f17763e" />
 
@@ -28,7 +27,7 @@ In DaVinci Resolve's Keyboard Customization, search for Unbound to set keyboard 
 
 <img width="2560" height="1400" alt="Unbound - Footage Review" src="https://github.com/user-attachments/assets/cb0325e2-a2ba-4f71-acf7-23b27fde0dda" />
 
-## Unbound design goals
+## Design goals
 
 - be borderline invisible
 - be discoverable and self-explanatory
@@ -36,6 +35,13 @@ In DaVinci Resolve's Keyboard Customization, search for Unbound to set keyboard 
 
 Ideally, Unbound would render itself obsolete because BM devs may agree with its design and ship
 the feature natively. I think that would be a wonderful outcome.
+
+## How does it work?
+
+Unbound moves DaVinci Resolve's existing panels into floating windows, preserving their native
+controls and behavior. It uses DaVinci Resolve's own UI framework to keep the integration
+lightweight and minimally intrusive. Unbound adds a few conveniences on top: window snapping,
+The Grid and saved layouts.
 
 ## Installation
 
@@ -50,6 +56,9 @@ settings and layouts.
 Unbound supports Windows 10/11 (x64) and macOS. The universal Mac app includes Apple
 Silicon and Intel code. No Linux port yet.
 
+Tested with DaVinci Resolve versions from 20.3.1 through 21.2 (Free and Studio editions).
+Unbound's integration has remained compatible across those versions.
+
 ## Is it safe to install Unbound?
 
 Yes. _Says random stranger on the internet_.
@@ -62,7 +71,7 @@ It is good to check, but do it the 2026 way.
 
 Windows builds are unsigned; macOS builds are ad-hoc signed, without Apple notarization.
 
-Our operating systems still offer ways to decide for ourselves what to run, though.
+Operating systems still offer ways to decide for ourselves what to run, though.
 For Unbound downloaded from this repository, use the per-app exception
 when offered:
 
@@ -72,6 +81,9 @@ when offered:
 - **macOS:** try opening the app once, then go to **System Settings → Privacy &
   Security → Open Anyway** and confirm. See
   [Apple's instructions](https://support.apple.com/en-us/102445).
+
+All that said: Unbound does not phone home, does not collect data and does not install
+unrelated weird stuff. My name is on it. I stand behind it and I will take care of it.
 
 ## Discussion and feedback
 
