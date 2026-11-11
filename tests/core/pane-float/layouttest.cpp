@@ -300,6 +300,7 @@ int main(int argc,char **argv) {
         LayoutTest::nativePlacementEdges(); testPaneCatalogue(); testColorViewer(); testColorControls(); testEditScopes(); testColorToolSelection(); testColorClips(); storage(); layoutIdentity();
         testPageFocus();
         testDockingGuard();
+        if(app.arguments().contains("--components-without-window-group")) return 0;
         testWindowGroup();
         if(app.arguments().contains("--components-only")) return 0;
     }

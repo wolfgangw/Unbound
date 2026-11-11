@@ -20,8 +20,10 @@ The failure is specific to the tested translucent-window path; actual memory exh
 or a universal Windows 10 limitation is not established. Windows 11 is validated.
 
 Production skips the cover and continues recall. This workstation limitation is
-accepted: retain the current rendering path, keep/report the failing fixture, and
-do not introduce an opaque-menu workaround. Other Windows 10 systems need validation.
+accepted: retain the current rendering path and do not introduce an opaque-menu
+workaround. Builds allow this exact diagnosed limitation while testing cleanup
+and recording incomplete menu-capture coverage; see the
+[Windows build rules](../../AGENTS.md#windows). Other Windows 10 systems need validation.
 
 ## Remaining validation
 

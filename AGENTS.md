@@ -868,6 +868,25 @@ and Qt 5.15.2 MSVC x64 development files (default
 runs loader, installer, shared pane/layout and native Windows fixtures, then audits
 dependencies. Native input fixtures use `test-input.ps1` with 30-second child
 limits and cursor-confinement release in finally cleanup.
+Release/internal builds include pane smoke and audition fixtures in the main
+CMake graph, sharing its compiled Windows backend and avoiding a second layout-test
+build. The standalone pane-test project remains usable for focused development.
+Compilation uses up to four parallel MSBuild projects by default (bounded by CPU
+count); `-BuildJobs N` overrides this, including `1` for constrained machines.
+Tests remain sequential with unchanged waits/timeouts. Separate consumer builds
+of core sources retain their existing definitions and C++ runtime settings.
+Native window-group checks run in their own process rather than at the end of
+the component batch; both retain the existing 30-second process watchdog.
+The command-catalogue generator preserves unchanged header timestamps so CMake
+reconfiguration does not unnecessarily recompile controller consumers.
+Build and installer scripts explicitly import `Microsoft.PowerShell.Utility`
+globally for reliable `Get-FileHash` availability in Windows PowerShell.
+The layout-cover fixture permits the known translucent-menu exclusion failure
+only on Windows 10 builds 19041–21999 when an independent public-API probe returns
+error 8. Cleanup, menu input/focus and affinity restoration must still pass. The
+build reports `KNOWN LIMITATION` and records it in the runtime manifest's
+`ValidationLimitations`; other failures, including Windows 11 failures, stay fatal.
+This changes validation handling only, not runtime rendering or transitions.
 
 Internal output: `release/win/yyyy.mm.dd.NNN/Unbound <version> (yyyy.mm.dd.NNN).exe`.
 Public output: `release/packages/Unbound-<version>-windows-x64.exe` (EXE alone).

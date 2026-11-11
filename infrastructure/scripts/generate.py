@@ -46,7 +46,10 @@ if args.catalogue_header:
         values = [command['label'], command['command'], json.dumps(command['arguments'], separators=(',', ':'))]
         header += '    {' + ','.join(json.dumps(value) for value in values) + '},\n'
     header += '};\n}\n'
-    args.catalogue_header.write_text(header, encoding='utf-8')
+    # CMake configures for each build identity. Preserve an unchanged header's
+    # timestamp so that this does not recompile every controller consumer.
+    if not args.catalogue_header.exists() or args.catalogue_header.read_text(encoding='utf-8') != header:
+        args.catalogue_header.write_text(header, encoding='utf-8', newline='\n')
 if not args.output:
     if args.catalogue_header:
         raise SystemExit(0)

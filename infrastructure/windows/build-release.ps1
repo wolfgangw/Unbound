@@ -3,9 +3,11 @@ param(
     [int]$BuildNumber = 0,
     [switch]$InternalBuild,
     [switch]$PaletteSizeDiagnostics,
+    [ValidateRange(1,64)][int]$BuildJobs = [Math]::Max(1, [Math]::Min(4, [Environment]::ProcessorCount)),
     [string]$QtPath = "$env:USERPROFILE\Qt\5.15.2\msvc2019_64"
 )
 $ErrorActionPreference = 'Stop'
+Import-Module Microsoft.PowerShell.Utility -Global
 if ($PaletteSizeDiagnostics -and !$InternalBuild) { throw 'Palette size diagnostics require an internal build.' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-StrictMode -Version Latest
@@ -47,7 +49,7 @@ try {
         '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath",
         "-DUNBOUND_VERSION=$version", "-DUNBOUND_BUILD=$BuildNumber", "-DUNBOUND_BUILD_ID=$buildId",
         "-DUNBOUND_PALETTE_SIZE_DIAGNOSTICS=$($PaletteSizeDiagnostics.IsPresent)")
-    Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--', '/m:1', '/nr:false')
+    Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--parallel', "$BuildJobs", '--', '/nr:false')
     & (Join-Path $repoRoot 'tests\platforms\windows\version\main.ps1')
     $loader = Join-Path $build 'Release\UnboundLuaLoader.dll'
     $dll = Join-Path $build 'Release\Unbound.dll'
@@ -61,10 +63,8 @@ try {
     }
     $dependencyReport = Get-UnboundDependencies -loader $loader -dll $dll
     # Tests exercise the shared pane code and production Lua attachment entry.
-    $testBuild = Join-Path $repoRoot 'build\windows\pane-tests'
-    Invoke-Checked 'cmake' @('-S', (Join-Path $repoRoot 'tests\core\pane-float'), '-B', $testBuild,
-        '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DCMAKE_PREFIX_PATH=$QtPath")
-    Invoke-Checked 'cmake' @('--build', $testBuild, '--config', 'Release', '--', '/m:1', '/nr:false')
+    # All fixtures share this build graph and its compiled native backend.
+    # The standalone pane-test project remains available for focused development.
     $env:PATH = "$QtPath\bin;$env:PATH"
     $env:QT_QPA_PLATFORM = 'offscreen'
     $env:UNBOUND_LOG_FILE = Join-Path $build 'lua-fixture.log'
@@ -80,8 +80,8 @@ try {
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--feedback-only')
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--color-clips-startup')
     Invoke-Checked (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
-    $test = Join-Path $testBuild 'Release\pane-float-smoke.exe'
-    Invoke-Checked (Join-Path $testBuild 'Release\audition-activation-test.exe') @()
+    $test = Join-Path $build 'Release\pane-float-smoke.exe'
+    Invoke-Checked (Join-Path $build 'Release\audition-activation-test.exe') @()
     Invoke-Checked $test @()
     Invoke-Checked $test @('--main-placement-test')
     Invoke-Checked $test @('--settings-json-test')
@@ -101,10 +101,12 @@ try {
     Invoke-Checked $test @('--discovery-test', $dll)
     $env:QT_QPA_PLATFORM = 'windows'
     try {
-        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-cover-only')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-cover-only') | Tee-Object -Variable coverResults
+        $validationLimitations = @($coverResults | Where-Object { $_ -like 'KNOWN LIMITATION:*' } | ForEach-Object { '{0}' -f $_ })
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--feedback-only')
         # Keep each native process inside the watchdog as fixture coverage grows.
-        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--components-only')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--components-without-window-group')
+        Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--window-group-only')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--layout-menu-only')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--index-header-drag')
         Invoke-UnboundNativeTest (Join-Path $build 'Release\UnboundLayoutTests.exe') @('--auxiliary-page-context')
@@ -120,9 +122,10 @@ try {
     # Runtime files stay in build/; the only deliverable is the native installer.
     $hashes = @(Get-FileHash -LiteralPath $loader, $dll)
     $manifest = @{ Version=$version; BuildId=$buildId; Revision=$BuildNumber; BuiltAt=(Get-Date).ToString('o'); Qt=$QtPath; Files=$hashes; Dependencies=$dependencyReport }
+    $manifest.ValidationLimitations = $validationLimitations
     $manifest |
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $build 'release-manifest.json')
-    $installerArguments = @{ OutputDirectory=$destination }
+    $installerArguments = @{ OutputDirectory=$destination; BuildJobs=$BuildJobs }
     if ($InternalBuild) { $installerArguments.InternalBuild=$outputVersion }
     else { $installerArguments.Version=$version }
     & (Join-Path $PSScriptRoot 'installer/build.ps1') @installerArguments

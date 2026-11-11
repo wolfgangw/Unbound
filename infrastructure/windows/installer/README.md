@@ -2,6 +2,11 @@
 
 `infrastructure/windows/build-release.cmd -InternalBuild` builds and tests the
 runtime and its self-contained native installer in `release/win/<build>/`.
+Compilation defaults to up to four parallel projects; use `-BuildJobs 1` to
+serialize it or `-BuildJobs N` to choose another limit. Tests still run sequentially.
+The main build shares compiled native code across fixtures; see the
+[Windows build rules](../../../AGENTS.md#windows), including the explicitly
+reported Windows 10 translucent-menu capture limitation.
 To rebuild only the installer UI around an existing tested runtime:
 
 ```powershell

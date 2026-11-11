@@ -1,9 +1,11 @@
 param(
     [Parameter(Mandatory=$true,ParameterSetName='Internal')][string]$InternalBuild,
     [Parameter(Mandatory=$true,ParameterSetName='Release')][string]$Version,
-    [string]$OutputDirectory = ''
+    [string]$OutputDirectory = '',
+    [ValidateRange(1,64)][int]$BuildJobs = [Math]::Max(1, [Math]::Min(4, [Environment]::ProcessorCount))
 )
 $ErrorActionPreference='Stop'
+Import-Module Microsoft.PowerShell.Utility -Global
 $root=(Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 if($PSCmdlet.ParameterSetName -eq 'Internal') {
     if ($InternalBuild -notmatch '^\d{4}\.\d{2}\.\d{2}\.\d{3,}$') { throw 'Expected internal build identifier yyyy.mm.dd.NNN' }
@@ -30,7 +32,7 @@ if(Test-Path -LiteralPath $destination) { throw "Installer destination already e
 $build=Join-Path $root "build/windows/installer/$packageBuild"
 & cmake -S $PSScriptRoot -B $build -G 'Visual Studio 17 2022' -A x64 "-DUNBOUND_VERSION=$($manifest.Version)" "-DUNBOUND_BUILD=$($manifest.Revision)" "-DUNBOUND_PAYLOAD=$($payload.Replace('\','/'))"
 if($LASTEXITCODE) { throw 'Installer configuration failed' }
-& cmake --build $build --config Release -- /m:1 /nr:false
+& cmake --build $build --config Release --parallel $BuildJobs -- /nr:false
 if($LASTEXITCODE) { throw 'Installer build failed' }
 & (Join-Path $build 'Release/UnboundInstallerStateTests.exe')
 if($LASTEXITCODE) { throw 'Installer running-state tests failed' }

@@ -8,6 +8,7 @@
 #include <dwmapi.h>
 #include <QPushButton>
 #include <QScreen>
+#include <QOperatingSystemVersion>
 
 void testLayoutCoverPresentation() {
     using namespace LayoutTest;
@@ -65,11 +66,31 @@ void testLayoutCoverPresentation() {
     activate(window);menu.popup(window.mapToGlobal(QPoint(30,30)));activate(menu);
     const auto menuHandle=reinterpret_cast<HWND>(menu.winId());
     require(GetWindowLongPtr(menuHandle,GWL_EXSTYLE)&WS_EX_LAYERED,"Production menu fixture is not translucent");
-    GetWindowDisplayAffinity(menuHandle,&prior);
-    require(cover->begin(&window,[] {},{&menu}),"Production translucent menu cannot remain live above capture");
-    GetWindowDisplayAffinity(menuHandle,&after);const auto menuCenter=menu.geometry().center();
+    require(GetWindowDisplayAffinity(menuHandle,&prior),"Cannot inspect production menu capture affinity");
+    const bool captured=cover->begin(&window,[] {},{&menu});
+    if(!captured) {
+        // Diagnose the exact accepted workstation limitation independently. Do
+        // not waive unrelated begin failures or assume all Windows 10 PCs fail.
+        const auto os=QOperatingSystemVersion::current();
+        require(os.majorVersion()==10 && os.microVersion()>=19041 && os.microVersion()<22000,
+            "Production translucent menu cannot remain live above capture");
+        require(GetWindowDisplayAffinity(menuHandle,&after) && after==prior,
+            "Failed capture changed production menu affinity");
+        SetLastError(ERROR_SUCCESS);
+        const bool excluded=SetWindowDisplayAffinity(menuHandle,WDA_EXCLUDEFROMCAPTURE);
+        const auto exclusionError=GetLastError();
+        if(excluded)require(SetWindowDisplayAffinity(menuHandle,prior),"Cannot restore diagnostic capture affinity");
+        require(!excluded && exclusionError==ERROR_NOT_ENOUGH_MEMORY,
+            "Unexpected production menu capture failure on Windows 10");
+        require(cover->retainedBytes()==0 && !FindWindowW(L"UnboundLayoutTransitionCover",nullptr),
+            "Unavailable menu capture retained cover resources");
+        std::puts("KNOWN LIMITATION: Windows 10 translucent menu capture exclusion returns error 8; layout recall uses normal presentation");
+    }
+    require(GetWindowDisplayAffinity(menuHandle,&after),"Cannot inspect restored production menu affinity");
+    const auto menuCenter=menu.geometry().center();
     require(prior==after && WindowFromPoint(POINT{menuCenter.x(),menuCenter.y()})==menuHandle
         && GetForegroundWindow()==menuHandle,"Production menu lost capture affinity, input or focus");
     cover->cancel();menu.dismiss();
-    std::puts("PASS: native layout cover capture, reveal, cancellation and release");
+    std::puts(captured ? "PASS: native layout cover capture, reveal, cancellation and release"
+        : "PASS: native layout cover lifecycle and unavailable-menu cleanup; translucent menu capture NOT VALIDATED");
 }
