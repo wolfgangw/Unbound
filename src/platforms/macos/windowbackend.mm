@@ -463,8 +463,11 @@ bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
         if(window->isWindow() && window->property("unboundFloatingWindow").toBool()
             && member(window))m_keyFocus->hostHidden();
     switch(event->type()) {
+    case QEvent::DynamicPropertyChange:
+        if(groupPropertyChanged(object,event)) refreshLevels();
+        break;
     case QEvent::WindowActivate: case QEvent::Show: case QEvent::Hide:
-    case QEvent::WindowStateChange: case QEvent::DynamicPropertyChange:
+    case QEvent::WindowStateChange:
     case QEvent::WinIdChange: case QEvent::Destroy: case QEvent::ApplicationActivate: case QEvent::ApplicationDeactivate:
         if(object==qApp || (qobject_cast<QWidget *>(object) && static_cast<QWidget *>(object)->isWindow()))
             refreshLevels();

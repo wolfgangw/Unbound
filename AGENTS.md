@@ -1013,6 +1013,15 @@ minimization, native window recreation and group teardown. Levels never change
 focus, ownership or geometry. This prevents an ordinary main-window click from
 covering pins before a queued ordering correction; no click interception,
 method replacement, screen capture or polling is used.
+`PaneWindowGroup::groupPropertyChanged()` owns property relevance for both shared
+queued ordering and immediate Cocoa level refreshes: only `unboundKeepAtop` and
+`unboundUndockDragging` on group members/layout menus qualify. Native effect
+controls can be temporarily parentless; top-level status alone must not trigger
+group-wide work for their unrelated properties. This avoids repeated window scans
+during effect-interface construction. The narrowed Cocoa filter eliminates the
+multi-second CST/DCTL and Film Look Creator selection stalls in macOS Resolve
+Studio 21.2, with Always on top user-validated. Some selection latency remains;
+instant switching is not claimed.
 
 The additional Color toolbar row reserves space for native traffic-light buttons
 when they overlap its allocation. The Cocoa adapter measures visible standard

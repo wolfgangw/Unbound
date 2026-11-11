@@ -46,6 +46,14 @@ protected:
             && window->parentWidget()->window()==m_main;
     }
     bool activationMember(QWidget *window) const { return member(window) || layoutMenu(window); }
+    bool groupPropertyChanged(QObject *object,QEvent *event) const {
+        if(event->type()!=QEvent::DynamicPropertyChange) return false;
+        const auto name=static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
+        // Native controls can be temporarily parentless. Neither top-level
+        // status nor an unrelated property warrants window-group work.
+        return (name=="unboundKeepAtop" || name=="unboundUndockDragging")
+            && activationMember(qobject_cast<QWidget *>(object));
+    }
     bool eventFilter(QObject *object,QEvent *event) override {
         if(m_raising) return false;
         const auto type=event->type();
@@ -58,10 +66,8 @@ protected:
             m_order.removeAll(window); m_order.prepend(window);
         }
         if((activationMember(window) && (type==QEvent::WindowActivate || type==QEvent::Show
-            || type==QEvent::Hide || type==QEvent::WindowStateChange
-            || (type==QEvent::DynamicPropertyChange &&
-                (static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()=="unboundKeepAtop"
-                 || static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()=="unboundUndockDragging"))))
+            || type==QEvent::Hide || type==QEvent::WindowStateChange))
+            || groupPropertyChanged(object,event)
             || type==QEvent::ApplicationActivate) schedule();
         return false;
     }

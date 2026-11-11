@@ -817,6 +817,27 @@ static bool runMacKeyFocusTest(QApplication &app) {
     [NSApp activateIgnoringOtherApps:YES];[native makeKeyAndOrderFront:nil];
     QApplication::setActiveWindow(&main);editor.setFocus();settle();
     Unbound::PaneFloatingWindow host;host.resize(200,100);host.show();settle();
+    [native makeKeyAndOrderFront:nil];QApplication::setActiveWindow(&main);settle();
+    host.setProperty("unboundKeepAtop",true);settle();
+    NSWindow *hostNative=reinterpret_cast<NSView *>(host.winId()).window;
+    check(hostNative.level==NSFloatingWindowLevel,"Pinning did not apply Cocoa level");
+    // A sentinel native level detects even a redundant synchronous group pass.
+    // Model effect construction with parentless controls and arbitrary properties.
+    QWidget effectControl;settle();
+    hostNative.level=NSFloatingWindowLevel+2;
+    for(int i=0;i<100;++i) {
+        effectControl.setProperty("effectValue",i);
+        main.setProperty("effectValue",i);
+        host.setProperty("effectValue",i);
+    }
+    effectControl.setProperty("unboundKeepAtop",true);
+    check(hostNative.level==NSFloatingWindowLevel+2,
+        "Unrelated properties or nonmember controls refreshed Cocoa group levels");
+    host.setProperty("unboundKeepAtop",false);
+    check(hostNative.level==NSNormalWindowLevel,"Unpinning failed to restore native level");
+    host.setProperty("unboundKeepAtop",true);
+    check(hostNative.level==NSFloatingWindowLevel,"Relevant pin property did not refresh levels");
+    host.setProperty("unboundKeepAtop",false);settle();
     // Model Resolve's observed mismatch: Cocoa main stays key while the host
     // owns Qt activation. Hiding that host clears Qt without a Cocoa key change.
     [native makeKeyAndOrderFront:nil];QApplication::setActiveWindow(&host);
@@ -836,7 +857,7 @@ static bool runMacKeyFocusTest(QApplication &app) {
     cancelled->hostHidden();delete cancelled;settle();
     check(!QApplication::activeWindow(),"Destroyed observer retained queued focus work");
     QApplication::setActiveWindow(&main);
-    std::puts("PASS: Cocoa retained-key focus recovery after host hide, remembered control, newer activation, unrelated windows and queued teardown");
+    std::puts("PASS: Cocoa property refresh isolation, pin levels, retained-key focus recovery, remembered control, newer activation, unrelated windows and queued teardown");
     return true;
 }
 
