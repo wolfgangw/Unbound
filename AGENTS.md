@@ -82,6 +82,9 @@ existing modules; an unaffected platform explicitly supplies no extra workaround
 Resolve owns transferred content; Unbound owns hosts/placeholders. Add pane metadata
 once in the catalogue; specialized layout handling remains shared. New native
 requirements go through platform contracts, not platform-specific pane policies.
+Discovery refreshes retained Color control headers only while their logical page
+is visible, including on page return. Unrelated changes on other pages must not
+search those inactive controls; Clips context reconciliation remains independent.
 `src/core/CMakeLists.txt` owns production sources through `unbound_link_core()`, used
 by both helpers and controller fixtures. Shared fixture targets are in
 `tests/core/pane-float/targets.cmake`; native operations implement `layoutadapter.h`

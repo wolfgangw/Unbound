@@ -392,6 +392,16 @@ void testColorControls() {
         PaneDecoration decoration(slot,&page,[]{});
         require(decoration.usesNativeHeader() && decoration.button()->parentWidget()==header,
             "Color control missing native header button");
+        if(control.objectName=="curvesTab") {
+            // A native header may be replaced while its logical page is away.
+            // Unrelated discovery must defer decoration until the page returns.
+            delete decoration.button();
+            decoration.refreshNativeHeader(false);
+            require(!decoration.button(),"Inactive Color header was searched and decorated");
+            decoration.refreshNativeHeader(true);
+            require(decoration.button() && decoration.button()->parentWidget()==header,
+                "Color page return did not recover its native header button");
+        }
         if(options) require(row->indexOf(decoration.button())==row->indexOf(options)-1,
             "Color control button must precede options");
         const auto descriptor=PaneCatalogue::find(control.objectName);
@@ -503,7 +513,7 @@ void testColorControls() {
             require(!lateExpand->isEnabled(),"Late header Expand escaped guard");
             lateExpand->setEnabled(true);
             require(!lateExpand->isEnabled(),"Native update re-enabled late Expand");
-            decoration.refreshNativeHeader(); decoration.refreshNativeHeader();
+            decoration.refreshNativeHeader(true); decoration.refreshNativeHeader(true);
             auto buttons=lateHeader->findChildren<QToolButton *>("resolvePaneUndockButton");
             require(buttons.size()==1 && lateRow->indexOf(buttons.first())==lateRow->indexOf(menu)-1,
                 "Late header missing or duplicated button");
@@ -568,7 +578,7 @@ void testColorControls() {
             // Take over an already-native-expanded palette whose slot is empty.
             expand->click(); LayoutTest::settle();
             require(native->count()==0 && dialog->registered,"Native expansion fixture failed");
-            decoration.refreshNativeHeader();
+            decoration.refreshNativeHeader(true);
             require(decoration.button()->parentWidget()==header,"Already expanded palette lost header button");
             require(session.start(slot,control.label,&page,false,false,true,false).isEmpty(),
                 "Already expanded palette could not be hosted");

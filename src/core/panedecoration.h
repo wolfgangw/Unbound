@@ -234,9 +234,11 @@ public:
     QWidget *pane() const { return m_pane; }
     QToolButton *button() const { for(auto b:m_buttons) if(b) return b; return nullptr; }
     bool usesNativeHeader() const { return m_native; }
-    void refreshNativeHeader() {
+    void refreshNativeHeader(bool pageActive) {
         updateClipsContext();
-        if(m_pane && PaneCatalogue::colorControl(m_pane->objectName())) refresh();
+        // Discovery also runs for changes on other pages. Retained Color tools
+        // need header discovery on return, not on unrelated background work.
+        if(pageActive && m_pane && PaneCatalogue::colorControl(m_pane->objectName())) refresh();
     }
     void setDockingFailure(const QString &message) {
         m_failure=message;

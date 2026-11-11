@@ -800,7 +800,11 @@ private:
                 m_restoreAttempted.remove(it.key());
                 delete it.value(); it = m_decorations.erase(it);
             }
-            else { it.value()->refreshNativeHeader(); ++it; }
+            else {
+                const auto page=panePage(it.value()->pane());
+                it.value()->refreshNativeHeader(page && page->isVisible());
+                ++it;
+            }
         }
         for (auto pane : m_candidates) {
             if (!pane) continue;
