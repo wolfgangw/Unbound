@@ -11,6 +11,8 @@
 #include "pagelayoutmenu.h"
 #include <QEventLoop>
 #include <QElapsedTimer>
+#include <QMenu>
+#include <QDialog>
 void initializePlatformTests() { qputenv("QT_STYLE_OVERRIDE","Fusion"); }
 void settlePlatformWindowState(QWidget &window)
 {
@@ -837,6 +839,21 @@ static bool runMacKeyFocusTest(QApplication &app) {
     check(hostNative.level==NSNormalWindowLevel,"Unpinning failed to restore native level");
     host.setProperty("unboundKeepAtop",true);
     check(hostNative.level==NSFloatingWindowLevel,"Relevant pin property did not refresh levels");
+    hostNative.level=NSFloatingWindowLevel+2;
+    for(int i=0;i<20;++i) {
+        QMenu unusedMenu;unusedMenu.addAction("Unused timeline");
+        unusedMenu.winId(); // Native creation/teardown without visible popup priority.
+    }
+    check(hostNative.level==NSFloatingWindowLevel+2,
+        "Hidden menu native creation/destruction refreshed unrelated pin levels");
+    QMenu popup;popup.addAction("Timeline");popup.popup(main.mapToGlobal(QPoint(50,50)));settle();
+    check(hostNative.level==NSNormalWindowLevel,"Native popup did not suspend pin levels");
+    popup.hide();[native makeKeyAndOrderFront:nil];QApplication::setActiveWindow(&main);settle();
+    check(hostNative.level==NSFloatingWindowLevel,"Popup dismissal did not restore pin levels");
+    QDialog modal(&main);modal.setWindowModality(Qt::ApplicationModal);modal.show();settle();
+    check(hostNative.level==NSNormalWindowLevel,"Modal dialog did not suspend pin levels");
+    modal.hide();[native makeKeyAndOrderFront:nil];QApplication::setActiveWindow(&main);settle();
+    check(hostNative.level==NSFloatingWindowLevel,"Modal dismissal did not restore pin levels");
     host.setProperty("unboundKeepAtop",false);settle();
     // Model Resolve's observed mismatch: Cocoa main stays key while the host
     // owns Qt activation. Hiding that host clears Qt without a Cocoa key change.
@@ -857,7 +874,7 @@ static bool runMacKeyFocusTest(QApplication &app) {
     cancelled->hostHidden();delete cancelled;settle();
     check(!QApplication::activeWindow(),"Destroyed observer retained queued focus work");
     QApplication::setActiveWindow(&main);
-    std::puts("PASS: Cocoa property refresh isolation, pin levels, retained-key focus recovery, remembered control, newer activation, unrelated windows and queued teardown");
+    std::puts("PASS: Cocoa property/menu lifecycle isolation, popup/modal pin priority, retained-key focus recovery, newer activation and queued teardown");
     return true;
 }
 

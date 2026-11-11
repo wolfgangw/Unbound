@@ -444,7 +444,7 @@ void WindowGroupActivation::refreshLevels() {
     m_updatingLevels=true;
     QList<QPair<QWidget *,NSInteger>> desired;
     bool ownsKey=false;
-    if(NSApp.active && NSApp.keyWindow && stackingAllowed())
+    if(m_levelBlockers.isEmpty() && NSApp.active && NSApp.keyWindow && stackingAllowed())
         for(auto widget:QApplication::topLevelWidgets())
             if(activationMember(widget) && nativeWindow(widget)==NSApp.keyWindow) {ownsKey=true;break;}
     if(ownsKey) {
@@ -457,8 +457,28 @@ void WindowGroupActivation::refreshLevels() {
     m_levels->apply(desired);
     m_updatingLevels=false;
 }
+void WindowGroupActivation::scheduleLevels() {
+    if(m_levelsQueued) return;
+    m_levelsQueued=true;
+    QTimer::singleShot(0,this,[this] {m_levelsQueued=false;refreshLevels();});
+}
 bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
     const bool result=PaneWindowGroup::eventFilter(object,event);
+    const auto type=event->type();
+    auto window=qobject_cast<QWidget *>(object);
+    // Popups/modal windows affect priority while visible, not whenever native
+    // menus are constructed or destroyed. Drop levels without scanning windows;
+    // defer restoration until Qt has removed its active popup/modal state.
+    if(type==QEvent::Show && window && window->isWindow()
+        && (window->isModal() || window->windowType()==Qt::Popup)) {
+        m_levelBlockers.insert(object);
+        m_levels->apply({});
+        return result;
+    }
+    if((type==QEvent::Hide || type==QEvent::Destroy) && m_levelBlockers.remove(object)) {
+        scheduleLevels();
+        return result;
+    }
     if(event->type()==QEvent::Hide)if(auto window=qobject_cast<QWidget *>(object))
         if(window->isWindow() && window->property("unboundFloatingWindow").toBool()
             && member(window))m_keyFocus->hostHidden();
@@ -466,11 +486,13 @@ bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
     case QEvent::DynamicPropertyChange:
         if(groupPropertyChanged(object,event)) refreshLevels();
         break;
+    case QEvent::ApplicationActivate: case QEvent::ApplicationDeactivate:
+        if(object==qApp) refreshLevels();
+        break;
     case QEvent::WindowActivate: case QEvent::Show: case QEvent::Hide:
     case QEvent::WindowStateChange:
-    case QEvent::WinIdChange: case QEvent::Destroy: case QEvent::ApplicationActivate: case QEvent::ApplicationDeactivate:
-        if(object==qApp || (qobject_cast<QWidget *>(object) && static_cast<QWidget *>(object)->isWindow()))
-            refreshLevels();
+    case QEvent::WinIdChange: case QEvent::Destroy:
+        if(activationMember(window)) refreshLevels();
         break;
     default: break;
     }
@@ -483,8 +505,9 @@ bool WindowGroupActivation::raiseGroup(QWidget *selected,const QList<QWidget *> 
     if (!m_main || !selected || !key || NSApp.keyWindow!=key || !NSApp.active
         || QApplication::activeModalWidget() || QApplication::activePopupWidget()) return false;
     QList<NSWindow *> peers;
+    const auto widgets=QApplication::topLevelWidgets();
     for (NSWindow *window in NSApp.orderedWindows)
-        for (auto widget : QApplication::topLevelWidgets())
+        for (auto widget : widgets)
             if (widget!=selected && member(widget)
                 && widget->isVisible() && !widget->isMinimized() && nativeWindow(widget)==window) peers.append(window);
     QList<NSWindow *> ordered;

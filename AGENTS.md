@@ -1022,6 +1022,16 @@ during effect-interface construction. The narrowed Cocoa filter eliminates the
 multi-second CST/DCTL and Film Look Creator selection stalls in macOS Resolve
 Studio 21.2, with Always on top user-validated. Some selection latency remains;
 instant switching is not claimed.
+Cocoa lifecycle-triggered level refreshes are limited to group members and Unbound
+layout menus. Visible native popups/modal dialogs suspend temporary levels directly;
+Hide/Destroy of those observed blockers queues one restoration after Qt settles its
+active-popup/modal state. Hidden unrelated menu creation, native-ID changes and
+teardown do not scan group windows. Native key-window/app notifications continue to
+handle unrelated focus and app departure. Group ordering takes one Qt top-level
+snapshot per pass, not one per native window. No persistent discovery cache is used.
+Fast timeline switching on Edit, Color, Fairlight and Deliver, with Always on top
+intact, is user-validated on macOS Resolve Studio 21.2. Native popup/modal priority
+and restoration are covered by the Cocoa fixtures.
 
 The additional Color toolbar row reserves space for native traffic-light buttons
 when they overlap its allocation. The Cocoa adapter measures visible standard
