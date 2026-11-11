@@ -7,6 +7,15 @@ substantial delay and the application busy cursor, including with everything
 docked. Uninstalling removes the symptom; reinstalling restores it. Whether this
 also happens before any undocking in a fresh process is unknown.
 
+The reporter further isolates effect-type changes: DCTL to CST takes about half
+a second, CST to DCTL stalls for 8–10 seconds, and DCTL to DCTL is nearly instant.
+The DCTL stall occurs with different scripts and even with no script selected,
+and persists with the Effects panel hidden. Film Look Creator produces a similar
+5–6 second stall. During the delay Resolve stops responding to clicks; node
+highlighting and Effects UI updates complete only afterward. This points toward
+effect-interface replacement or related native synchronization, without proving
+which operation consumes the time.
+
 ## Code findings
 
 Selecting a clip changes the active grade/node graph and tool values. Selecting a
@@ -41,6 +50,20 @@ The following paths exist in v0.6.2:
 
 These are overhead candidates, not a confirmed explanation for multi-second stalls.
 
+Current shared discovery still queues newly created child objects and indexes
+uncovered QWidget branches recursively. It is therefore inaccurate to claim that
+Unbound never enumerates effect controls, even though it does not create them or
+manage their effect values. Coalescing lasts only until the queued callback runs;
+platform differences in event batching or reentrancy could change the number of
+passes. No such difference has yet been measured on macOS.
+
+The Cocoa screenshot hold is requested by the Color divider-drag path, not ordinary
+node selection; macOS has no desktop layout-transition capture. Window interaction
+and grouping are gesture/window-event scoped. These paths provide no direct
+evidence for a Metal capture explanation. Native Qt/Cocoa layout, accessibility
+or GPU synchronization remains possible downstream of UI changes; a native stack
+sample is needed to distinguish busy work from a blocked GUI thread.
+
 ## Windows baseline
 
 Passive public-Qt observation on Windows Resolve Studio 21.2.0.5 with internal
@@ -70,6 +93,9 @@ The temporary observer was removed and Clips/Nodes returned to floating state.
 ## Next investigation
 
 Use our own macOS Resolve installation, preferably 21.2, and a simple project.
+Include repeated CST-to-empty-DCTL, DCTL-to-CST, DCTL-to-DCTL and Film Look Creator
+selections, with Effects visible and hidden. Capture a main-thread sample during
+the stall and compare with Unbound uninstalled in a fresh process.
 Compare fresh all-docked startup, floating panes, and docked-again state. Select
 clips and nodes separately. Measure counts and cumulative/max GUI-thread time for
 discovery, branch indexing and each decoration refresh; include native event types
