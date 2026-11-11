@@ -4,22 +4,26 @@ Unbound lets you undock and rearrange DaVinci Resolve panels and viewers.
 
 <img width="1295" height="1391" alt="Unbound - Color page - Color controls 04" src="https://github.com/user-attachments/assets/9c223b85-5b6c-48d7-935b-b9c60844b517" />
 
-It supports a range of panels and viewers on the Edit, Color and Fairlight pages (more to come).
+## How to use
+
+Unbound supports a range of panels and viewers on the Edit, Color and Fairlight pages (more to come).
 You can arrange them across your displays, resize them, snap them alongside one another.
 
-An Unbound button in each supported panel header lets you undock/dock.
+- An Unbound button in each supported panel header lets you undock/dock.
 
 <img width="97" height="51" alt="Unbound - Button" src="https://github.com/user-attachments/assets/b275e6b3-60ac-4c85-81d0-7ead4d02579e" /> <img width="32" height="32" alt="unbound-64" src="https://github.com/user-attachments/assets/1be1d772-15ea-407d-9ace-058a1f17763e" />
 
-Move undocked panels by dragging their header bars or the Unbound button.
+- Move undocked panels by dragging their header bars or the Unbound button.
 
-Snapping is fine-tuned to feel helpful and still overridable. Hold Alt / Option to bypass magnetism altogether. Hold Shift to meet The Grid.
+- Snapping is fine-tuned to feel helpful and still overridable. Hold Alt / Option to bypass magnetism altogether. Hold Shift to meet The Grid.
 
-Right-click on any of the Unbound buttons to manage layouts. Each Resolve page has its own set
+- Right-click on any of the Unbound buttons to manage layouts. Each Resolve page has its own set
 of layouts. Hold a layout name for one second to rename it. Layouts are saved and restored
 between sessions.
 
-In DaVinci Resolve's Keyboard Customization, search for Unbound to set keyboard shortcuts.
+- In DaVinci Resolve's Keyboard Customization, search for Unbound to set keyboard shortcuts.
+
+## Examples
 
 <img width="3359" height="1391" alt="Unbound - Color page - Color controls 06" src="https://github.com/user-attachments/assets/2e883927-c87c-424d-bdef-bb3282ca276a" />
 
