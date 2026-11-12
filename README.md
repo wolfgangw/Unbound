@@ -93,7 +93,7 @@ unrelated weird stuff. My name is on it. I stand behind it and I will take care 
 ## Discussion, articles, testimonials
 
 - [Unbound thread on Blackmagic's user forum](https://forum.blackmagicdesign.com/viewtopic.php?f=21&t=240898)
-- [Digital Production](https://digitalproduction.com/) has an entertaining article on Unbound: [Unbound: Resolve’s Panels Get Their Own Place](https://digitalproduction.com/2026/11/09/unbound-davinci-resolve-floating-panels/) (_Bela Beier, Nov 9th 2026_)
+- [Digital Production](https://digitalproduction.com/) has an entertaining article on Unbound: [Unbound: Resolve’s Panels Get Their Own Place](https://digitalproduction.com/2026/11/09/unbound-davinci-resolve-floating-panels/) (_Bela Beier, Nov 9 2026_)
 - [TutKit.com](https://www.tutkit.com/en) has a kind note on Unbound: [Unbound turns panels in DaVinci Resolve into freely movable windows](https://www.tutkit.com/en/news/1021-unbound-resolve-floating-panels) (_Stefan Petri, Nov 10 2026_)
 
 And I just love this testimonial:
