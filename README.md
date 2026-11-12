@@ -90,6 +90,11 @@ when offered:
 All that said: Unbound does not phone home, does not collect data and does not install
 unrelated weird stuff. My name is on it. I stand behind it and I will take care of it.
 
-## Discussion and feedback
+## Discussion, articles, testimonials
 
-There is [a thread on Blackmagic's Forum where we are talking about Unbound](https://forum.blackmagicdesign.com/viewtopic.php?f=21&t=240898).
+- [Unbound thread on Blackmagic's user forum](https://forum.blackmagicdesign.com/viewtopic.php?f=21&t=240898)
+- [Digital Production](https://digitalproduction.com/) has an entertaining article on Unbound: [Unbound: Resolve’s Panels Get Their Own Place](https://digitalproduction.com/2026/11/09/unbound-davinci-resolve-floating-panels/) (_Bela Beier, Nov 9th 2026_)
+- [TutKit.com](https://www.tutkit.com/en) has a kind note on Unbound: [Unbound turns panels in DaVinci Resolve into freely movable windows](https://www.tutkit.com/en/news/1021-unbound-resolve-floating-panels) (_Stefan Petri, Nov 10 2026_)
+
+And I just love this testimonial:
+> [Wow, this is not a thing I thought I wanted, but it's SO well executed and after using it a little I am really into it.](https://forum.blackmagicdesign.com/viewtopic.php?p=1240136#p1240136)
