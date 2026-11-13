@@ -36,7 +36,8 @@ between sessions.
 
 - be borderline invisible
 - be discoverable and self-explanatory
-- keep it simple and don't add mental load
+- be lightweight
+- keep it simple
 
 Ideally, Unbound would render itself obsolete because BM devs may agree with its design and ship
 the feature natively. I think that would be a wonderful outcome.
