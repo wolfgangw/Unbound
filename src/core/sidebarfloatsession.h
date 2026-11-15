@@ -28,6 +28,7 @@
 #include "colorexpandguard.h"
 #include "colornativepalette.h"
 #include "colortimelineheader.h"
+#include "colortoolactivation.h"
 #include "colorwheelsminimum.h"
 #include "activestacksize.h"
 #include "layoutrestorepolicy.h"
@@ -331,6 +332,9 @@ public:
         }
         if(PaneCatalogue::colorControl(slot->objectName()))
             m_expandGuard=new ColorExpandGuard(host,this);
+        if(control && control->selectOnFloatingInput
+            && m_root->objectName()==QLatin1String("WStackPage_Color"))
+            m_colorToolActivation=new ColorToolActivation(host,m_root,control->selector,this);
         host->installEventFilter(this);
         m_root->installEventFilter(this);
         // If Resolve deletes the original slot, dispose only of our displaced
@@ -411,6 +415,7 @@ public:
         rememberGeometry();
         m_restoring = true;
         delete m_timelineHeader; m_timelineHeader=nullptr;
+        stopColorToolActivation();
         stopActivationBridge();
         restoreNativeExpand();
         const bool nativePalette=bool(m_nativePalette);
@@ -576,6 +581,12 @@ private:
         m_activationBridge->deleteLater();
         m_activationBridge = nullptr;
     }
+    void stopColorToolActivation() {
+        if(!m_colorToolActivation)return;
+        m_colorToolActivation->stop();
+        m_colorToolActivation->deleteLater();
+        m_colorToolActivation=nullptr;
+    }
     void restoreModeSizes() { qDeleteAll(m_modeSizes); m_modeSizes.clear(); }
     QList<ActiveStackSize *> m_modeSizes;
     void restoreWheelsPolicy() {
@@ -649,6 +660,7 @@ private:
         delete m_timelineHeader; m_timelineHeader=nullptr;
         delete m_nativePalette; m_nativePalette=nullptr;
         restoreNativeExpand();
+        stopColorToolActivation();
         stopActivationBridge();
         m_elidingLabels.reset();
         restoreModeSizes();
@@ -676,6 +688,7 @@ private:
     ColorClipsAdapter *m_clipsAdapter=nullptr;
     ColorTimelineHeader *m_timelineHeader=nullptr;
     QPointer<PaneActivationBridge> m_activationBridge;
+    QPointer<ColorToolActivation> m_colorToolActivation;
     QPointer<AuditionPlayerActivation> m_auditionActivation;
     PaneHeaderDrag *m_auditionHeaderDrag = nullptr;
     QPointer<QLayout> m_layout;

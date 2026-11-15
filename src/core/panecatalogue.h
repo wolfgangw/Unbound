@@ -42,6 +42,7 @@ struct ColorControlDescriptor {
     QString objectName,label,scope,header,headerOwner,anchor,selector;
     bool wholeLayout=false;
     QString retainedContainer; // Native tool lookup must still find this object in its stack slot.
+    bool selectOnFloatingInput=false; // Viewer gestures require the native tool selection.
 };
 inline const QVector<ColorControlDescriptor> &colorControls() {
     static const QVector<ColorControlDescriptor> entries={
@@ -54,10 +55,10 @@ inline const QVector<ColorControlDescriptor> &colorControls() {
         {"curvesTab","Curves","UiSecWidgetContainer","frameTop","curvesTabWidget","","btnCurves",false},
         {"colorSlice","ColorSlice","UiSecWidgetContainer","frameTopBar","colorSliceWidget","","btnColorSlice",false},
         {"colorMapperTab","Color Warper","UiSecWidgetContainer","frameTop","colorMapperTabWidget","","btnColorMapper",false},
-        {"qualTab","Qualifier","UiSecWidgetContainer","frameTop","qualTabWidget","","btnQualifier",false},
-        {"windowTab","Window","UiSecWidgetContainer","secWindowTopFrame","windowWidget","btnResetMenu","btnWindow",false},
-        {"trackerTab","Tracker","UiSecWidgetContainer","frameTrackingHeader","trackerWidget","btnContextMenu","btnTracker",false,"trackerWidget"},
-        {"personMaskTab","Magic Mask","UiSecWidgetContainer","secWindowTopFrame","personMaskTabWidget","btnResetMenu","btnPersonMask",false},
+        {"qualTab","Qualifier","UiSecWidgetContainer","frameTop","qualTabWidget","","btnQualifier",false,"qualTabWidget",true},
+        {"windowTab","Window","UiSecWidgetContainer","secWindowTopFrame","windowWidget","btnResetMenu","btnWindow",false,"windowWidget",true},
+        {"trackerTab","Tracker","UiSecWidgetContainer","frameTrackingHeader","trackerWidget","btnContextMenu","btnTracker",false,"trackerWidget",true},
+        {"personMaskTab","Magic Mask","UiSecWidgetContainer","secWindowTopFrame","personMaskTabWidget","btnResetMenu","btnPersonMask",false,"personMaskTabWidget",true},
         {"blurTab","Blur","UiSecWidgetContainer","headerFrame","frame","","btnBlur",false},
         {"keyTab","Key","UiSecWidgetContainer","m_KeyHeaderFrame","keyWidget","","btnKey",false,"keyWidget"},
         {"sizingTab","Sizing","UiSecWidgetContainer","sizingTopFrame","sizingWidget","btnResetMenu","btnSizing",false,"sizingWidget"},

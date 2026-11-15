@@ -319,7 +319,9 @@ void testColorControls() {
         native->addWidget(content);
         // Camera Raw/HDR own multiple layout entries, transferred as a unit.
         if(control.wholeLayout) native->addWidget(new QLabel("Footer"));
-        const bool retained=control.objectName=="keyTab" || control.objectName=="sizingTab" || control.objectName=="trackerTab";
+        const bool retained=control.objectName=="keyTab" || control.objectName=="sizingTab"
+            || control.objectName=="trackerTab" || control.objectName=="qualTab"
+            || control.objectName=="windowTab" || control.objectName=="personMaskTab";
         const bool expanded=ColorNativePalette::supports(slot);
         auto owner=retained || expanded ? content : new QWidget;
         owner->setObjectName(control.headerOwner);
@@ -533,7 +535,7 @@ void testColorControls() {
         {
             auto host=session.floatingWindow();
             // Use transferred content, including tools whose native outer
-            // container intentionally remains docked (Key/Sizing/Tracker/whole layouts).
+            // container intentionally remains docked for native lookup.
             QWidget *controls=dialog ? (warperModes ? warperModes->currentWidget()->layout()->itemAt(0)->widget() : content) : value;
             const int nativeMinimum=controls->minimumHeight();
             // Page return is not layout recall: preserve the most recent working

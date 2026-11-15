@@ -571,10 +571,28 @@ Curves, ColorSlice, Color Warper, Qualifier, Window, Tracker, Magic Mask, Blur, 
 Sizing, 3D, Keyframes, Scopes and Info. Catalogue scope disambiguates repeated names
 and identifies stack family, header and selector. Preserve stack entries/indices.
 Camera Raw/HDR transfer the multi-entry layout; ordinary tools transfer single
-content while preserving native layout. Key, Sizing and Tracker retain `keyWidget`,
-`sizingWidget`, `trackerWidget` as the first widget in their native tab layouts and
-transfer those containers' contents instead. Native tool lookup requires their
-identity in the original slot; put placeholders inside them.
+content while preserving native layout. Catalogue `retainedContainer` keeps Key,
+Sizing, Tracker, Qualifier, Window and Magic Mask's named native container as the
+first widget in its original tab layout and transfers only its layout contents.
+Native tool lookup requires that identity in the original slot; put placeholders
+inside it.
+
+`ColorToolActivation` selects the catalogued native toolbar button for floating
+Qualifier, Window, Tracker and Magic Mask through `QAbstractButton::click()`.
+Actual host activation queues selection after native activation handlers; a local
+mouse press selects synchronously before the picker handles input. Repeated local
+clicks do not reselect an already-owned tool. Leaving the host invalidates that
+ownership: a checked button alone does not prove viewer ownership after expanded
+Warper or another tool was used. The native tray shows the chosen floating tool's
+placeholder, displacing its previous docked tool. This is the accepted tradeoff.
+Show alone does not select. Hidden/inactive pages or hosts, minimized windows,
+tearoff handover, popups and modal dialogs cannot select; newer input/hiding cancels
+queued activation. Unbound button input is excluded. Bind before first show, stop
+before docking, and retain no private Resolve state or forwarded viewer gestures.
+Cache selectors under `frameColorBottom`; rediscover replaced buttons only on
+activation/input, never on paints or idle scans. Curves/Warper keep native expansion
+and are excluded from this policy. Primaries viewer pickers remain unresolved;
+live integration/platform validation remains in `doc/issues/color-controls.md`.
 
 Curves/Warper use `ColorNativePalette`: invoke native Expand, then embed the registered
 `UiFloatingPaletteWidgetDialog` inside the host. Native registration keeps signals
