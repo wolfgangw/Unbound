@@ -20,6 +20,7 @@
 #include "editviewers.h"
 #include "editscopes.h"
 #include "colortoolselection.h"
+#include "primariespickeractivation.h"
 #include "pagelayoutmenu.h"
 #include "pagefocus.h"
 #include "gridreferenceevent.h"
@@ -703,6 +704,17 @@ private:
         error(session->start(pane, m_names.value(name), panePage(pane),
             name == QStringLiteral("frameEditAudioMeter") || name == QStringLiteral("frameTimelineMixerContainer"), automatic, preserveNativeLayout));
         if (session->active()) {
+            if (name == QLatin1String("colorWheelsTab")) {
+                new Unbound::PrimariesPickerActivation(session->floatingWindow(),
+                    [owner = QPointer<Controller>(this)]() -> QWidget * {
+                        if (!owner || owner->currentPage() != QLatin1String("WStackPage_Color")) return nullptr;
+                        const QString viewerName = QStringLiteral("m_pFramePlayer");
+                        auto session = owner->m_sessions.value(viewerName);
+                        if (session && session->active()) return session->floatingWindow();
+                        auto viewer = owner->m_candidates.value(viewerName);
+                        return viewer && viewer->isVisible() ? viewer->window() : nullptr;
+                    });
+            }
             // Manual detachment also resolves startup intent. Lifecycle events
             // must not interpret its newly saved floating state as a restore.
             m_restoreAttempted.insert(name);

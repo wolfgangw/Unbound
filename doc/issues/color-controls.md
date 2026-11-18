@@ -44,7 +44,7 @@ of floating grading controls or live image updates.
 | --- | --- |
 | Camera Raw | Material-limited: controls are disabled for the current non-RAW clip. Codec-specific controls remain unvalidated. |
 | Color Match | Chart corner dragging works with the palette floating and Magic Mask docked, after explicitly selecting the native viewer **Color Chart** overlay, as documented. This does not establish automatic overlay restoration by floating-palette activation. Color matching itself requires chart footage and was not tested. |
-| Color Wheels / Primaries | **Affected:** floating white-point and white-balance pickers leave Magic Mask receiving the viewer click. White-point Gain values stay unchanged; the same picker docked changes Gain correctly. Black-point picking remains a related untested case. Wheels, bars and numeric grading are separate local operations. |
+| Color Wheels / Primaries | The floating picker needs the Color viewer's window active as its button release completes. With this handoff, white point changes Gain, black point changes Lift, and white balance changes Temperature and Tint in Color Bars while Magic Mask stays in the tray. Windows live trials cover all three with the viewer docked, white point with the viewer floating, white point in Color Wheels and white balance in Log Wheels. Check the installed build, Dual Screen and macOS. |
 | HDR | Inspected controls are local grading/zone adjustments. Zone preview is viewer output, not a viewer gesture; independent floating highlight-preview behavior remains unvalidated. |
 | RGB Mixer | Local channel mixing; no analogous viewer picker or handle workflow identified. |
 | Motion Effects | Local noise-reduction/motion settings; no analogous viewer gesture identified. |
@@ -235,6 +235,8 @@ The trial is not a production focus policy: keyboard/text input, activation from
 other floating windows, lifecycle behavior and macOS remain unvalidated.
 
 The evidence separates native focus recognition from the region's selected tool.
+Invoking the floating 3D Qualifier's own picker with the viewer window already
+active still adds a Magic Mask point when Magic Mask is selected in that region.
 Recovering the former does not independently select a different tool from the same
 region. Native-expanded Curves/Warper retain an association that avoids this
 limitation; its registration/selection mechanism remains unresolved. Neither focus

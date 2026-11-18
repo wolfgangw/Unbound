@@ -491,6 +491,12 @@ transition readiness. Selection memory is session-only, with no settings/schema 
 layout-snapshot changes; main-window hiding/minimization is not page departure.
 Tracker/Info preservation across Edit/Color page return is user-validated on macOS.
 
+For the floating Primaries white-point, black-point and white-balance buttons,
+`PrimariesPickerActivation` completes the mouse release after activating the
+Color viewer's actual window. Resolve then handles the sample. The existing
+viewer pane and floating host identify the target without a toolbar selection,
+viewer input filter or discovery scan on activation.
+
 ### Color Clips
 
 Resolve shares `m_pLightBox` between Color and Fusion. On Color departure return
