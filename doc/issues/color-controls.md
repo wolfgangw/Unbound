@@ -106,8 +106,13 @@ and macOS:
 3. Float Window with an enabled shape. After choosing another tool, return and drag
    a viewer handle. Check handles return and Pan/Tilt/shape changes belong to Window.
 4. Float Tracker in Window/Interactive Mode. After Magic Mask, return and select
-   tracking points in the viewer. Confirm no Magic Mask point is created. Other
-   Tracker modes remain separate coverage work.
+   a region of cloud points in the viewer. Check for Tracker's dotted rectangle
+   and that Magic Mask gains no point. Explicitly turn Interactive Mode off
+   before testing another tool. In Windows Resolve, switching directly from
+   docked Tracker to docked 3D Qualifier can leave the rectangle following
+   the drag while Qualifier records its own sample. If the checkbox already
+   appears clear, cycling it on and off with a Power Window enabled clears
+   the rectangle. Floating Qualifier sampling after Edit → Color then works.
 5. Alternate these tools with floating Curves and Warper. Sampling must return to
    the chosen tool, Curves/Warper must stay floating, and live updates must continue.
 6. Check local editing, header/button dragging, tearoff, redocking and floating
