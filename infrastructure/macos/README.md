@@ -14,13 +14,17 @@
   `release/mac/lua/yyyy.mm.dd.NNN/`, using `build/macos/lua/<variant>/`.
 - `lua/install.sh <absolute-candidate-directory>`: install/update the private
   runtime and automatic startup hook with Resolve closed; migrate legacy menu
-  files into backups and preserve settings. No Scripts-menu entry is installed.
+  files into backups and preserve settings. Managed commands live under
+  `Scripts/Utility/Unbound`.
 - `lua/startup/enable.sh <absolute-candidate-directory>`: developer alias for
   normal installation, restoring automatic startup with a matching runtime.
 - `lua/startup/disable.sh`: move only the startup hook outside Resolve's Scripts
   tree; retain the runtime and settings for isolated development tests.
 
 The top-level `build.sh`, `test.sh`, `audit.sh` and `install.sh` delegate to Lua.
+Use Xcode command-line tools, CMake, Git and Resolve's Qt/LuaJIT/Cocoa libraries.
+`UNBOUND_QT_SOURCE` and `UNBOUND_RESOLVE_APP` can override the source and app
+paths. Cocoa fixtures require a GUI session.
 `UNBOUND_MAC_ARCHS` selects `universal` (default), `arm64` or `x86_64`.
 Build output lives under `build/macos/lua/<variant>/`; candidates remain under
 `release/mac/lua/`. Public candidates use `<VERSION>/` and contain both architectures.
@@ -30,7 +34,11 @@ every requested slice; CMake checks this before building. No second Qt is shippe
 Tests select each executable architecture explicitly. When a host cannot execute
 a slice, builds stop unless `UNBOUND_MAC_ALLOW_UNTESTED=1` is set. That exception
 is recorded as NOT RUN in validation logs and never suppresses a failing test.
-See [Lua instructions](lua/README.md).
+See [Lua instructions](lua/README.md). Build the installer from the tested
+candidate. Use its runtime build ID for the final internal folder and app name,
+even when the installer staging directory has a different packaging counter.
+Follow the [final output convention](../../AGENTS.md#build-and-validate) and
+[installer procedure](installer/README.md) for release naming and archive verification.
 
 These workflows are separate from the Windows release entry points. See
 [platform status](../../AGENTS.md#platform-implementation-and-validation) for requirements and validation.

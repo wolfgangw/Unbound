@@ -1,7 +1,37 @@
-# Windows internal diagnostic builds
+# Windows builds
 
-Normal build conventions and platform-independent design rules are in
-[AGENTS.md](../../AGENTS.md#build-and-validate).
+Run the build from the repository root on Windows x64 with VS 2022 C++ tools,
+the Windows SDK, CMake, PowerShell, Python 3 and Qt 5.15.2 MSVC x64 development
+files. The default Qt directory is `%USERPROFILE%\Qt\5.15.2\msvc2019_64`.
+
+```powershell
+.\infrastructure\windows\build-release.cmd -InternalBuild
+```
+
+Use `-QtPath C:\Qt\5.15.2\msvc2019_64` for an alternate Qt installation,
+or `-BuildJobs N` to change compilation parallelism (default up to four).
+Fixtures run sequentially. Native-input fixtures require a desktop session.
+The build uses `test-input.ps1` for process timeouts and cursor cleanup.
+
+The layout-cover fixture allows one diagnosed limitation on Windows 10 builds
+19041–21999. An independent probe must reproduce error 8 when excluding the
+translucent menu. Cleanup, menu input/focus and display-affinity restoration
+must still pass. The build prints `KNOWN LIMITATION` and records it in the
+manifest's `ValidationLimitations`. Other failures, including on Windows 11,
+remain fatal.
+
+For an explicitly requested public build, omit `-InternalBuild`. The script
+uses `VERSION` and stages `release/win/<version>/Unbound <version>.exe`.
+Copy it to the [final release path](../../AGENTS.md#build-and-validate),
+verify its embedded version and compare the final hash with the build's
+`release-manifest.json`. Preserve existing artifacts. `-Version` overrides
+the semantic version and `-BuildNumber` sets the numeric revision.
+If a ZIP is requested, `infrastructure/windows/package-release.ps1` checks
+clean tagged source, embedded versions and hashes, then packages the installer,
+license and source revision under a single enclosing folder.
+
+The [installer README](installer/README.md) covers installer-only rebuilding,
+installation and recovery.
 
 ## Public Qt palette size measurements
 
