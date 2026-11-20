@@ -29,7 +29,21 @@ public:
     QWidget *border;
     int refreshes=0;
     bool dragging=false,wide=false;
+    bool restoreShortOnShow=false;
+    int paintsAfterReturn=0;
+    bool paintedShort=false;
 protected:
+    void showEvent(QShowEvent *event) override {
+        QDialog::showEvent(event);
+        if(restoreShortOnShow)resize(width(),height()-84);
+    }
+    void paintEvent(QPaintEvent *event) override {
+        if(restoreShortOnShow) {
+            ++paintsAfterReturn;
+            if(geometry()!=parentWidget()->contentsRect())paintedShort=true;
+        }
+        QDialog::paintEvent(event);
+    }
     void resizeEvent(QResizeEvent *event) override { QDialog::resizeEvent(event);border->setGeometry(rect()); }
     void mousePressEvent(QMouseEvent *) override { dragging=true; }
     void mouseMoveEvent(QMouseEvent *) override {
@@ -110,8 +124,22 @@ void testColorControls() {
         host.show();LayoutTest::settle();
         require(dialog.refreshes==4 && !dialog.wide && dialog.size()==QSize(650,350),
             "Scopes page return did not refresh native view availability");
+        host.hide();
+        dialog.restoreShortOnShow=true;
+        host.show();
+        require(dialog.geometry()==host.contentsRect(),
+            "Native Scopes kept its shorter Show geometry until after host exposure");
+        LayoutTest::settle();
+        require(dialog.paintsAfterReturn>0 && !dialog.paintedShort && host.size()==QSize(650,350),
+            "Returning Scopes painted with the wrong allocation or changed the host size");
+        const int settledRefreshes=dialog.refreshes;
+        host.hide();
+        dialog.restoreShortOnShow=false;
+        host.show();LayoutTest::settle();
+        require(dialog.refreshes==settledRefreshes,
+            "Showing correctly sized Scopes replayed a native border resize");
         host.resize(700,370);delete refresh;LayoutTest::settle();
-        require(dialog.refreshes==4,"Scopes refresh survived adapter disposal");
+        require(dialog.refreshes==settledRefreshes,"Scopes refresh survived adapter disposal");
         qApp->removeEventFilter(&input);
     }
     {

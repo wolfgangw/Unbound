@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include <QApplication>
+#include <QLayout>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QTimer>
@@ -24,6 +25,15 @@ public:
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
         if(m_refreshing)return false;
+        // A child's native Show handler can restore its former window size.
+        // Qt shows children before the host's Show, and sends ShowToParent
+        // after an explicit child show in an already visible host. Both are
+        // early enough to fix the allocation without asking for another paint.
+        if((object==m_host && (event->type()==QEvent::Show
+                || (m_pending && event->type()==QEvent::UpdateRequest)))
+            || (object==m_dialog && event->type()==QEvent::ShowToParent)) {
+            fitToHost();
+        }
         // The embedded dialog is content, not a second movable/resizable
         // window. Child controls/plots keep their input; only events delivered
         // or propagated to the native window itself must stop here. Our direct
@@ -38,9 +48,15 @@ protected:
             else if(object==m_border)rememberCursor(m_border,m_borderCursor);
         }
         if(object==m_dialog) {
-            if(event->type()==QEvent::Resize || event->type()==QEvent::Show)request();
+            if(event->type()==QEvent::Resize || event->type()==QEvent::Show) {
+                if(m_dialog->size()!=m_lastSize)m_lastSize={};
+                request();
+            }
             else if(event->type()==QEvent::Hide || event->type()==QEvent::ParentChange) {
-                m_pending=false;m_lastSize={};
+                m_pending=false;
+                // A retained renderer shown at the same size already has the
+                // correct view-count controls. Reparenting starts a new allocation.
+                if(event->type()==QEvent::ParentChange)m_lastSize={};
             }
         }
         if(m_pending && event->type()==QEvent::MouseButtonRelease)queue();
@@ -61,6 +77,15 @@ private:
         if(state.explicitSet)widget->setCursor(state.cursor);else widget->unsetCursor();
     }
     void request() { m_pending=true;queue(); }
+    void fitToHost() {
+        if(!m_host || !m_dialog || m_dialog->parentWidget()!=m_host || !m_dialog->isVisible()
+            || m_dialog->geometry()==m_host->contentsRect())return;
+        auto layout=m_host->layout();
+        if(layout && layout->isEnabled()) {
+            layout->invalidate();
+            layout->activate();
+        }
+    }
     void queue() {
         if(m_queued)return;
         m_queued=true;
@@ -72,6 +97,9 @@ private:
         // Never compete with a real native gesture or a control's mouse grab.
         // Its release schedules the outstanding refresh; there is no polling.
         if(QApplication::mouseButtons()!=Qt::NoButton || QWidget::mouseGrabber())return;
+        // Capture the layout's allocation, even if native code resized the
+        // embedded dialog again between Show and this view-count refresh.
+        fitToHost();
         m_pending=false;
         if(m_dialog->size()==m_lastSize)return;
         const auto geometry=m_dialog->geometry();

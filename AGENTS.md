@@ -234,8 +234,12 @@ page-specific. Discover the native shell as QWidget on both platforms.
 - **Color** embeds the native floating window while leaving the single docked
   scope in place. Keep native view-count controls and plot input. Decorate the
   outer header once. Prevent the embedded shell from resizing independently
-  of its host. `ColorScopesLayoutRefresh` updates view-count availability
-  after resize and restores allocation and cursor.
+  of its host.
+- **Sizing on Edit and Color.** Scopes can restore its former native size on
+  show. Reapply the host layout before exposure if the embedded window no
+  longer fills it. Let Qt deliver the normal paint. Keep the native view-count
+  refresh for size changes and reuse its result on same-size reveals. Returning
+  from Cinema Viewer with resized Color Scopes is validated on Windows.
 - **Page handoff** must close the borrowed native renderer **while visible**,
   restore native ownership and remembered placement, then hide the outgoing
   host. Otherwise Resolve can reopen Scopes on the destination page or lose

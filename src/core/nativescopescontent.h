@@ -38,9 +38,9 @@ public:
   slot->setProperty("unboundNativeScopes",QVariant::fromValue(static_cast<QObject *>(dialog)));
   disconnect(m_destroyed);
   m_destroyed=connect(dialog,&QObject::destroyed,this,[this]{if(m_slot)m_slot->setProperty("unboundNativeScopes",QVariant());});
+  m_layoutRefresh=new ColorScopesLayoutRefresh(dialog,host,this);
   dialog->show();dialog->installEventFilter(this);
   if(slot!=page)m_expandGuard=new ColorExpandGuard(slot,this);
-  m_layoutRefresh=new ColorScopesLayoutRefresh(dialog,host,this);
   return {};
  }
  bool intact()const{return m_slot && m_host && (m_suspended || (m_dialog && m_dialog->parentWidget()==m_host));}
@@ -98,9 +98,9 @@ private:
    m_dialog->setParent(m_host,Qt::Widget);m_dialog->setMinimumSize(0,0);
    m_host->layout()->addWidget(m_dialog);
    m_slot->setProperty("unboundNativeScopes",QVariant::fromValue(static_cast<QObject *>(m_dialog.data())));
+   m_layoutRefresh=new ColorScopesLayoutRefresh(m_dialog,m_host,this);
    m_dialog->show();m_dialog->installEventFilter(this);
    if(m_slot!=m_page)m_expandGuard=new ColorExpandGuard(m_slot,this);
-   m_layoutRefresh=new ColorScopesLayoutRefresh(m_dialog,m_host,this);
   }
   m_stopping=false;return false;
  }
