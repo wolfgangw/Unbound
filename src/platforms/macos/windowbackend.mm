@@ -480,8 +480,9 @@ bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
         return result;
     }
     if(event->type()==QEvent::Hide)if(auto window=qobject_cast<QWidget *>(object))
-        if(window->isWindow() && window->property("unboundFloatingWindow").toBool()
-            && member(window))m_keyFocus->hostHidden();
+        if(window->isWindow() && ((window->property("unboundFloatingWindow").toBool() && member(window))
+            || window->inherits("UiCinemaViewerDialog")))
+            m_keyFocus->hostHidden(window->inherits("UiCinemaViewerDialog"));
     switch(event->type()) {
     case QEvent::DynamicPropertyChange:
         if(groupPropertyChanged(object,event)) refreshLevels();

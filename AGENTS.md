@@ -473,9 +473,10 @@ open. See [platform validation](doc/issues/platform-validation.md).
   levels on departure, dialogs and teardown. Limit level tracking to members,
   the layout menu and actual popup/modal blockers. Temporarily parentless effect
   controls must never trigger a group scan on unrelated properties or lifecycle
-  events. If host teardown clears Qt focus, synchronize only to the existing
-  native key group window. Resolve owns integrated title movement, and the
-  backend owns frame conversion, native resize gestures and measured clearance
+  events. If host teardown or Cinema exit clears Qt focus, synchronize only to the
+  existing native key group window. Cinema exit also restores that window's native
+  input responder through Qt activation; it must not raise or select another window.
+  Resolve owns integrated title movement, and the backend owns frame conversion, native resize gestures and measured clearance
   for traffic lights.
 - **Inspection.** Follow the local `tools/gammaray/` README for native captures.
   Use a fresh session without Unbound and verify `truncated: false`. Live startup

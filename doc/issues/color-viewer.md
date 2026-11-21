@@ -22,6 +22,12 @@ Color viewer on the first display (Win+Up). Resolve supplies current-frame
 traces in that configuration. No public API for requesting a paused external
 scope frame in Color Cinema has been identified.
 
+## macOS Cinema entry
+
+First entry from a floating Color viewer has been reported behind the workspace
+and floating panes. Fresh-session reproduction and stacking diagnosis remain open.
+Only a single display is available for local macOS validation.
+
 ## Open validation
 
 - Validate Cinema/expanded-viewer transitions, page return, layout recall and

@@ -863,6 +863,23 @@ static bool runMacKeyFocusTest(QApplication &app) {
         "Host hide did not synchronize Qt with the unchanged Cocoa key window");
     check(QApplication::focusWidget()==&editor,"Native main remembered focus was not restored");
     Unbound::CocoaKeyWindowFocus recovery([&](QWidget *w){return w==&main;});
+    // Cinema returns native key ownership to the floating viewer before Qt
+    // clears its activation. Recovery must follow that host, not choose main.
+    host.show();settle();
+    QLineEdit viewerEditor(&host);viewerEditor.show();
+    [hostNative makeKeyAndOrderFront:nil];QApplication::setActiveWindow(&host);
+    viewerEditor.setFocus();settle();
+    NSView *hostView=reinterpret_cast<NSView *>(host.winId());
+    NSTextView *staleResponder=[[NSTextView alloc] initWithFrame:NSMakeRect(0,0,10,10)];
+    [hostView addSubview:staleResponder];[hostNative makeFirstResponder:staleResponder];
+    QApplication::setActiveWindow(nullptr);
+    Unbound::CocoaKeyWindowFocus cinemaReturn([&](QWidget *w){return w==&main || w==&host;});
+    cinemaReturn.hostHidden(true);settle();
+    check(NSApp.keyWindow==hostNative && QApplication::activeWindow()==&host,
+        "Cinema return did not follow the native key floating viewer");
+    check(QApplication::focusWidget()==&viewerEditor,"Cinema return lost remembered viewer focus");
+    check(hostNative.firstResponder==hostView,"Cinema return retained the stale native input responder");
+    [staleResponder removeFromSuperview];[staleResponder release];
     QWidget other;other.show();settle();
     recovery.hostHidden();QApplication::setActiveWindow(&other);settle();
     check(QApplication::activeWindow()==&other,"Recovery stole a newer activation");
