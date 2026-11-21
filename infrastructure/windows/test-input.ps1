@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 namespace Unbound {
     public static class TestInputRecovery {
         [DllImport("user32.dll")] public static extern bool ClipCursor(IntPtr rectangle);
+        [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     }
 }
 '@
@@ -17,6 +18,13 @@ namespace Unbound {
     $stderr = [IO.Path]::GetTempFileName()
     $fixture = $null
     try {
+        # Closing the previous fixture's last window can temporarily leave no
+        # foreground input queue for the next fixture's activation request.
+        $handoff = [Diagnostics.Stopwatch]::StartNew()
+        while ([Unbound.TestInputRecovery]::GetForegroundWindow() -eq [IntPtr]::Zero -and
+               $handoff.ElapsedMilliseconds -lt 1000) {
+            Start-Sleep -Milliseconds 15
+        }
         # Do not pass SW_HIDE: Windows applies it to the fixture's first native
         # test window, silently removing that window from snap/visibility tests.
         # Reuse our console rather than opening an additional console window.
