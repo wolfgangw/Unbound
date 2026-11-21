@@ -4,9 +4,14 @@ Floating playback and interaction are user-validated on Windows.
 
 ## External Scopes in Color Cinema Viewer
 
-On Windows with Resolve Studio 21.2 build 5, external Scopes follow playback
-in Color Cinema Viewer. Entering on a still frame or stepping through frames
-produces no new external plot. After playback stops, a repaint can clear the
+On Windows with Resolve Studio 21.2 build 5, Color Cinema Viewer's **Hide Scopes
+on Play** also affects floating Scopes on a second display. With it checked,
+the external plots follow playback. With it unchecked, they show only their
+grids during playback. Both results hold with **Show Scopes** either on or off.
+
+Entering on a still frame or stepping through frames produces no new external
+plot. None of the four menu combinations restored updates on paused seeks.
+After playback stops, a repaint can clear the
 last trace while leaving the graticule intact. All four plot widgets and their
 OpenGL contexts remain valid. The same external Scopes track individual frames
 on Edit in Cinema Viewer and on Color in the ordinary viewer.
