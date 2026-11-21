@@ -6,6 +6,7 @@
 #include <QWidget>
 #include <qt_windows.h>
 #include <functional>
+#include "cinemapanevisibility.h"
 
 namespace Unbound {
 // Windows Cinema Viewer hides the selected player's original top-level window.
@@ -52,6 +53,11 @@ protected:
                     || !m_main || !m_main->isVisible() || m_hiddenMain || QCoreApplication::closingDown()) return;
                 m_player=floatingViewer(cinema,"EditTimelinePlayer","widgetEditTimelinePlayer");
                 if(!m_player) m_player=floatingViewer(cinema,"EditSourcePlayer","widgetEditSourcePlayer");
+                if(!m_player) {
+                    // Color lends its entire viewer form to Cinema.
+                    auto form=cinema->findChild<QWidget *>("UiMainViewerForm",Qt::FindDirectChildrenOnly);
+                    if(cinemaBorrowingColorViewer(form)==cinema) m_player=form;
+                }
                 if(!m_player) return;
                 m_cinema=cinema;
                 m_hiddenMain=true;

@@ -312,7 +312,9 @@ separate from layout-switch presentation.
 ### Color viewer and lower controls
 
 Keep the outer Color viewer container in the native layout when transferring
-the player. Preserve the lower tool regions and their allocation. Tool selectors
+the player. Cinema Viewer temporarily takes the complete floating viewer form.
+Allow that transfer and resume normal ownership when Resolve returns it.
+Preserve the lower tool regions and their allocation. Tool selectors
 choose content and must not be switched off as visibility toggles. Preserve
 checked selectors across page departure **before Scopes handoff changes them**.
 On return, reselect through native actions after queued page work. Newer input or

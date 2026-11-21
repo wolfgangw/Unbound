@@ -2,6 +2,7 @@
 #include "cinemaviewervisibility.h"
 #include "cinemapanevisibility.h"
 #include "nativescopescontent.h"
+#include "sidebarfloatsession.h"
 #include <QPushButton>
 #include <QDialog>
 #include <QShortcut>
@@ -15,6 +16,64 @@ static void require(bool value,const char *message) {
     if(!value) { std::fprintf(stderr,"FAIL: %s\n",message); std::exit(1); }
 }
 static void settle() { for(int i=0;i<4;++i) QApplication::processEvents(); }
+static void checkFloatingColorViewer() {
+    QWidget main;
+    auto page=new QWidget(&main); page->setObjectName("WStackPage_Color");
+    auto slot=new QWidget(page); slot->setObjectName("m_pFramePlayer");
+    auto native=new QVBoxLayout(slot);
+    auto form=new QWidget; form->setObjectName("UiMainViewerForm"); native->addWidget(form);
+    main.show(); settle();
+    Unbound::SidebarFloatSession session;
+    require(session.start(slot,"Viewer",page,false,false,true,false).isEmpty(),"float Color viewer");
+    QPointer<QWidget> host=session.floatingWindow();
+    Unbound::CinemaViewerVisibility visibility;
+    visibility.setWindow(&main);
+    UiCinemaViewerDialog cinema;
+    auto cinemaLayout=new QVBoxLayout(&cinema);
+    QAction toggle(&main);
+    toggle.setObjectName("workspaceViewerModeCinemaViewer"); toggle.setCheckable(true);
+    bool queuedReturn=false;
+    auto returnForm=[&] {
+        host->layout()->addWidget(form); form->show(); host->show();
+    };
+    QObject::connect(&toggle,&QAction::triggered,[&](bool on) {
+        if(on) {
+            cinemaLayout->addWidget(form); form->show(); cinema.show(); host->hide();
+        } else {
+            cinema.hide();
+            if(queuedReturn) QTimer::singleShot(0,&cinema,returnForm);
+            else returnForm();
+        }
+    });
+    toggle.trigger(); settle();
+    require(form->window()==&cinema && form->isVisible() && !main.isVisible(),
+        "Cinema keeps the borrowed Color form after deferred graph recovery");
+    toggle.trigger(); settle();
+    require(form->window()==host && host->isVisible() && main.isVisible(),
+        "Cinema returns the complete form to the original Color host");
+    int docked=0;
+    session.userDocked=[&] {++docked;};
+    for(bool delayed : {false,true}) {
+        queuedReturn=delayed;
+        toggle.trigger(); settle();
+        require(session.dock().isEmpty(),"dock a Color viewer currently in Cinema");
+        if(delayed) require(session.active() && form->window()==&cinema && docked==1,
+            "queued Cinema return keeps the originating host alive and defers the dock notification");
+        settle();
+        require(main.isVisible() && !cinema.isVisible() && !session.active() && native->indexOf(form)==0,
+            "explicit docking lets Cinema return the viewer before retiring its host");
+        if(!delayed) {
+            require(session.start(slot,"Viewer",page,false,false,true,false).isEmpty(),"refloat after Cinema docking");
+            host=session.floatingWindow();
+        }
+    }
+    require(docked==2,"each completed dock notifies exactly once");
+    // Resolve controls a docked viewer's original window and return focus.
+    cinemaLayout->addWidget(form); form->show(); cinema.show(); settle();
+    require(main.isVisible() && !form->property(Unbound::floatingColorViewerProperty).isValid(),
+        "docked Color viewer does not activate the floating visibility guard");
+    cinema.hide(); native->addWidget(form);
+}
 class ShowObserver : public QObject {
 public:
     std::function<void()> callback;
@@ -86,6 +145,7 @@ int main(int argc,char **argv) {
         std::puts("Secondary-display Cinema visibility passed");
         return 0;
     }
+    checkFloatingColorViewer();
     QWidget main;
     main.setObjectName("UiMainWindow"); main.setGeometry(30,40,800,600);
     QWidget host(&main,Qt::Window);

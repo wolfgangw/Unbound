@@ -4,11 +4,13 @@
 
 #include <QBoxLayout>
 #include <QAbstractButton>
+#include <QAction>
 #include <QGridLayout>
 #include <QCloseEvent>
 #include <QLabel>
 #include <QPointer>
 #include <QPropertyAnimation>
+#include <QScopedValueRollback>
 #include <QTimer>
 #include <QSplitter>
 #include <QWidget>
@@ -62,7 +64,12 @@ public:
         m_dockingGuard.cancel();
         report = {};
         restore();
-        if (m_host) delete m_host.data();
+        if (m_host && m_slot && cinemaBorrowingColorViewer(m_content)) {
+            // At shutdown Resolve may still have a queued return to this host.
+            // Keep its return address alive until the native workspace is destroyed.
+            m_content->setProperty(floatingColorViewerProperty,QVariant());
+            m_host->setParent(m_slot,m_host->windowFlags());
+        } else if (m_host) delete m_host.data();
     }
     std::function<void(const QString &)> report;
     std::function<void(const QByteArray &)> geometrySaved;
@@ -105,6 +112,7 @@ public:
         const auto label=m_host->windowTitle();
         const bool splitter=bool(m_splitter), native=bool(m_nativeLayout);
         const auto error = restore();
+        if (m_dockOnCinemaReturn) return {};
         if (error.isEmpty()) {
             if(userDocked) userDocked();
             m_dockingGuard.watch(slot,root,[this,slot,root,label,splitter,native](bool failed) {
@@ -238,6 +246,9 @@ public:
             m_nativeLayout = layout;
             auto item = layout->itemAt(0);
             m_content = item->widget();
+            if (slot->objectName()==QLatin1String("m_pFramePlayer")
+                && m_content->objectName()==QLatin1String("UiMainViewerForm"))
+                m_content->setProperty(floatingColorViewerProperty,true);
             m_contentAlignment = item->alignment();
             m_contentWasHidden = m_content->isHidden();
             if (nativeGrid) nativeGrid->getItemPosition(0, &m_gridRow, &m_gridColumn, &m_gridRows, &m_gridColumns);
@@ -402,6 +413,19 @@ public:
         m_dockingGuard.cancel();
         if (!active()) return QString();
         if (m_restoring) return QString();
+        // Cinema remembers the original host. A deliberate dock must give
+        // Resolve the opportunity to return its viewer before retiring that host.
+        if (auto cinema=cinemaBorrowingColorViewer(m_content)) {
+            if (!m_dockOnCinemaReturn) {
+                m_dockOnCinemaReturn=true;
+                QScopedValueRollback<bool> restoring(m_restoring,true);
+                auto action=m_root ? m_root->window()->findChild<QAction *>("workspaceViewerModeCinemaViewer") : nullptr;
+                if (action && action->isChecked() && action->isEnabled()) action->trigger();
+                else cinema->close();
+            }
+            if (cinemaBorrowingColorViewer(m_content)) return {};
+        }
+        m_dockOnCinemaReturn=false;
         // A close can arrive before the queued native-toggle recovery.
         recoverFloatingGraph();
         const bool layoutIntact = m_nativePalette ? m_nativePalette->intact() : m_nativeLayout
@@ -620,14 +644,15 @@ private:
         QTimer::singleShot(0, this, [this, generation] {
             if (generation != m_generation) return;
             m_graphRecoveryQueued = false;
-            recoverFloatingGraph();
+            if (m_dockOnCinemaReturn && !cinemaBorrowingColorViewer(m_content)) dock();
+            else recoverFloatingGraph();
         });
     }
     void recoverFloatingGraph()
     {
         if (m_contentReturned || m_restoring || m_recoveringGraph || !m_nativeLayout || !m_slot
             || m_slot->layout() != m_nativeLayout || !m_content || !m_host || !m_hostLayout
-            || m_host->layout() != m_hostLayout) return;
+            || m_host->layout() != m_hostLayout || cinemaBorrowingColorViewer(m_content)) return;
         m_recoveringGraph = true;
         if (m_content->parentWidget() != m_host || m_hostLayout->indexOf(m_content) < 0)
             m_hostLayout->addWidget(m_content);
@@ -677,8 +702,13 @@ private:
         m_returnFade->setTargetObject(nullptr);
         for (const auto &connection : m_nativeToggleConnections) disconnect(connection);
         m_nativeToggleConnections.clear();
-        if (m_content) m_content->removeEventFilter(this);
+        if (m_content) {
+            m_content->removeEventFilter(this);
+            if (m_content->property(floatingColorViewerProperty).toBool())
+                m_content->setProperty(floatingColorViewerProperty,QVariant());
+        }
         m_graphRecoveryQueued = false;
+        m_dockOnCinemaReturn = false;
         m_contentReturned = false;
         m_nativePageSuspended = false;
         m_nativeLayout = nullptr; m_hostLayout = nullptr; m_content = nullptr;
@@ -704,6 +734,7 @@ private:
     QPointer<QWidget> m_content;
     QList<QMetaObject::Connection> m_nativeToggleConnections;
     bool m_graphRecoveryQueued = false;
+    bool m_dockOnCinemaReturn = false;
     bool m_contentReturned = false;
     bool m_nativePageSuspended = false;
     bool m_recoveringGraph = false;

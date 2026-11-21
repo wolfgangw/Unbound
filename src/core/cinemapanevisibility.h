@@ -7,6 +7,14 @@
 #include <QWidget>
 
 namespace Unbound {
+inline constexpr char floatingColorViewerProperty[] = "unboundFloatingColorViewer";
+
+inline QWidget *cinemaBorrowingColorViewer(QWidget *form) {
+    if (!form || !form->property(floatingColorViewerProperty).toBool()) return nullptr;
+    auto window = form->window();
+    return window->inherits("UiCinemaViewerDialog") ? window : nullptr;
+}
+
 inline QWidget *visibleCinemaForPage(QWidget *page) {
     if (!page || page->isHidden() || page->window()->isMinimized()
         || !page->isVisibleTo(page->window())) return nullptr;

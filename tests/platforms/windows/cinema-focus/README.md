@@ -9,7 +9,7 @@ activates Cinema's corresponding shortcut. Native and Qt focus are correct in
 both cases. Merely refocusing Cinema does not repair this.
 
 `CinemaViewerVisibility` matches native docked behavior by hiding the remaining
-main window while Cinema contains an undocked Edit image widget. It restores
+main window while Cinema contains an undocked Edit image or Color viewer form. It restores
 only visibility it changed, after native Cinema cleanup, without activating the
 main window over another app. It does not move viewer content, change shortcuts,
 forward keys or poll. This workaround is Windows-only; macOS does not reproduce
@@ -24,8 +24,9 @@ viewer region. `UnboundViewerTests` covers repeated main-window hide/show follow
 by docking in Single and Dual Viewer configurations, without a resize to repair
 the layout.
 
-`UnboundCinemaTests` runs with the regular Windows build. It covers Program and
-Source, repeated entry/exit, cancellation, rapid reentry, native dialog
+`UnboundCinemaTests` runs with the regular Windows build. It covers the Color
+form's transfer and return through its floating session, docking from Cinema,
+Edit Program and Source, repeated entry/exit, cancellation, rapid reentry, native dialog
 destruction, adapter detachment, already-hidden main windows, unaffected docked
 viewers/other dialogs, and geometry/shortcut preservation. Live Resolve testing
 still needs a fresh helper process: single Program floating, both floating in
