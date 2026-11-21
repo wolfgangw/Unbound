@@ -7,6 +7,7 @@
 #include "panesettings.h"
 #include "panegeometryrestore.h"
 #include "panemainresizegeometry.h"
+#include "cinemapanevisibility.h"
 #include "nativemenutracking.h"
 
 namespace Unbound {
@@ -107,9 +108,12 @@ protected:
         if(object==m_page) {
             if(event->type()==QEvent::Hide) {
                 m_activateRequested=false;
-                flushGeometry();
-                if(m_main && m_main->isVisible() && !m_main->isMinimized())release();
-                if(m_host)m_host->hide();
+                onPanePageHide(this,m_page,m_host,[this,host=m_host] {
+                    if(m_host!=host)return;
+                    flushGeometry();
+                    if(m_main && m_main->isVisible() && !m_main->isMinimized())release();
+                    if(m_host)m_host->hide();
+                });
             } else if(event->type()==QEvent::Show)queue();
         }
         if(object==m_host) {

@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include <functional>
 #include "colorexpandguard.h"
+#include "cinemapanevisibility.h"
 #include "colorscopeslayoutrefresh.h"
 namespace Unbound {
 // Exclusive, reversible ownership of Resolve's global native Scopes renderer.
@@ -114,6 +115,14 @@ protected:
    if(!m_queued){m_queued=true;QTimer::singleShot(0,this,[this]{
     m_queued=false;
     if(m_stopping || !m_dialog)return;
+    // Cinema can hide Scopes before it hides the workspace. This is a
+    // presentation change. An explicit Close or Escape still returns the pane.
+    if(!m_dockQueued && m_dialog->isHidden() && m_host && m_dialog->parentWidget()==m_host) {
+     if(auto cinema=visibleCinemaForPage(m_page)) {
+      if(paneOutsideCinemaDisplay(m_host,cinema))m_dialog->show();
+      return;
+     }
+    }
     if(m_dockQueued || (m_dialog->isHidden() && m_host && m_host->isVisible() && m_page && m_page->isVisible())) {
      m_dockQueued=false;
      const auto request=dockRequested;if(request)request();

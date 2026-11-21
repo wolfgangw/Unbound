@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "cinemaviewervisibility.h"
+#include "cinemapanevisibility.h"
+#include "nativescopescontent.h"
+#include <QPushButton>
 #include <QDialog>
 #include <QShortcut>
 #include <QKeyEvent>
@@ -20,9 +23,69 @@ public:
         return false;
     }
 };
+// Run with the native Windows platform and two connected displays.
+static void checkSecondaryDisplay() {
+    const auto screens=QApplication::screens();
+    require(screens.size()>=2,"two displays required for secondary-display fixture");
+    QWidget workspace;
+    QWidget panePage(&workspace);
+    QWidget host;
+    UiCinemaViewerDialog cinema;
+    const auto first=screens[0]->availableGeometry().center();
+    const auto second=screens[1]->availableGeometry().center();
+    workspace.move(first);
+    cinema.move(first);
+    host.resize(120,90);
+    class PageHide : public QObject {
+    public:
+        QWidget *page,*host;
+        bool eventFilter(QObject *,QEvent *event) override {
+            if(event->type()==QEvent::Hide)
+                Unbound::onPanePageHide(this,page,host,[this] {host->hide();});
+            return false;
+        }
+    } observer;
+    observer.page=&panePage;
+    observer.host=&host;
+    panePage.installEventFilter(&observer);
+    QDialog scopes(&workspace);
+    QPushButton closeScopes(&scopes);
+    closeScopes.setObjectName("btnHide");
+    QObject::connect(&closeScopes,&QPushButton::clicked,&scopes,&QWidget::hide);
+    Unbound::NativeScopesContent content(nullptr);
+    require(content.adopt(&panePage,&scopes,&host,&panePage,false).isEmpty(),"embed native Scopes");
+    int dockRequests=0;
+    content.dockRequested=[&] {++dockRequests;};
+    for(bool elsewhere : {true,false}) {
+        host.move(elsewhere ? second : first);
+        workspace.show(); host.show(); settle();
+        scopes.show();
+        cinema.show(); scopes.hide(); settle();
+        require(dockRequests==0 && scopes.isVisible()==elsewhere,
+            "Cinema hiding Scopes before the workspace must never request docking");
+        cinema.hide(); scopes.show(); settle();
+        workspace.hide(); scopes.hide(); cinema.show(); settle();
+        require(host.isVisible()==elsewhere,"keep only floats clear of Cinema display");
+        require(scopes.isVisible()==elsewhere && scopes.parentWidget()==&host,
+            "preserve the embedded Scopes content only in the retained host");
+        cinema.hide(); workspace.show(); settle();
+    }
+    host.move(second); host.show(); scopes.show(); cinema.show(); settle();
+    scopes.close(); settle();
+    require(dockRequests==1,"explicit Scopes close in Cinema still requests docking");
+    cinema.hide(); panePage.hide();
+    require(!host.isVisible(),"real page departure still hides synchronously");
+    panePage.show(); host.show(); workspace.hide(); settle();
+    require(!host.isVisible(),"ordinary workspace hide still conceals secondary host");
+}
 int main(int argc,char **argv) {
     QApplication app(argc,argv);
     app.setQuitOnLastWindowClosed(false);
+    if(app.arguments().contains("--secondary-display")) {
+        checkSecondaryDisplay();
+        std::puts("Secondary-display Cinema visibility passed");
+        return 0;
+    }
     QWidget main;
     main.setObjectName("UiMainWindow"); main.setGeometry(30,40,800,600);
     QWidget host(&main,Qt::Window);

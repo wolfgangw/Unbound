@@ -17,6 +17,7 @@
 #include "panegeometryrestore.h"
 #include "panegeometrytransaction.h"
 #include "panemainresizegeometry.h"
+#include "cinemapanevisibility.h"
 #include "paneactivationbridge.h"
 #include "layoutreadiness.h"
 #include "panepagecontext.h"
@@ -108,8 +109,14 @@ protected:
             m_saveTimer.start();
         if(object==m_page && (event->type()==QEvent::Hide || event->type()==QEvent::Show))
             for(auto pane:{&m_program,&m_source}) if(pane->host) {
-                if(event->type()==QEvent::Hide) pane->returningGeometry=pane->host->saveGeometry();
-                pane->host->setVisible(event->type()==QEvent::Show);
+                if(event->type()==QEvent::Hide) {
+                    pane->returningGeometry=pane->host->saveGeometry();
+                    Unbound::onPanePageHide(this,m_page,pane->host,[pane,host=pane->host] {
+                        if(host && pane->host==host)host->hide();
+                    });
+                    continue;
+                }
+                pane->host->show();
                 if(event->type()==QEvent::Show) preserveGeometry(*pane,pane->mainResizeGeometry
                     ?pane->mainResizeGeometry->intendedGeometry(pane->returningGeometry):pane->returningGeometry);
             }
@@ -294,7 +301,7 @@ private:
                     m_restoreSource=false; if(!m_source.host) toggle(m_source,true);
                 }
             }
-            if(m_source.host && m_source.content)
+            if(m_source.host && m_source.content && !Unbound::cinemaKeepsPane(m_page,m_source.host))
                 m_source.host->setVisible(m_page && m_page->isVisible() && !m_source.content->isHidden());
             if(m_program.host && m_program.host->isVisible() && m_page && m_page->isVisible()
                 && m_program.content && m_program.content->isHidden()) {

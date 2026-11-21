@@ -35,6 +35,7 @@
 #include "panegeometryrestore.h"
 #include "panegeometrytransaction.h"
 #include "panemainresizegeometry.h"
+#include "cinemapanevisibility.h"
 
 namespace Unbound {
 // Move the entire layout, including all widgets/spacers/stretch factors. This
@@ -481,24 +482,9 @@ protected:
             || event->type() == QEvent::WindowStateChange)) m_geometryTimer->start();
         if (object == m_root && !m_restoring && m_host) {
             if (event->type() == QEvent::Hide) {
-                m_hiddenByPage = m_hiddenByPage || m_host->isVisible();
-                if (m_hiddenByPage) {
-                    m_pageReturnWork.clear();
-                    static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
-                    rememberGeometry();
-                    m_returnFade->stop();
-                }
-                returnSharedContent(true);
-                if(m_nativePalette && m_root->window()->isVisible() && !m_root->window()->isMinimized())
-                    if(m_nativePalette->suspendForPage()) {
-                        restoreNativeExpand();m_nativePageSuspended=true;
-                    }
-                // Native shared windows must retire their visible state before
-                // hiding the host suppresses their own visibility transition.
-                if(m_hiddenByPage) {
-                    m_host->hide();
-                    m_host->setWindowOpacity(1.0);
-                }
+                onPanePageHide(this,m_root,m_host,[this,generation=m_generation] {
+                    if(m_host && m_generation==generation) hideForPage();
+                });
             } else if (event->type() == QEvent::Show && m_hiddenByPage) {
                 m_pageReturnWork.set(m_host);
                 const auto generation = m_generation;
@@ -557,6 +543,26 @@ protected:
     }
 
 private:
+    void hideForPage() {
+        m_hiddenByPage = m_hiddenByPage || m_host->isVisible();
+        if (m_hiddenByPage) {
+            m_pageReturnWork.clear();
+            static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
+            rememberGeometry();
+            m_returnFade->stop();
+        }
+        returnSharedContent(true);
+        if(m_nativePalette && m_root->window()->isVisible() && !m_root->window()->isMinimized())
+            if(m_nativePalette->suspendForPage()) {
+                restoreNativeExpand();m_nativePageSuspended=true;
+            }
+        // Native shared windows must retire their visible state before
+        // hiding the host suppresses their own visibility transition.
+        if(m_hiddenByPage) {
+            m_host->hide();
+            m_host->setWindowOpacity(1.0);
+        }
+    }
     void preserveRestoredGeometry(const QByteArray &requested) {
         auto host=static_cast<PaneFloatingWindow *>(m_host.data());
         if(!host || host->isMaximized() || host->isFullScreen()) return;

@@ -45,3 +45,10 @@ keyboard layout to distinguish native shortcut collisions from focus changes.
 The DLL remains loaded until exit.
 An optional `-DPROBE_NAME=...` gives a revised passive probe a distinct DLL name;
 this is not a way to replace the production helper in a running session.
+
+With two connected displays, run `UnboundCinemaTests.exe --secondary-display`
+with `QT_QPA_PLATFORM=windows`. This exercises the shared page-hide policy with
+real screen geometry, including ordinary page departure and workspace hiding.
+In Resolve, place Scopes and Inspector on the other display, enter Cinema and
+play moving footage. Verify the scope trace changes, both hosts remain visible,
+and their placement and normal page-switch behavior survive Cinema exit.
