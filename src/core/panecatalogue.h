@@ -10,7 +10,7 @@ namespace Unbound {
 namespace PaneCatalogue {
 enum class Page { Edit, Color, Fairlight, Media, Cut, Fusion, Deliver };
 enum class Kind { Sidebar, Viewer, NativeWindow };
-enum class Header { None, MediaPool, SoundLibrary, Keyframes, Effects, Index,
+enum class Header { None, MediaPool, MediaStorage, SoundLibrary, Keyframes, Effects, Index,
     Inspector, Metadata, Mixer, Nodes, Gallery, Luts, Groups, Adr, TimelineCorner, ClipsGutter, ColorViewer, ColorControl };
 struct PageDescriptor {
     Page id;
@@ -25,7 +25,7 @@ inline const QVector<PageDescriptor> &pages() {
         {Page::Edit,"WStackPage_Conform","Edit","edit","frameEditPageWidgetsContainer","","btnEditToggle",{"InSSM","InDSM","InEFTM"},true,"UiEditPanelAux"},
         {Page::Color,"WStackPage_Color","Color","color","WStackPage_Color","Color/","",{"","InDSM"},true,"UiColorPanelAux"},
         {Page::Fairlight,"WStackPage_Audio","Fairlight","fairlight","WStackPage_Audio","Audio/","btnAudioPanel",{"InSSM","InDSM"},true,"UiAudioPanelAux"},
-        {Page::Media,"WStackPage_Browse","Media","media","WStackPage_Browse","Media/","",{},false},
+        {Page::Media,"WStackPage_Browse","Media","media","WStackPage_Browse","Media/","btnMediaToggle",{""},true,"UiMediaPanelAux"},
         {Page::Cut,"WStackPage_Cut","Cut","cut","WStackPage_Cut","Cut/","",{},false},
         {Page::Fusion,"WStackPage_Fusion","Fusion","fusion","WStackPage_Fusion","Fusion/","",{},false},
         {Page::Deliver,"WStackPage_Deliver","Deliver","deliver","WStackPage_Deliver","Deliver/","",{},false}
@@ -82,6 +82,9 @@ inline const QVector<ElidingLabelDescriptor> &elidingLabels() {
         {"frameInspectorContainer","frameEffectsWidgetsTitle","labelTitle"},
         {"frameEditPageMetadata","frameClipInfoTop","lblMetadataFileName"},
         {"frameEditPageMetadata","framePhotoInfoTop","lblMetadataPhotoFileName"},
+        {"frameMediaPageInspector","frameEffectsWidgetsTitle","labelTitle"},
+        {"frameMediaPageMetadataWidget","frameClipInfoTop","lblMetadataFileName"},
+        {"frameMediaPageMetadataWidget","framePhotoInfoTop","lblMetadataPhotoFileName"},
     };
     return entries;
 }
@@ -94,12 +97,14 @@ struct PaneDescriptor {
     Kind kind=Kind::Sidebar;
     QString additionalDragHeader;
     QString nativeVisibilityAction;
+    QString alternateToggleName; // Some Dual Screen toolbars use a different button name.
     QString settingsKey() const { return PaneCatalogue::page(page).settingsPrefix+objectName; }
     QStringList toggleNames() const {
         QStringList names;
         if(toggleName.isEmpty()) return names;
         const auto &owner=PaneCatalogue::page(page);
         for(const auto &suffix:owner.toggleSuffixes) names.append(owner.togglePrefix+toggleName+suffix);
+        if(!alternateToggleName.isEmpty()) names.append(alternateToggleName);
         return names;
     }
     bool preserveNativeLayout() const { const auto control=colorControl(objectName); return page==Page::Color && !(control && control->wholeLayout); }
@@ -111,16 +116,20 @@ struct PaneDescriptor {
             || (page==Page::Color && (header==Header::Nodes || header==Header::Gallery
                 || header==Header::TimelineCorner || objectName==QLatin1String("keyframesWidgetContainer")));
     }
-    bool requireNativeHeader() const { return page==Page::Fairlight || (header==Header::ClipsGutter || header==Header::ColorViewer || header==Header::ColorControl); }
+    bool requireNativeHeader() const { return page==Page::Media || page==Page::Fairlight || (header==Header::ClipsGutter || header==Header::ColorViewer || header==Header::ColorControl); }
     bool serializeInitialization() const {
         // Edit's two right-sidebar selectors can deselect each other while
         // their native initialization is queued. Detach one before opening next.
         return page==Page::Color || page==Page::Fairlight
-            || (page==Page::Edit && (header==Header::Inspector || header==Header::Metadata));
+            || ((page==Page::Edit || page==Page::Media) && (header==Header::Inspector || header==Header::Metadata));
     }
 };
 inline const QVector<PaneDescriptor> &panes() {
     static const QVector<PaneDescriptor> entries=[] { QVector<PaneDescriptor> result={
+        {"frameMediaPageMediaStorage","Media Storage",Page::Media,"MediaLibraryVisibility","",Header::MediaStorage,true,Kind::Sidebar,"","","btnMediaToggleMediaLibrary"},
+        {"frameMediaPageMediaPool","Media Pool",Page::Media,"","",Header::MediaPool,false},
+        {"frameMediaPageInspector","Inspector",Page::Media,"InspectorVisibility","",Header::Inspector,true,Kind::Sidebar,"","","btnMediaToggleInspectorPanelVisibilityDSM"},
+        {"frameMediaPageMetadataWidget","Metadata",Page::Media,"MetadataVisibility","",Header::Metadata,true,Kind::Sidebar,"","","btnMediaToggleMetadataPanelVisibilityDSM"},
         {"frameEditPageMediaPool","Media Pool",Page::Edit,"MediaPool","mediaPool",Header::MediaPool,false},
         {"frameEditPageSoundLibrary","Sound Library",Page::Edit,"SoundLibrary","soundLibrary",Header::SoundLibrary,false},
         {"frameEditPageKeyframeEditor","Keyframe Editor",Page::Edit,"KeyframeEditor","keyframeEditor",Header::Keyframes,false},
@@ -178,6 +187,7 @@ inline bool matchesActionlessHeader(Header header,const QString &name,const QStr
 inline bool matchesHeader(Header header,const QString &name,const QString &parent,const QString &grandparent) {
     switch(header) {
     case Header::MediaPool: return name=="btnMediaPoolOptions" && parent=="frameMediaPoolTitleBarTop";
+    case Header::MediaStorage: return name=="btnOptions" && parent=="frameMediaStorageTitleBarTop";
     case Header::Inspector: return name=="btnTitleOptions" && parent=="frameEffectsWidgetsTitle";
     case Header::Mixer: return name=="btnAudioMixerOptions" && (parent=="frameOptions" || parent=="frameHeaderContainer");
     case Header::Effects: return (name=="btnOptions" && parent=="frameEffectTopBar")

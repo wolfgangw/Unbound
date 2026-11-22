@@ -436,7 +436,9 @@ private:
             if(!toggle) continue;
             auto session=m_sessions.value(name);
             if(m_settings.floating(key) && (!session || !session->active())) continue;
-            if(toggle->isChecked()!=checked) {
+            if(name==QLatin1String("frameMediaPageMetadataWidget") && session && session->active()) {
+                session->setMediaMetadataExpanded(toggle,checked);
+            } else if(toggle->isChecked()!=checked) {
                 if(!checked && session && session->active() && !preservesNativeLayout(name)) session->reclaimNativeSpace(toggle);
                 else toggle->click();
             }
@@ -513,8 +515,12 @@ private:
             if (!matchesNativeToggle(it.key(),name)) continue;
             m_toggles[it.key()].append(button);
             m_watchedToggles.insert(button);
-            connect(button,&QAbstractButton::clicked,this,[this,button] {
-                if(!Unbound::LayoutRestorePolicy::ToggleState::temporary(button)) queueRememberUserToggles();
+            connect(button,&QAbstractButton::clicked,this,[this,button,name=it.key()] {
+                if(name==QLatin1String("frameMediaPageMetadataWidget")) {
+                    auto session=m_sessions.value(name);
+                    if(session && session->mediaMetadataUpdating()) return;
+                    queueRememberUserToggles();
+                } else if(!Unbound::LayoutRestorePolicy::ToggleState::temporary(button)) queueRememberUserToggles();
                 scheduleDiscovery();
             });
             connect(button,&QObject::destroyed,this,[this,button] { m_watchedToggles.remove(button); scheduleDiscovery(); });
@@ -529,13 +535,29 @@ private:
         // content and internal visibility state. Do not unhide descendants:
         // some of them are alternative meter views that must remain hidden.
         QAbstractButton *toggle = nullptr;
+        QAbstractButton *peerToggle = nullptr;
+        bool ambiguousPeer = false;
         for (auto button : m_toggles.value(name)) {
-            if (!button || button->window()!=pane->window() || !button->isVisible()
+            if (!button || !button->isVisible()
                 || !button->isCheckable() || !button->isEnabled()) continue;
+            if (button->window()!=pane->window()) {
+                // A Dual Screen toolbar may control a pane on the other display.
+                // Follow only a selector in the same logical page or its named auxiliary.
+                const auto &page=Catalogue::page(Catalogue::find(name)->page);
+                const auto auxiliary=Unbound::auxiliaryPanePage(button);
+                bool samePage=auxiliary==&page;
+                if (!auxiliary) for(auto owner=button->parentWidget();owner;owner=owner->parentWidget())
+                    if(owner->objectName()==page.objectName) { samePage=true; break; }
+                if (samePage) {
+                    ambiguousPeer=ambiguousPeer || peerToggle;
+                    peerToggle=button;
+                }
+                continue;
+            }
             if (toggle) return nullptr; // Ambiguous UI: never click an arbitrary control.
             toggle = button;
         }
-        return toggle;
+        return toggle ? toggle : (ambiguousPeer ? nullptr : peerToggle);
     }
     void rememberUserToggles()
     {
@@ -722,7 +744,9 @@ private:
                 if (button) session->observeNativeToggle(button);
             if (toggle) {
                 const bool savedChoice=automatic && m_settings.hasToggle(settingsKey(name));
-                if (savedChoice && preserveNativeLayout) m_pendingColorToggles.insert(name);
+                if (name==QLatin1String("frameMediaPageMetadataWidget")) {
+                    session->setMediaMetadataExpanded(toggle,savedChoice && m_settings.toggle(settingsKey(name)));
+                } else if (savedChoice && preserveNativeLayout) m_pendingColorToggles.insert(name);
                 else if (savedChoice) {
                     m_restoringToggles = true;
                     if (toggle->isChecked() != m_settings.toggle(settingsKey(name))) {
@@ -736,7 +760,7 @@ private:
                     // through its native handler. Never alter a failed detach.
                     session->reclaimNativeSpace(toggle);
                 }
-                if (!savedChoice) settingsError(m_settings.saveToggle(settingsKey(name),toggle->isChecked()));
+                if (!savedChoice) settingsError(m_settings.saveToggle(settingsKey(name),Unbound::NativeToggleState::checked(toggle)));
             }
             session->rememberGeometry();
             settingsError(m_settings.saveFloating(settingsKey(name), true));
@@ -855,6 +879,11 @@ private:
                     });
                 m_viewers->dockingWarningChanged=[this] { if(m_layoutMenu) m_layoutMenu->refreshDockingWarning(); };
             }
+        }
+        if(auto metadata=m_sessions.value("frameMediaPageMetadataWidget"); metadata && metadata->active()) {
+            const QString name=QStringLiteral("frameMediaPageMetadataWidget");
+            if(auto pane=m_candidates.value(name); pane && panePage(pane) && panePage(pane)->isVisible())
+                metadata->refreshMediaMetadataSelector(nativeToggle(pane,name));
         }
         prepareColorRestoration();
         showDockedPanes();

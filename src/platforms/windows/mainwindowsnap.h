@@ -13,6 +13,7 @@ public:
     {
         const auto handle = window ? reinterpret_cast<HWND>(window->effectiveWinId()) : nullptr;
         if (handle == m_handle) return;
+        resizeGesture(m_handle,false);
         stopFrames(); m_liveTarget=false;m_snap.end();
         if (m_handle) RemoveWindowSubclass(m_handle, dispatch, reinterpret_cast<UINT_PTR>(this));
         m_handle = nullptr;
@@ -26,6 +27,7 @@ private:
     {
         auto self = reinterpret_cast<MainWindowSnap *>(data);
         if (message == WM_NCDESTROY) {
+            self->resizeGesture(handle,false);
             self->stopFrames();self->m_snap.end();
             RemoveWindowSubclass(handle, dispatch, id);
             self->m_handle = nullptr;
@@ -81,6 +83,7 @@ private:
             m_topAligned = m_commitPending = false;
             stopFrames(); m_liveTarget=false;m_snap.end();
         }
+        if(message==WM_SHOWWINDOW && !wParam) resizeGesture(handle,false);
         if (message == WM_EXITSIZEMOVE) {
             const bool settle=m_liveTarget;
             stopFrames(); m_liveTarget=false;
@@ -92,6 +95,7 @@ private:
                 putRect(handle,final);
             }
             m_snap.end();
+            resizeGesture(handle,false);
             if (m_topAligned && !(GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
                 m_commitPending = true;
                 PostMessage(handle, commitMessage(), 0, 0);
@@ -101,6 +105,7 @@ private:
         if (m_active && !IsZoomed(handle) && lParam && (message == WM_MOVING || message == WM_SIZING)) {
             int hit = HTCAPTION;
             if (message == WM_SIZING) {
+                resizeGesture(handle,true);
                 switch (wParam) {
                 case WMSZ_LEFT: hit = HTLEFT; break;
                 case WMSZ_RIGHT: hit = HTRIGHT; break;
@@ -162,6 +167,12 @@ private:
         }
         return DefSubclassProc(handle, message, wParam, lParam);
     }
+    void resizeGesture(HWND handle,bool started) {
+        if(m_resizing==started) return;
+        m_resizing=started;
+        MainWindowResizeEvent::notify(QWidget::find(reinterpret_cast<WId>(handle)),started);
+    }
+    bool m_resizing=false;
     static UINT commitMessage()
     {
         static const UINT message = RegisterWindowMessageW(L"Unbound.MainWindowSnap.Commit");

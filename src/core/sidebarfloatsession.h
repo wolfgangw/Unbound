@@ -18,6 +18,7 @@
 #include <memory>
 #include "windowintegration.h"
 #include "layoutreadiness.h"
+#include "mediametadataspace.h"
 #include "nodescanvasbounds.h"
 #include "paneactivationbridge.h"
 #include "auditionplayeractivation.h"
@@ -127,6 +128,21 @@ public:
         }
         if (report) report(error);
         return error;
+    }
+    bool mediaMetadataUpdating() const { return m_metadataSpace && m_metadataSpace->updating(); }
+    void refreshMediaMetadataSelector(QAbstractButton *button)
+    {
+        if(m_metadataSpace && button && m_metadataSpace->button()!=button)
+            setMediaMetadataExpanded(button,m_metadataSpace->expanded());
+    }
+    void setMediaMetadataExpanded(QAbstractButton *button, bool expanded)
+    {
+        if (!m_host || !m_root || !m_slot || !button) return;
+        if (!m_metadataSpace || m_metadataSpace->button()!=button) {
+            m_metadataSpace.reset();
+            m_metadataSpace=std::make_unique<MediaMetadataSpace>(m_slot,m_root,button);
+        }
+        m_metadataSpace->setExpanded(expanded);
     }
     void reclaimNativeSpace(QAbstractButton *button)
     {
@@ -439,6 +455,7 @@ public:
         static_cast<PaneFloatingWindow *>(m_host.data())->finishDeferredResize();
         rememberGeometry();
         m_restoring = true;
+        m_metadataSpace.reset();
         delete m_timelineHeader; m_timelineHeader=nullptr;
         stopColorToolActivation();
         stopActivationBridge();
@@ -687,6 +704,7 @@ private:
     void clear()
     {
         m_pageReturnWork.clear();
+        m_metadataSpace.reset();
         delete m_mainResizeGeometry; m_mainResizeGeometry=nullptr;
         delete m_timelineHeader; m_timelineHeader=nullptr;
         delete m_nativePalette; m_nativePalette=nullptr;
@@ -720,6 +738,7 @@ private:
     QPointer<QWidget> m_slot, m_layoutSlot, m_root, m_host, m_placeholder;
     QPointer<PaneMainResizeGeometry> m_mainResizeGeometry;
     std::unique_ptr<PaneElidingLabels> m_elidingLabels;
+    std::unique_ptr<MediaMetadataSpace> m_metadataSpace;
     NodesCanvasBounds *m_nodesBounds=nullptr;
     ColorClipsAdapter *m_clipsAdapter=nullptr;
     ColorTimelineHeader *m_timelineHeader=nullptr;

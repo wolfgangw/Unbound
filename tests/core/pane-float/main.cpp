@@ -13,6 +13,9 @@ int main(int argc, char **argv)
         const QVector<Unbound::PaneCatalogue::ElidingLabelDescriptor> cases={
             {"frameEditPageInspector","frameEffectsWidgetsTitle","labelTitle"},
             {"frameInspectorContainer","frameEffectsWidgetsTitle","labelTitle"},
+            {"frameMediaPageInspector","frameEffectsWidgetsTitle","labelTitle"},
+            {"frameMediaPageMetadataWidget","frameClipInfoTop","lblMetadataFileName"},
+            {"frameMediaPageMetadataWidget","framePhotoInfoTop","lblMetadataPhotoFileName"},
             {"frameEditPageMetadata","frameClipInfoTop","lblMetadataFileName"},
             {"frameEditPageMetadata","framePhotoInfoTop","lblMetadataPhotoFileName"}};
         for(const auto &spec:cases) {

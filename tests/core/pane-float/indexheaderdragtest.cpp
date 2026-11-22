@@ -66,14 +66,14 @@ static void testIndexHeaderDrag(bool fairlight, bool effects=false) {
         : "PASS: Edit Index tab/header dragging, native clicks and dock/refloat lifecycle");
 }
 
-static void testMetadataHeaders(bool fairlight) {
+static void testMetadataHeaders(const QString &paneName) {
     using LayoutTest::require;
     QWidget docked;
     Unbound::PaneFloatingWindow host;
     host.setGeometry(300,200,500,300);
     auto outer=new QVBoxLayout(&host);
     auto pane=new QFrame;
-    pane->setObjectName(fairlight ? "frameMetadataContainer" : "frameEditPageMetadata");
+    pane->setObjectName(paneName);
     outer->addWidget(pane);
     auto column=new QVBoxLayout(pane);
     auto stack=new QStackedWidget; column->addWidget(stack);
@@ -125,8 +125,7 @@ static void testMetadataHeaders(bool fairlight) {
         button->click(); require(clicks==5,"Empty Metadata lost undocking action");
     }
     require(pane->findChildren<QToolButton *>("resolvePaneUndockButton").isEmpty(),"Metadata decoration leaked buttons");
-    std::puts(fairlight ? "PASS: Fairlight Metadata empty/single/multi headers, title dragging and docking"
-        : "PASS: Edit Metadata empty/single/multi headers, title dragging and docking");
+    std::printf("PASS: %s empty/single/multi headers, title dragging and docking\n",qPrintable(paneName));
 }
 
 static void testUndockDrag() {
@@ -225,8 +224,8 @@ static void testUndockDrag() {
 
 void testIndexHeaderDrag() {
     testUndockDrag();
-    testMetadataHeaders(false);
-    testMetadataHeaders(true);
+    for(const auto &pane:{"frameEditPageMetadata","frameMetadataContainer","frameMediaPageMetadataWidget"})
+        testMetadataHeaders(pane);
     testIndexHeaderDrag(false);
     testIndexHeaderDrag(true);
     testIndexHeaderDrag(false,true);

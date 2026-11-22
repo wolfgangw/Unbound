@@ -14,7 +14,13 @@ class ResolveTopEdgeFixture : public QWidget
 {
 public:
     bool clampTopOnMoveExit = false;
+    QVector<bool> resizeBoundaries;
 protected:
+    bool event(QEvent *event) override {
+        if(event->type()==Unbound::MainWindowResizeEvent::eventType())
+            resizeBoundaries.append(static_cast<Unbound::MainWindowResizeEvent *>(event)->started);
+        return QWidget::event(event);
+    }
     bool nativeEvent(const QByteArray &type, void *message, long *result) override
     {
         const auto msg = static_cast<MSG *>(message);
@@ -691,12 +697,15 @@ bool runPlatformWindowTests(QApplication &app)
         check(SendMessage(handle, WM_MOVING, 0, reinterpret_cast<LPARAM>(&moving)) == TRUE, "Main native move message not handled");
         const int insetRight = original.right - contact.x() - contact.width();
         check(moving.right - insetRight == other.x(), "Main movement did not join contact edges exactly");
+        check(main.resizeBoundaries.isEmpty(),"Moving the main window began a resize transaction");
         RECT sizing = original;
         sizing.right = other.x() + insetRight + 6;
         check(SendMessage(handle, WM_SIZING, WMSZ_RIGHT, reinterpret_cast<LPARAM>(&sizing)) == TRUE,
             "Main native sizing message not handled");
         check(sizing.left == original.left && sizing.right - insetRight == other.x(), "Main resize snapped wrong edge or left a gap");
+        SendMessage(handle, WM_SIZING, WMSZ_RIGHT, reinterpret_cast<LPARAM>(&sizing));
         SendMessage(handle, WM_EXITSIZEMOVE, 0, 0);
+        check(main.resizeBoundaries==QVector<bool>{true,false},"Native main resize did not produce one begin/end pair");
         filter.setWindow(nullptr);
         Unbound::PaneSnapWindows snap;
         snap.begin(handle);

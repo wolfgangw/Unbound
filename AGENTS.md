@@ -39,6 +39,7 @@ Intel Mac operation remains unvalidated and is offered for community testing.
 
 | Page | Supported content |
 | --- | --- |
+| Media | Media Storage, Media Pool, Inspector and Metadata |
 | Edit | Media Pool, Effects, Sound Library, Keyframe Editor, Edit Index, Inspector, Metadata, Mixer, Source and Program viewers, floating Video Scopes |
 | Color | Nodes, Gallery, LUTs, Media Pool, Effects, Timeline, Clips, Viewer and lower Color controls |
 | Fairlight | Media Pool, Effects, Index, Groups, Sound Library, ADR, Mixer, Metadata and Inspector. Meters are excluded. |
@@ -135,13 +136,18 @@ interruption. Preserve native accessibility and input delivery.
 
 Decorate existing headers. Drag from titles and unused background. Controls
 and selectable text keep native input. Decorate both populated and empty
-Edit/Fairlight Metadata headers so the button and dragging survive selection changes.
+Media/Edit/Fairlight Metadata headers so the button and dragging survive selection changes.
 
 Manual undocking turns off the corresponding native visibility toggle. Docking
 turns it on, deferred on an inactive page. Queue native actions only for panes
 with a known toggle or selector. Preserve saved choices across lazy initialization.
 Serialize Edit Inspector/Metadata initialization so a queued native sidebar
-deselection cannot strand the other pane. Keep occupied hosts on page switches.
+deselection cannot strand the other pane. On Media, the Metadata selector also
+enables clip updates. To reclaim its sidebar, measure where Resolve places the
+other regions with Metadata closed, then keep those bounds with the selector on.
+Persist the user's sidebar choice. During interactive main-window resize, leave
+the reclaimed sidebar closed until the native resize ends, then resume delivery.
+Keep occupied hosts on page switches.
 After successful docking, delete empty hosts and their compositors.
 
 Associate panes with their **logical page**, including named auxiliary pages in

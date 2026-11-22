@@ -59,8 +59,9 @@ public:
             }];
         auto center = NSNotificationCenter.defaultCenter;
         m_beginResize = [center addObserverForName:NSWindowWillStartLiveResizeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            if (!alive || (!alive->m_floating && !alive->m_resizePress)
-                || note.object != nativeWindow(alive->m_window) || alive->m_button) return;
+            if (!alive || note.object != nativeWindow(alive->m_window)) return;
+            alive->mainResizeGesture(true);
+            if ((!alive->m_floating && !alive->m_resizePress) || alive->m_button) return;
             // Cocoa owns the cursor and its complete edge/corner hit regions.
             // Some native resize starts lie outside our thin frame press band.
             if (!alive->m_active) alive->begin({},false,true);
@@ -76,12 +77,15 @@ public:
                 alive->updateNativeGeometry();
         }];
         m_end = [center addObserverForName:NSWindowDidEndLiveResizeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            if (alive && note.object == nativeWindow(alive->m_window) && alive->followsNativeFrame()) alive->finish(false);
+            if (!alive || note.object != nativeWindow(alive->m_window)) return;
+            if (alive->followsNativeFrame()) alive->finish(false);
+            alive->mainResizeGesture(false);
         }];
     }
     ~MacWindowInteraction() override
     {
         finish(false);
+        mainResizeGesture(false);
         if (m_hostDragWindow && nativeWindow(m_window)==m_hostDragWindow)
             m_hostDragWindow.movable=m_originalMovable;
         if (qApp) qApp->removeEventFilter(this);
@@ -201,6 +205,12 @@ protected:
         return false;
     }
 private:
+    void mainResizeGesture(bool started) {
+        if(m_floating || m_mainResizing==started) return;
+        m_mainResizing=started;
+        MainWindowResizeEvent::notify(m_window,started);
+    }
+    bool m_mainResizing=false;
     bool followsNativeFrame() const { return !m_floating || m_nativeResize; }
     void queueFinalCommit(const QRect &target)
     {

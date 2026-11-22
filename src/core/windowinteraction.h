@@ -19,4 +19,21 @@ public:
 private:
     WindowInteractionEvent() : QEvent(eventType()) {}
 };
+// Native sizing loops can span many Qt event turns, including pauses while
+// the pointer is still held. Consumers finish at the actual gesture boundary.
+class MainWindowResizeEvent final : public QEvent {
+public:
+    static QEvent::Type eventType() {
+        static const auto type=static_cast<QEvent::Type>(QEvent::registerEventType());
+        return type;
+    }
+    static void notify(QObject *window,bool started) {
+        if(!window) return;
+        MainWindowResizeEvent event(started);
+        QCoreApplication::sendEvent(window,&event);
+    }
+    const bool started;
+private:
+    explicit MainWindowResizeEvent(bool start) : QEvent(eventType()),started(start) {}
+};
 }
