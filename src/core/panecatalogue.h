@@ -42,14 +42,14 @@ struct ColorControlDescriptor {
     QString objectName,label,scope,header,headerOwner,anchor,selector;
     bool wholeLayout=false;
     QString retainedContainer; // Native tool lookup must still find this object in its stack slot.
-    bool selectOnFloatingInput=false; // Viewer gestures require the native tool selection.
+    bool selectOnFloatingInput=false; // Viewer gestures or zone previews require native tool selection.
 };
 inline const QVector<ColorControlDescriptor> &colorControls() {
     static const QVector<ColorControlDescriptor> entries={
         {"cameraRawTab","Camera Raw","UiPrimaryWidgetContainer","cameraRawHeader","cameraRawTab","m_RefreshPushBtn","btnScene",true},
         {"colorMatchTab","Color Match","UiPrimaryWidgetContainer","frameHeader","frameBackground","btnMenu","btnColorMatch",false},
         {"colorWheelsTab","Color Wheels","UiPrimaryWidgetContainer","colorWheelTopFrame","colorWheelsMainContainer","","btnColorWheels",false},
-        {"colorHDRTab","HDR","UiPrimaryWidgetContainer","colorWheelTopFrame","colorHDRTab","btnOptionsMenu","btnHdr",true},
+        {"colorHDRTab","HDR","UiPrimaryWidgetContainer","colorWheelTopFrame","colorHDRTab","btnOptionsMenu","btnHdr",true,"",true},
         {"maskingTab","RGB Mixer","UiPrimaryWidgetContainer","frameHeader","frame","","btnMasking",false},
         {"motionEffectsTab","Motion Effects","UiPrimaryWidgetContainer","frameMotionEffectsHeader","frame","","btnMotionEffects",false},
         {"curvesTab","Curves","UiSecWidgetContainer","frameTop","curvesTabWidget","","btnCurves",false},

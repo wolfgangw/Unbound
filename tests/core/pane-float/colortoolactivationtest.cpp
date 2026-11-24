@@ -27,10 +27,12 @@ void testColorToolActivation() {
     QStringList affected;
     for(const auto &tool:Unbound::PaneCatalogue::colorControls())
         if(tool.selectOnFloatingInput) {
-            require(!tool.retainedContainer.isEmpty(),"Viewer tool activation lost its native container");
+            if(tool.objectName=="colorHDRTab")
+                require(tool.wholeLayout && tool.selector=="btnHdr","Floating HDR lost its complete layout or native selector");
+            else require(!tool.retainedContainer.isEmpty(),"Viewer tool activation lost its native container");
             affected.append(tool.objectName);
         }
-    require(affected==QStringList({"qualTab","windowTab","trackerTab","personMaskTab"}),
+    require(affected==QStringList({"colorHDRTab","qualTab","windowTab","trackerTab","personMaskTab"}),
         "Native tool selection escaped the validated catalogue scope");
 
     QWidget main;auto layout=new QVBoxLayout(&main);
