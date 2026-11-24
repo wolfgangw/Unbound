@@ -343,7 +343,7 @@ public:
                 m_activationBridge=new PaneActivationBridge(m_root->window(),m_root,host,this,host->objectName());
         }
         if(PaneCatalogue::colorControl(slot->objectName()))
-            m_expandGuard=new ColorExpandGuard(host,this);
+            m_expandGuard=new ColorExpandGuard(host,this,slot);
         if(control && control->selectOnFloatingInput
             && m_root->objectName()==QLatin1String("WStackPage_Color"))
             m_colorToolActivation=new ColorToolActivation(host,m_root,control->selector,this);

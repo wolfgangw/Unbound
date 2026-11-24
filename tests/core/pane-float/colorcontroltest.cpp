@@ -370,6 +370,38 @@ void testColorControls() {
             paletteAction=new QPushButton("Native mode"); selectorRow->addWidget(paletteAction);
         }
         auto expand=new QPushButton("Expand"); expand->setObjectName("btnUndock"); row->addWidget(expand);
+        QPushButton *zonesArrow=nullptr,*hdrWheels=nullptr,*hdrGraph=nullptr;
+        QWidget *zonesPair=nullptr;
+        bool zonesVisible=false,wideTray=false;
+        if(control.objectName=="colorHDRTab") {
+            auto addTab=[&](const char *name) {
+                auto tab=new QPushButton(header);
+                tab->setObjectName(name);tab->setCheckable(true);tab->setAutoExclusive(true);
+                row->addWidget(tab);
+                return tab;
+            };
+            hdrWheels=addTab("btnWheelsView");
+            hdrGraph=addTab("btnGraphsView");
+            hdrGraph->setChecked(true);
+            zonesPair=new QWidget;
+            zonesPair->setObjectName("frameFlatViewContainer");
+            body->addWidget(zonesPair);
+            zonesPair->hide();
+            zonesArrow=new QPushButton(header);
+            zonesArrow->setObjectName("btnExpandWidget");
+            zonesArrow->setCheckable(true);
+            row->addWidget(zonesArrow);
+            QObject::connect(zonesArrow,&QPushButton::toggled,slot,[&,slot](bool open) {
+                zonesVisible=open;
+                zonesPair->setVisible(open);
+                slot->setWindowTitle(open ? "Wide" : "Normal");
+            });
+            QObject::connect(slot,&QWidget::windowTitleChanged,slot,[&](const QString &title) {
+                wideTray=title=="Wide";
+            });
+            zonesArrow->click();
+            require(zonesVisible && wideTray,"Docked HDR arrow did not expand graph and tray");
+        }
         NativePaletteDialog *dialog=nullptr;
         if(expanded) {
             if(control.objectName!="colorMapperTab") content->setMinimumSize(360,180);
@@ -552,6 +584,67 @@ void testColorControls() {
         require(!expand->isEnabled(),"Native update re-enabled floating Expand");
         require(stack->count()==2 && stack->widget(1)==slot,"Color stack indices changed on detach");
         require(value->window()==session.floatingWindow() && !expand->isEnabled(),"Tool content or native Expand ownership incorrect");
+        if(zonesArrow) {
+            require(zonesArrow->isEnabled() && zonesVisible,"Tearoff lost the open HDR graph or disabled its arrow");
+            auto clickZones=[&] {
+                const auto point=zonesArrow->rect().center();
+                for(auto type:{QEvent::MouseButtonPress,QEvent::MouseButtonRelease}) {
+                    QMouseEvent event(type,point,zonesArrow->mapToGlobal(point),Qt::LeftButton,
+                        type==QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton,Qt::NoModifier);
+                    QApplication::sendEvent(zonesArrow,&event);
+                }
+            };
+            clickZones();
+            require(!zonesVisible && wideTray && !slot->signalsBlocked(),"Floating HDR mouse click resized the tray");
+            require(hdrWheels->isChecked(),"Closing the HDR split left the graph filling the window");
+            hdrGraph->setChecked(true); // Deferred native tab reset after a tray switch.
+            LayoutTest::settle();
+            require(hdrWheels->isChecked(),"Native tab reset overrode an explicit HDR split close");
+            hdrGraph->click();
+            LayoutTest::settle();
+            require(hdrGraph->isChecked(),"Explicit graph-only selection was overridden");
+            slot->blockSignals(true);
+            for(auto type:{QEvent::KeyPress,QEvent::KeyRelease}) {
+                QKeyEvent event(type,Qt::Key_Space,Qt::NoModifier);
+                QApplication::sendEvent(zonesArrow,&event);
+            }
+            require(zonesVisible && slot->signalsBlocked(),"HDR keyboard input lost graph or prior signal blocking");
+            slot->blockSignals(false);
+            clickZones();
+            require(!zonesVisible && wideTray,"Floating HDR graph did not close independently");
+            clickZones();
+            struct HostPaint : QObject {
+                QWidget *pair=nullptr;
+                int complete=0,partial=0;
+                bool eventFilter(QObject *,QEvent *event) override {
+                    if(event->type()==QEvent::Paint) {
+                        if(pair->isVisible()) ++complete;
+                        else ++partial;
+                    }
+                    return false;
+                }
+            } paints;
+            paints.pair=zonesPair;
+            auto host=session.floatingWindow();
+            host->installEventFilter(&paints);
+            stack->setCurrentWidget(other);
+            {
+                // Resolve returns HDR to its single-tab layout without emitting
+                // toggled when another palette takes the tray.
+                const QSignalBlocker silent(zonesArrow);
+                zonesArrow->setChecked(false);
+                zonesVisible=false;
+                zonesPair->hide();
+                slot->setWindowTitle("Normal");
+            }
+            host->update();
+            QEvent flush(QEvent::UpdateRequest);
+            QApplication::sendEvent(host,&flush);
+            LayoutTest::settle();
+            require(!paints.partial && paints.complete,"HDR host presented the interim layout or failed to repaint");
+            require(zonesArrow->isChecked() && zonesPair->isVisible() && zonesVisible && !wideTray
+                && stack->currentWidget()==other,"Selecting another tray tool collapsed floating HDR or stole the tray");
+        }
         stack->setCurrentWidget(other); LayoutTest::settle();
         require(session.floatingWindow()->isVisible() && value->isVisible(),"Native selector hid floating tool");
         value->click(); require(clicks==1,"Native tool connection lost");
@@ -598,6 +691,11 @@ void testColorControls() {
             require(warperModes->widget(i)->sizePolicy()==warperPolicies[i],"Docking failed to restore Warper mode policies");
         require(!session.active() && slot->layout()==native && content->parentWidget()==slot,
             "Native Color layout was not restored");
+        if(zonesArrow) {
+            require(!zonesVisible && !wideTray,"Docking HDR overwrote the newer native tray arrangement");
+            zonesArrow->click();
+            require(zonesVisible && wideTray,"Docked HDR arrow no longer controls the native tray");
+        }
         if(lateExpand) require(lateExpand->isEnabled(),"Late Expand was not restored on docking");
         if(wheels) require(wheels->sizePolicy()==originalPolicy && wheels->minimumWidth()==0,"Wheel native sizing policy not restored");
         if(retained) require(content->layout()==body,"Retained tool original content layout was not restored");

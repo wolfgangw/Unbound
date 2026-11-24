@@ -2,6 +2,7 @@
 #ifndef UNBOUND_COLOREXPANDGUARD_H
 #define UNBOUND_COLOREXPANDGUARD_H
 #include <QAbstractButton>
+#include "floatinghdrzones.h"
 #include <QPointer>
 #include <QTimer>
 #include <QEvent>
@@ -11,7 +12,10 @@ namespace Unbound {
 // Expand again or construct a new header; neither may steal our hosted content.
 class ColorExpandGuard : public QObject {
 public:
-    ColorExpandGuard(QWidget *host,QObject *owner) : QObject(owner),m_host(host) { observe(); }
+    ColorExpandGuard(QWidget *host,QObject *owner,QWidget *slot=nullptr) : QObject(owner),m_host(host) {
+        if(slot && slot->objectName()==QLatin1String("colorHDRTab")) m_hdrZones=new FloatingHdrZones(host,slot,this);
+        observe();
+    }
     ~ColorExpandGuard() override {
         for(auto widget:m_widgets) if(widget) widget->removeEventFilter(this);
         for(const auto &entry:m_buttons) if(entry.first) entry.first->setEnabled(entry.second);
@@ -38,6 +42,7 @@ private:
         for(auto widget:widgets) {
             if(!known.contains(widget)) { m_widgets.append(widget); widget->installEventFilter(this); }
             auto button=qobject_cast<QAbstractButton *>(widget);
+            if(m_hdrZones && m_hdrZones->observe(widget)) continue;
             if(!button || (button->objectName()!=QLatin1String("btnUndock")
                 && button->objectName()!=QLatin1String("btnExpandWidget")
                 && button->objectName()!=QLatin1String("btnTGExpand"))) continue;
@@ -48,6 +53,7 @@ private:
         }
     }
     QPointer<QWidget> m_host;
+    FloatingHdrZones *m_hdrZones=nullptr;
     QList<QPointer<QWidget>> m_widgets;
     QList<QPair<QPointer<QAbstractButton>,bool>> m_buttons;
     bool m_queued=false;
