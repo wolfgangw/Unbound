@@ -52,8 +52,22 @@ void testTrayPresentation() {
     auto qualifier=addButton("btnQualifier",qual),magic=addButton("btnPersonMask",mask);
     Unbound::ColorToolTray tray(&page,[&](const QString &name){return slotsByName.value(name);},
         [&](const QString &name)->QWidget * { return name=="qualTab" ? &host : nullptr; },{},&page);
+    auto qualifierBody=new Picker;
+    (new QVBoxLayout(&host))->addWidget(qualifierBody);
     page.show(); host.show(); LayoutTest::settle();
-    tray.activate(qual,qualifier);
+    LayoutTest::activate(page);
+    Unbound::ColorToolActivation activation(&host,&page,"btnQualifier",&page,&tray,qual);
+    magic->click();
+    QApplication::setActiveWindow(&host);
+    int qualifierPresses=0;
+    qualifierBody->pressed=[&] {
+        require(stack->currentWidget()==qual && tray.owns(qual),
+            "An ordinary floating Qualifier press left the viewer assigned to docked Magic Mask");
+        ++qualifierPresses;
+    };
+    press(qualifierBody);
+    LayoutTest::settle();
+    require(qualifierPresses==1,"The original floating palette press was lost or replayed");
     require(stack->currentWidget()==qual && !holder->layout() && faster->isVisible() && rgb->layout()==adjacentLayout,
         "Selecting floating tool failed to keep the docked palette in its own region");
     require(tray.displayedSelector("btnQualifier")=="btnPersonMask",
@@ -66,7 +80,8 @@ void testTrayPresentation() {
     point->pressed=[&]{ routed=stack->currentWidget()==mask && holder->layout()==inner; };
     press(point);
     require(routed && !tray.owns(qual),"Docked picker did not reclaim its own native slot before the first press");
-    tray.activate(qual,qualifier);
+    press(qualifierBody);
+    require(qualifierPresses==2 && !holder->layout(),"An already-active floating palette could not reclaim the viewer");
     // Native press/release selects the displayed palette. The deferred handoff
     // can only run after all its clicked handlers return.
     press(magic);

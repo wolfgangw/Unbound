@@ -334,8 +334,10 @@ a fixed number of tool regions.
 [ColorToolTray](src/core/colortooltray.h) keeps a displaced docked palette interactive
 in the same tray region while Resolve highlights the selected viewer tool. Transfer
 its native layout to a child at the floating tool's placeholder, leaving the
-original stack intact. Local controls keep viewer ownership. A declared viewer
-action returns the palette to its slot and selects it before native input. Return
+original stack intact. With a docked tool active, clicking into a floating viewer
+tool selects it even when its picker is already armed. Local adjustments in the
+displayed docked palette preserve that choice. Its viewer actions return the
+palette to its slot and select it before native input. Return
 borrowed layouts before docking, transfer or page departure. Page return remembers
 the displayed palette. Use this policy across tool pairs and split trays.
 

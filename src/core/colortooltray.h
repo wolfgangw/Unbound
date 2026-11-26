@@ -6,6 +6,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QStackedWidget>
 
 namespace Unbound {
@@ -55,6 +56,17 @@ public:
         stopIfIdle();
     }
     bool owns(QWidget *slot) const { return slot && slot->objectName()==m_owner; }
+
+    bool selectsFromFloatingPress(const Tool &tool,QWidget *receiver,QWidget *host) const {
+        // A click into a floating palette chooses it when the viewer is still
+        // with a docked tool. No second click on its already-armed picker.
+        if (m_owner.isEmpty() || m_owner==tool.objectName || requestsViewer(tool,receiver,host)) return true;
+        // With another floating viewer tool selected, leave local adjustments
+        // alone. A click on the host or a plain palette background chooses it.
+        if (qobject_cast<QLabel *>(receiver) && ancestor(receiver,tool.header)) return true;
+        return receiver==host || receiver->metaObject()==&QFrame::staticMetaObject
+            || receiver->metaObject()==&QWidget::staticMetaObject;
+    }
 
     QString displayedSelector(const QString &native) const {
         for (const auto &p:m_presentations) {

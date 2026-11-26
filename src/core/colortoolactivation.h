@@ -63,6 +63,11 @@ protected:
             }
             auto widget=static_cast<QWidget *>(object);
             if(!m_host || widget->window()!=m_host)return false;
+            const QPointer<QWidget> receiver(widget);
+            // Qt can propagate a child's ignored press to several background
+            // widgets. Classify it by the control under the original press.
+            if(type==QEvent::MouseButtonPress)
+                if(auto child=widget->childAt(static_cast<QMouseEvent *>(event)->pos()))widget=child;
             // This press supersedes queued activation. Dock/menu gestures must
             // not change native tool selection on their way out.
             ++m_generation;
@@ -73,12 +78,13 @@ protected:
             m_revealing=false;++m_revealGeneration;
             if(m_tray && m_slot) {
                 const auto tool=PaneCatalogue::colorControl(m_slot->objectName());
-                // Native mouse presses propagate through ignored parents. Only
-                // the actual title or a declared viewer control selects a tool.
-                if(tool && !ColorToolTray::requestsViewer(*tool,widget,m_host))
-                    return false;
+                if(tool) {
+                    const bool choose=type==QEvent::MouseButtonPress
+                        ? m_tray->selectsFromFloatingPress(*tool,widget,m_host)
+                        : ColorToolTray::requestsViewer(*tool,widget,m_host);
+                    if(!choose)return false;
+                }
             }
-            const QPointer<QWidget> receiver(widget);
             select();
             // Native handlers may destroy the original receiver reentrantly.
             return !receiver;
