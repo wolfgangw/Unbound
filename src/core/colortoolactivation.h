@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
+#include "colortooltray.h"
 
 namespace Unbound {
 // A floating tool's Qt focus is not Resolve's viewer-tool selection. Use the
@@ -12,8 +13,9 @@ namespace Unbound {
 // The retained native tool container stays discoverable in its original slot.
 class ColorToolActivation final : public QObject {
 public:
-    ColorToolActivation(QWidget *host,QWidget *page,QString selector,QObject *owner)
-        :QObject(owner),m_host(host),m_page(page),m_selector(std::move(selector)) {
+    ColorToolActivation(QWidget *host,QWidget *page,QString selector,QObject *owner,
+        ColorToolTray *tray=nullptr,QWidget *slot=nullptr)
+        :QObject(owner),m_host(host),m_page(page),m_selector(std::move(selector)),m_tray(tray),m_slot(slot) {
         discover();
         qApp->installEventFilter(this);
     }
@@ -52,7 +54,13 @@ protected:
             QTimer::singleShot(0,this,[this,generation] {
                 if(generation==m_generation)select();
             });
-        } else if(type==QEvent::MouseButtonPress && object->isWidgetType()) {
+        } else if((type==QEvent::MouseButtonPress || type==QEvent::KeyPress || type==QEvent::Shortcut) && object->isWidgetType()) {
+            if(type==QEvent::MouseButtonPress && static_cast<QMouseEvent *>(event)->button()!=Qt::LeftButton)return false;
+            if(type!=QEvent::MouseButtonPress && (!m_tray || !qobject_cast<QAbstractButton *>(object)))return false;
+            if(type==QEvent::KeyPress) {
+                const auto key=static_cast<QKeyEvent *>(event)->key();
+                if(key!=Qt::Key_Space && key!=Qt::Key_Return && key!=Qt::Key_Enter)return false;
+            }
             auto widget=static_cast<QWidget *>(object);
             if(!m_host || widget->window()!=m_host)return false;
             // This press supersedes queued activation. Dock/menu gestures must
@@ -63,6 +71,13 @@ protected:
                 if(parent==m_host)break;
             }
             m_revealing=false;++m_revealGeneration;
+            if(m_tray && m_slot) {
+                const auto tool=PaneCatalogue::colorControl(m_slot->objectName());
+                // Native mouse presses propagate through ignored parents. Only
+                // the actual title or a declared viewer control selects a tool.
+                if(tool && !ColorToolTray::requestsViewer(*tool,widget,m_host))
+                    return false;
+            }
             const QPointer<QWidget> receiver(widget);
             select();
             // Native handlers may destroy the original receiver reentrantly.
@@ -95,16 +110,19 @@ private:
         // Native reconstruction may replace toolbar objects. Rediscover only
         // on this deliberate activation/input, scoped to the known toolbar.
         if(!button) { discover();button=availableButton(); }
-        if(!button || (m_selected==button && button->isChecked()))return;
+        if(!button || (m_selected==button && button->isChecked() && (!m_tray || m_tray->owns(m_slot))))return;
         // Checked alone is insufficient after expanded Warper/another window
         // owns viewer input. Re-select once per activation, not per local click.
         m_selected=button;m_selecting=true;
         const QPointer<ColorToolActivation> alive(this);
-        button->click();
+        if(m_tray && m_slot)m_tray->activate(m_slot,button);
+        else button->click();
         if(alive)m_selecting=false;
     }
     QPointer<QWidget> m_host,m_page;
     QString m_selector;
+    QPointer<ColorToolTray> m_tray;
+    QPointer<QWidget> m_slot;
     QList<QPointer<QAbstractButton>> m_buttons;
     QPointer<QAbstractButton> m_selected;
     unsigned m_generation=0;

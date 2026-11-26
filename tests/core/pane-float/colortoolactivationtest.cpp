@@ -19,11 +19,76 @@ void press(QWidget *widget) {
     QMouseEvent event(QEvent::MouseButtonPress,QPointF(2,2),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
     QApplication::sendEvent(widget,&event);
 }
+
+void testTrayPresentation() {
+    using LayoutTest::require;
+    QWidget page, host;
+    auto bottom=new QWidget(&page); bottom->setObjectName("frameColorBottom");
+    auto pageLayout=new QVBoxLayout(&page); pageLayout->addWidget(bottom);
+    auto rows=new QVBoxLayout(bottom);
+    auto toolbar=new QWidget; toolbar->setObjectName("frameColorBottomToolbar"); rows->addWidget(toolbar);
+    auto buttons=new QHBoxLayout(toolbar);
+    auto region=new QWidget; region->setObjectName("frameColorBottomToolsContainer"); rows->addWidget(region);
+    auto stacks=new QHBoxLayout(region);
+    auto stack=new QStackedWidget; stacks->addWidget(stack);
+    auto neighbor=new QStackedWidget; stacks->addWidget(neighbor);
+    QMap<QString,QWidget *> slotsByName;
+    auto slot=[&](const QString &name,QStackedWidget *parent) {
+        auto w=new QWidget; parent->addWidget(w); w->setObjectName(name);
+        slotsByName.insert(name,w); return w;
+    };
+    auto mask=slot("personMaskTab",stack),qual=slot("qualTab",stack),rgb=slot("maskingTab",neighbor);
+    auto adjacentLayout=new QVBoxLayout(rgb);
+    auto holder=new QWidget(mask); holder->setObjectName("personMaskTabWidget");
+    (new QVBoxLayout(mask))->addWidget(holder);
+    auto inner=new QVBoxLayout(holder);
+    auto faster=new Picker; faster->setObjectName("fasterQualityBtn"); inner->addWidget(faster);
+    auto point=new Picker; point->setObjectName("btnForegroundStroke"); inner->addWidget(point);
+    auto addButton=[&](const char *name,QWidget *slot) {
+        auto b=new QPushButton(name); b->setObjectName(name); buttons->addWidget(b);
+        QObject::connect(b,&QPushButton::clicked,&page,[=]{ stack->setCurrentWidget(slot); });
+        return b;
+    };
+    auto qualifier=addButton("btnQualifier",qual),magic=addButton("btnPersonMask",mask);
+    Unbound::ColorToolTray tray(&page,[&](const QString &name){return slotsByName.value(name);},
+        [&](const QString &name)->QWidget * { return name=="qualTab" ? &host : nullptr; },{},&page);
+    page.show(); host.show(); LayoutTest::settle();
+    tray.activate(qual,qualifier);
+    require(stack->currentWidget()==qual && !holder->layout() && faster->isVisible() && rgb->layout()==adjacentLayout,
+        "Selecting floating tool failed to keep the docked palette in its own region");
+    require(tray.displayedSelector("btnQualifier")=="btnPersonMask",
+        "Page-return capture remembered the placeholder instead of the displayed palette");
+    tray.prepareTransfer(rgb);
+    require(!holder->layout() && tray.owns(qual),"Moving an unrelated palette disturbed the active tray");
+    press(faster);
+    require(stack->currentWidget()==qual && !holder->layout(),"Local settings took the viewer away");
+    bool routed=false;
+    point->pressed=[&]{ routed=stack->currentWidget()==mask && holder->layout()==inner; };
+    press(point);
+    require(routed && !tray.owns(qual),"Docked picker did not reclaim its own native slot before the first press");
+    tray.activate(qual,qualifier);
+    // Native press/release selects the displayed palette. The deferred handoff
+    // can only run after all its clicked handlers return.
+    press(magic);
+    QMouseEvent release(QEvent::MouseButtonRelease,QPointF(2,2),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+    QApplication::sendEvent(magic,&release);
+    LayoutTest::settle();
+    require(tray.owns(qual) && stack->currentWidget()==qual && faster->isVisible() && !holder->layout(),
+        "Choosing a docked toolbar palette displaced the floating viewer tool");
+    tray.prepareTransfer(mask);
+    require(holder->layout()==inner && stack->indexOf(mask)>=0,"Tearoff could not recover the real docked layout");
+    magic->click(); tray.activate(qual,qualifier);
+    page.hide(); LayoutTest::settle();
+    require(holder->layout()==inner && !tray.owns(qual) && rgb->layout()==adjacentLayout,
+        "Page hide failed to restore native ownership");
+}
+
 }
 
 void testColorToolActivation() {
     using LayoutTest::require;
     using LayoutTest::settle;
+    testTrayPresentation();
     QStringList affected;
     for(const auto &tool:Unbound::PaneCatalogue::colorControls())
         if(tool.selectOnFloatingInput) {

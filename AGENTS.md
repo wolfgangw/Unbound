@@ -325,11 +325,19 @@ a fixed number of tool regions.
 | --- | --- |
 | Ordinary tool stacks | Preserve stack order and indices. Camera Raw and HDR use a multi-entry layout. Where the catalogue specifies `retainedContainer`, keep the named native container first in its original tab layout and transfer only its contents. Resolve looks it up there. |
 | HDR Color Wheels | Selecting the floating palette reselects HDR for zone previews. Preserve Highlight. The floating arrow shows wheels and Zones Graph together, then returns to wheels alone. The graph tab still selects graph alone. Preserve the floating choice across tray changes and defer the HDR host's backing-store flush until its native layout is restored. Dock into the tray's current arrangement. |
-| Qualifier, Window, Tracker and Magic Mask | Qt focus alone does not assign viewer gestures. `ColorToolActivation` invokes the native tool selector on host activation or local press before picker input. A checked selector alone does not establish ownership after another tool used the viewer. The tray showing this floating tool's placeholder is the accepted tradeoff. Mere reveal, tearoff and Unbound-button input must not take tool selection. |
+| Qualifier, Window, Tracker and Magic Mask | Qt focus alone does not assign viewer gestures. `ColorToolActivation` invokes the native tool selector on host activation or local press before picker input. A checked selector alone does not establish ownership after another tool used the viewer. Mere reveal, tearoff and Unbound-button input must not take tool selection. |
 | Primaries black point, white point and white balance | [PrimariesPickerActivation](src/core/primariespickeractivation.h) activates the Color viewer's actual window, then completes the user's picker-button release once. Resolve arms the picker for that window and receives the sample. This requires neither a native tray switch nor interception of viewer strokes. |
 | Curves and Color Warper | `ColorNativePalette` invokes native Expand and embeds the registered palette dialog. This keeps both updating independently. Relax its explicit window minimum only. Restore flags, ownership and minimum on native return, routing close/Escape through docking. Keep native toolbar state, histogram source and Warper mode. |
 | Tools with multiple sizes | `ActiveStackSize` uses active-mode hints so hidden modes cannot impose a persistent minimum. Relax both axes for Warper and only height for ordinary tools. Color Wheels derives width from intrinsic group requirements. Preserve child constraints and restore original policies on docking. |
 | Scopes | Use the shared global renderer and page handoff described above. Keep Resolve's native multi-scope interface and embedded plot interaction. |
+
+[ColorToolTray](src/core/colortooltray.h) keeps a displaced docked palette interactive
+in the same tray region while Resolve highlights the selected viewer tool. Transfer
+its native layout to a child at the floating tool's placeholder, leaving the
+original stack intact. Local controls keep viewer ownership. A declared viewer
+action returns the palette to its slot and selects it before native input. Return
+borrowed layouts before docking, transfer or page departure. Page return remembers
+the displayed palette. Use this policy across tool pairs and split trays.
 
 Decorate existing headers and follow their native selection-state visibility.
 Guard recognized native Expand actions only while floating. Restore original

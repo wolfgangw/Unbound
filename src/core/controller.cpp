@@ -82,6 +82,7 @@ public:
     {
         if(qApp) qApp->removeEventFilter(this);
         delete m_layoutMenu.data();
+        delete m_colorTray.data();
         delete m_colorTools.data();
         delete m_editScopes.data();
         delete m_viewers.data();
@@ -305,6 +306,7 @@ private:
         for(const auto &name:m_initializingNative)
             if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page)
                 return QStringLiteral("Panels are still initializing. Please try again.");
+        if(page=="WStackPage_Color" && m_colorTray)m_colorTray->reset();
         // Dock all is an ordinary, fully docked layout transition. Keep one
         // playback lease across every native return and restore Color controls
         // before leaving the Lightbox context used by floating Clips.
@@ -381,6 +383,7 @@ private:
         m_colorPlayback=Unbound::LayoutRestorePolicy::pauseForRecall(m_window,page,
             configuration.value("panes").toObject(),outgoingClips && outgoingClips->active());
         applied=true;
+        if(page=="WStackPage_Color" && m_colorTray)m_colorTray->reset();
         if(page=="WStackPage_Color") if(auto clips=m_sessions.value("m_pLightBox"))
             clips->suspendClipsMode(true);
         const auto panes=configuration.value("panes").toObject();
@@ -645,6 +648,13 @@ private:
             }
         }
     }
+    QWidget *colorViewerWindow() const {
+        if(currentPage()!=QLatin1String("WStackPage_Color"))return nullptr;
+        const auto session=m_sessions.value("m_pFramePlayer");
+        if(session && session->active())return session->floatingWindow();
+        const auto viewer=m_candidates.value("m_pFramePlayer");
+        return viewer && viewer->isVisible() ? viewer->window() : nullptr;
+    }
     void undock(const QString &name, bool automatic = false)
     {
         auto decoration = m_decorations.value(name);
@@ -689,6 +699,7 @@ private:
             session->report = [this](const QString &text) { error(text); scheduleDiscovery(); };
             m_sessions.insert(name, session);
         }
+        session->setColorToolTray(m_colorTray);
         if (session->active()) {
             // Dock explicitly. Resolve can intercept a host Close event before
             // the session sees it, leaving hidden content and a live placeholder.
@@ -706,14 +717,7 @@ private:
         if (session->active()) {
             if (name == QLatin1String("colorWheelsTab")) {
                 new Unbound::PrimariesPickerActivation(session->floatingWindow(),
-                    [owner = QPointer<Controller>(this)]() -> QWidget * {
-                        if (!owner || owner->currentPage() != QLatin1String("WStackPage_Color")) return nullptr;
-                        const QString viewerName = QStringLiteral("m_pFramePlayer");
-                        auto session = owner->m_sessions.value(viewerName);
-                        if (session && session->active()) return session->floatingWindow();
-                        auto viewer = owner->m_candidates.value(viewerName);
-                        return viewer && viewer->isVisible() ? viewer->window() : nullptr;
-                    });
+                    [owner=QPointer<Controller>(this)] { return owner ? owner->colorViewerWindow() : nullptr; });
             }
             // Manual detachment also resolves startup intent. Lifecycle events
             // must not interpret its newly saved floating state as a restore.
@@ -833,8 +837,18 @@ private:
         // Project Manager/other pages can exist before Edit is ready. Keep
         // intent pending, without selecting a page or touching empty layouts.
         if (QCoreApplication::closingDown() || QApplication::activeModalWidget()) return;
-        if(!m_colorTools && m_window)if(auto page=m_window->findChild<QWidget *>("WStackPage_Color"))
+        if(!m_colorTools && m_window)if(auto page=m_window->findChild<QWidget *>("WStackPage_Color")) {
             m_colorTools=new Unbound::ColorToolSelection(page,this);
+            m_colorTray=new Unbound::ColorToolTray(page,
+                [this](const QString &name) { return m_candidates.value(name).data(); },
+                [this](const QString &name) -> QWidget * {
+                    auto session=m_sessions.value(name);
+                    return session ? session->floatingWindow() : nullptr;
+                },[this] { return colorViewerWindow(); },this);
+            m_colorTools->displayedSelector=[this](const QString &name) {
+                return m_colorTray ? m_colorTray->displayedSelector(name) : name;
+            };
+        }
         if(!m_editScopes && m_window)if(auto page=m_window->findChild<QWidget *>("WStackPage_Conform")) {
             m_editScopes=new Unbound::EditScopes(m_window,page,m_settings,this);
             m_editScopes->report=[this](const QString &message){settingsError(message);};
@@ -903,6 +917,7 @@ private:
     QPointer<QWidget> m_window;
     QPointer<EditViewers> m_viewers;
     QPointer<Unbound::EditScopes> m_editScopes;
+    QPointer<Unbound::ColorToolTray> m_colorTray;
     QPointer<Unbound::ColorToolSelection> m_colorTools;
     QPointer<QWidget> m_editPlayers;
     Unbound::LayoutCommandGate m_commandGate;
