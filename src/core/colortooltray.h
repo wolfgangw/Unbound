@@ -159,7 +159,7 @@ protected:
         if (auto button=qobject_cast<QAbstractButton *>(receiver.data())) {
             if (ancestor(button,"frameColorBottomToolbar") && m_page->isAncestorOf(button)) {
                 for (const auto &tool:PaneCatalogue::colorControls())
-                    if (button->objectName()==tool.selector) { watchClick(button); return false; }
+                    if (button->objectName()==tool.selector) { watchClick(button,tool.objectName); return false; }
             }
         }
         for (int i=0;i<m_presentations.size();++i) {
@@ -226,14 +226,27 @@ private:
             if (b->isVisible() && b->isEnabled()) return b;
         return nullptr;
     }
-    void watchClick(QAbstractButton *button) {
+    void watchClick(QAbstractButton *button,const QString &name) {
         const auto press=++m_generation;
         QObject::disconnect(m_click);
-        m_click=connect(button,&QAbstractButton::clicked,this,[this,press] {
+        m_click=connect(button,&QAbstractButton::clicked,this,[this,press,name] {
             QObject::disconnect(m_click);
-            // An explicit toolbar choice ends the floating tool's ownership.
-            // Return borrowed controls and let Resolve keep its selected slot.
-            if (!m_busy && press==m_generation) reset();
+            if (m_busy || press!=m_generation) return;
+            ++m_generation;
+            m_owner.clear();
+            // Viewer ownership is global; displayed palettes belong to individual
+            // regions. In combined mode two native stacks can occupy the same area.
+            auto selected=m_slot(name);
+            const QRect area=selected && selected->isVisible() && m_region && m_region->isAncestorOf(selected)
+                ? bounds(selected) : QRect();
+            for (int i=m_presentations.size()-1;i>=0;--i) {
+                const auto &p=m_presentations.at(i);
+                if (p.slot==selected || p.anchor==selected || (p.surface && sameArea(p.surface->geometry(),area)))
+                    release(i);
+            }
+            // A lazy native selection that settles later hides its old anchor;
+            // the existing visibility observer returns that presentation then.
+            stopIfIdle();
         });
     }
     void selectAndPresent(QPointer<QWidget> anchor,QAbstractButton *button,const QList<Choice> &choices) {

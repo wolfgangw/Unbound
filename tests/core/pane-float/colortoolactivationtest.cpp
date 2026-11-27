@@ -46,10 +46,14 @@ void testTrayPresentation() {
     auto point=new Picker; point->setObjectName("btnForegroundStroke"); inner->addWidget(point);
     auto addButton=[&](const char *name,QWidget *slot) {
         auto b=new QPushButton(name); b->setObjectName(name); buttons->addWidget(b);
-        QObject::connect(b,&QPushButton::clicked,&page,[=]{ stack->setCurrentWidget(slot); });
+        QObject::connect(b,&QPushButton::clicked,&page,[slot]{
+            qobject_cast<QStackedWidget *>(slot->parentWidget())->setCurrentWidget(slot);
+        });
         return b;
     };
     auto qualifier=addButton("btnQualifier",qual),magic=addButton("btnPersonMask",mask);
+    auto primaries=slot("colorWheelsTab",neighbor);
+    auto wheels=addButton("btnColorWheels",primaries);
     Unbound::ColorToolTray tray(&page,[&](const QString &name){return slotsByName.value(name);},
         [&](const QString &name)->QWidget * { return name=="qualTab" ? &host : nullptr; },{},&page);
     auto qualifierBody=new Picker;
@@ -76,6 +80,13 @@ void testTrayPresentation() {
     require(!holder->layout() && tray.owns(qual),"Moving an unrelated palette disturbed the active tray");
     press(faster);
     require(stack->currentWidget()==qual && !holder->layout(),"Local settings took the viewer away");
+    QMouseEvent release(QEvent::MouseButtonRelease,QPointF(2,2),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+    press(wheels);
+    QApplication::sendEvent(wheels,&release);
+    LayoutTest::settle();
+    require(neighbor->currentWidget()==primaries && !tray.owns(qual),"Split tray toolbar selection did not take effect");
+    require(faster->isVisible() && !holder->layout() && tray.displayedSelector("btnQualifier")=="btnPersonMask",
+        "Selecting Primaries removed the displayed Magic Mask palette from the adjacent tray");
     bool routed=false;
     point->pressed=[&]{ routed=stack->currentWidget()==mask && holder->layout()==inner; };
     press(point);
@@ -84,22 +95,34 @@ void testTrayPresentation() {
     require(qualifierPresses==2 && !holder->layout(),"An already-active floating palette could not reclaim the viewer");
     // A completed toolbar click selects its native palette on the first click.
     press(magic);
-    QMouseEvent release(QEvent::MouseButtonRelease,QPointF(2,2),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
     QApplication::sendEvent(magic,&release);
     LayoutTest::settle();
     require(!tray.owns(qual) && stack->currentWidget()==mask && faster->isVisible() && holder->layout()==inner,
         "First toolbar click failed to restore the borrowed palette to its native slot");
     press(qualifierBody);
     require(tray.owns(qual) && !holder->layout(),"Floating Qualifier failed to reclaim viewer input");
-    // A lazily populated Primaries slot has no layout to borrow yet.
-    auto primaries=slot("colorWheelsTab",stack);
-    auto wheels=addButton("btnColorWheels",primaries);
-    wheels->show();
+    // In combined mode Resolve can put different stacks in the same rectangle.
+    stacks->removeWidget(neighbor);
+    LayoutTest::settle();
+    neighbor->setGeometry(stack->geometry());
+    neighbor->setCurrentWidget(rgb);
+    press(wheels);
+    QApplication::sendEvent(wheels,&release);
+    LayoutTest::settle();
+    require(neighbor->currentWidget()==primaries && holder->layout()==inner && !tray.owns(qual),
+        "Combined tray selection left a borrowed palette covering the selected stack");
+    // The lazy palette can also belong to the same stack as the floating tool.
+    neighbor->hide();
+    stack->addWidget(primaries);
+    magic->click(); tray.activate(qual,qualifier);
     press(wheels);
     QApplication::sendEvent(wheels,&release);
     LayoutTest::settle();
     require(stack->currentWidget()==primaries && primaries->isVisible() && !tray.owns(qual),
         "First Primaries toolbar click left a floating Qualifier placeholder");
+    require(holder->layout()==inner,"Combined tray selection did not return Magic Mask to its native slot");
+    magic->click(); tray.activate(qual,qualifier);
+    require(!holder->layout(),"Tearoff fixture needs an actively borrowed palette");
     tray.prepareTransfer(mask);
     require(holder->layout()==inner && stack->indexOf(mask)>=0,"Tearoff could not recover the real docked layout");
     magic->click(); tray.activate(qual,qualifier);
