@@ -23,14 +23,24 @@ replacement-tool selection validation remains open.
 
 ## Floating Color tools: viewer interaction routing
 
-**Open, release-blocking:** clicking a floating Qualifier picker can leave viewer
-strokes assigned to Magic Mask, Window or native-expanded Color Warper. With
-Qualifier and Magic Mask both floating, either can retain the assignment despite
-clicking the other. Qt focus and picker input arrive correctly; native tool context
-is missing. Selecting the floating tool's native toolbar button, and consequently
-replacing that region's docked tool with a floating placeholder, is now an accepted
-limitation. The floating tools must remain usable and viewer input must reach the
-tool the user chose.
+The shared tray mechanism and its viewer-action rule are described in
+[AGENTS.md](../../AGENTS.md#color-viewer-and-lower-controls).
+
+### Tray and viewer handoff validation
+
+| Live Windows check | Observed result |
+| --- | --- |
+| Floating HDR, docked Primaries or RGB Mixer | Gain and RGB output changes preserved the zone preview. The docked Primaries white-point picker took its first sample. RGB Mixer tracked distinct values on two nodes and Undo. |
+| Docked Window with a floating viewer tool | After HDR, selecting a circle gave Window the first handle drag and changed Pan/Tilt. After Qualifier, selecting a square displayed its handles. Returning to Qualifier changed its RGB ranges on the first sample. |
+| Floating Qualifier, docked Magic Mask | Faster left the next sample with Qualifier and the mask point count stayed fixed. Add Click recorded a mask point and preserved the Qualifier ranges. |
+| Floating Tracker, docked Magic Mask in split trays | Faster left the next selection rectangle with Tracker. Add Click gave the next point to Magic Mask. Primaries remained in its separate tray. |
+
+The table records prototype results. Validate the internal build on Windows and
+macOS, including separate primary/secondary trays, node changes and Undo across
+stacks, dock/tearoff from a displayed palette, page return and layout recall.
+Check the first actual sample or handle drag after switching tools, including a
+return from native-expanded Curves or Warper. In split trays, multiple native
+toolbar selectors may be checked.
 
 ### Control-by-control assessment
 
@@ -45,7 +55,7 @@ of floating grading controls or live image updates.
 | Camera Raw | Material-limited: controls are disabled for the current non-RAW clip. Codec-specific controls remain unvalidated. |
 | Color Match | Chart corner dragging works with the palette floating and Magic Mask docked, after explicitly selecting the native viewer **Color Chart** overlay, as documented. This does not establish automatic overlay restoration by floating-palette activation. Color matching itself requires chart footage and was not tested. |
 | Color Wheels / Primaries | The floating picker needs the Color viewer's window active as its button release completes. With this handoff, white point changes Gain, black point changes Lift, and white balance changes Temperature and Tint in Color Bars while Magic Mask stays in the tray. Windows live trials cover all three with the viewer docked, white point with the viewer floating, white point in Color Wheels and white balance in Log Wheels. Check the installed build, Dual Screen and macOS. |
-| HDR | Inspected controls are local grading/zone adjustments. Zone preview is viewer output, not a viewer gesture; independent floating highlight-preview behavior remains unvalidated. |
+| HDR | Native HDR toolbar selection restores the zone overlay after Primaries takes the tray. Validate the floating activation path with Viewer Highlight enabled and the momentary wheel-range preview with Highlight off, including on macOS. |
 | RGB Mixer | Local channel mixing; no analogous viewer picker or handle workflow identified. |
 | Motion Effects | Local noise-reduction/motion settings; no analogous viewer gesture identified. |
 | Curves | **Tested working:** floating Hue Vs Sat sampling creates curve points while Magic Mask remains docked. Native expansion is retained. Other curve modes were not exhaustively retested. |
@@ -70,17 +80,9 @@ pickers pp. 3127–3128, Curves sampling p. 3192, ColorSlice pp. 3210–3212,
 Color Match p. 3125, and Sizing pp. 3498–3500. Live sampling, mask and curve test
 edits were undone; no layout snapshot was saved.
 
-### Native-selection fix awaiting validation
+### Current native-selection mechanism
 
-On deliberate activation/input in an affected floating tool, select its catalogued
-native toolbar button through `QAbstractButton::click()`. Keep the native tool
-container in its original slot and transfer its layout contents into the host,
-using the existing `retainedContainer` mechanism. Resolve then selects the tool
-and handles viewer input itself. The corresponding tray region shows the floating
-placeholder; another docked tool in that region is displaced. Other floating tools
-remain open. No private handlers, focus IDs or forwarded viewer gestures are used.
-
-Live Windows trials establish the following, beyond focus indicators alone:
+Windows viewer-action checks use actual samples, points and handle movement:
 
 | Tool | Required native container | Tested result |
 | --- | --- | --- |
@@ -88,21 +90,20 @@ Live Windows trials establish the following, beyond focus indicators alone:
 | Magic Mask | `personMaskTabWidget` | Viewer click creates its own point after floating Qualifier; Qualifier ranges stay unchanged. Toolbar selection without container preservation still misroutes the click. |
 | Window | `windowWidget` | Returning from Qualifier restores the handles; dragging changes Window Pan/Tilt. Ordinary floating content loses the handles despite native toolbar selection. |
 | Tracker | `trackerWidget` (already retained) | After docked Magic Mask, floating Window/Interactive mode displays tracking points and receives the viewer selection rectangle rather than creating a Magic Mask point. |
-| Primaries | Unresolved | White-point picking still creates a Magic Mask point despite toolbar selection. Retaining `colorWheelsMainContainer` is insufficient; adding the existing command activation bridge to the ordinary host is also insufficient. |
+| Primaries | Separate picker mechanism | The viewer's window must be active when the picker button is released. See the Primaries row above. |
 
 The four secondary tools now use shared `ColorToolActivation` and catalogue-owned
 container preservation; the mechanism is documented in AGENTS.md. The results above
 come from live public-Qt trials. Shared fixtures pass offscreen and on the native
 Windows backend, covering input ordering, ownership, automatic shows, guards and
-reentrant docking. The integrated build still needs these live checks on Windows
-and macOS:
+reentrant docking. Use these cases for live regression checks on both platforms:
 
 1. Float Qualifier, select docked Magic Mask, then return to Qualifier and sample
    the viewer. Qualifier must change, without adding a Magic Mask point. Repeat in
    HSL and 3D modes, including add/subtract pickers.
 2. Float Magic Mask too. Alternate between both tools several times, including
    header clicks and keyboard-only window return. Only the chosen tool receives
-   the next viewer gesture; the tray placeholder changing is expected.
+   the next viewer gesture. A previously displayed docked palette should stay usable.
 3. Float Window with an enabled shape. After choosing another tool, return and drag
    a viewer handle. Check handles return and Pan/Tilt/shape changes belong to Window.
 4. Float Tracker in Window/Interactive Mode. After Magic Mask, return and select
@@ -121,9 +122,6 @@ and macOS:
    Resolve. Check placement, preserved native tool choices, and sampling after
    explicitly choosing a floating tool. Automatic reveals must not choose a tool
    merely because it was shown.
-
-Primaries white/black-point and white-balance picking are **not fixed** by this
-build; local Wheels/Bars grading remains a separate working path.
 
 Viewer OSC selection and local picker/submode changes are not substitutes for
 native tool activation. Shared header controls do not imply native expansion
@@ -246,8 +244,7 @@ Recovering the former does not independently select a different tool from the sa
 region. Native-expanded Curves/Warper retain an association that avoids this
 limitation; its registration/selection mechanism remains unresolved. Neither focus
 identity nor a major-mode signal proves the signal's argument or viewer recipient.
-The accepted candidate above permits native tray switching and still requires
-actual viewer edits as evidence. Do not invoke private Resolve setters, forward
+Test native selection through actual viewer edits. Do not invoke private Resolve setters, forward
 gestures or hardcode focus IDs. Restore temporary ownership,
 window flags and native layout changes before normal docking; undo test edits.
 

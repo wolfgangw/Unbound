@@ -107,16 +107,17 @@ void testLayoutTransition() {
         require(state->reveals==1 && state->cancels==1,"Supported page failed to reveal and release presentation");
         require(!Unbound::LayoutReadiness::active(),"Completed recall retained readiness observation");
     }
+#endif
+    QWidget main,page(&main);page.setObjectName("WStackPage_Color");main.show();page.show();
+    LayoutTest::activate(main);
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
     {
-        QWidget root;root.show();LayoutTest::activate(root);
-        Unbound::LayoutTransitionRecall recall(&root,"fixture",{},nullptr,
+        Unbound::LayoutTransitionRecall recall(&main,page.objectName(),{},nullptr,
             std::make_unique<Unbound::NoLayoutTransitionPresentation>());
         require(!Unbound::LayoutReadiness::active(),"Unavailable presentation retained readiness observation");
         recall.complete();
     }
 #endif
-    QWidget main,page(&main);page.setObjectName("WStackPage_Color");main.show();page.show();
-    LayoutTest::activate(main);
     // Color hands global native Scopes back before the destination is known.
     // Its Show must not uncover the intermediate page/viewer construction.
     QStringList scopesContexts{QString()};

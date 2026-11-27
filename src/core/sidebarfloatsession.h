@@ -77,6 +77,7 @@ public:
     std::function<void()> userDocked;
     std::function<void()> dockingFailed;
     std::function<void()> dockingSucceeded;
+    void setColorToolTray(ColorToolTray *tray) { m_colorToolTray=tray; }
     void setSavedGeometry(const QByteArray &geometry) { if (!active()) m_savedGeometry = geometry; }
     void setKeepAtop(bool value) {
         m_keepAtop=value;
@@ -191,6 +192,7 @@ public:
             return QStringLiteral("Open this pane's Resolve page before undocking it.");
         auto layoutSlot=slot;
         const auto control=PaneCatalogue::colorControl(slot->objectName());
+        if(control && m_colorToolTray)m_colorToolTray->prepareTransfer(slot);
         if(control && !control->retainedContainer.isEmpty()) {
             // Resolve looks up these tools through the native stack even when
             // another tool/page is selected. Transfer their layout contents,
@@ -359,10 +361,10 @@ public:
                 m_activationBridge=new PaneActivationBridge(m_root->window(),m_root,host,this,host->objectName());
         }
         if(PaneCatalogue::colorControl(slot->objectName()))
-            m_expandGuard=new ColorExpandGuard(host,this);
+            m_expandGuard=new ColorExpandGuard(host,this,slot);
         if(control && control->selectOnFloatingInput
             && m_root->objectName()==QLatin1String("WStackPage_Color"))
-            m_colorToolActivation=new ColorToolActivation(host,m_root,control->selector,this);
+            m_colorToolActivation=new ColorToolActivation(host,m_root,control->selector,this,m_colorToolTray,slot);
         host->installEventFilter(this);
         m_root->installEventFilter(this);
         // If Resolve deletes the original slot, dispose only of our displaced
@@ -429,6 +431,7 @@ public:
         m_dockingGuard.cancel();
         if (!active()) return QString();
         if (m_restoring) return QString();
+        if(m_colorToolTray && m_slot && PaneCatalogue::colorControl(m_slot->objectName()))m_colorToolTray->prepareTransfer(m_slot);
         // Cinema remembers the original host. A deliberate dock must give
         // Resolve the opportunity to return its viewer before retiring that host.
         if (auto cinema=cinemaBorrowingColorViewer(m_content)) {
@@ -743,6 +746,7 @@ private:
     ColorClipsAdapter *m_clipsAdapter=nullptr;
     ColorTimelineHeader *m_timelineHeader=nullptr;
     QPointer<PaneActivationBridge> m_activationBridge;
+    QPointer<ColorToolTray> m_colorToolTray;
     QPointer<ColorToolActivation> m_colorToolActivation;
     QPointer<AuditionPlayerActivation> m_auditionActivation;
     PaneHeaderDrag *m_auditionHeaderDrag = nullptr;

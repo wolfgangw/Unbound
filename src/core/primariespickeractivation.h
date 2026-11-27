@@ -27,15 +27,15 @@ public:
 protected:
     bool eventFilter(QObject *object, QEvent *event) override {
         if (event->type() != QEvent::MouseButtonRelease || !available()
-            || QApplication::activeWindow() != m_host)
+            || QApplication::activeWindow() != m_host->window())
             return false;
         auto button = static_cast<QAbstractButton *>(object);
         auto release = static_cast<QMouseEvent *>(event);
-        if (button->window() != m_host || !button->isDown() || release->button() != Qt::LeftButton
+        if (button->window() != m_host->window() || !button->isDown() || release->button() != Qt::LeftButton
             || !button->rect().contains(release->pos()))
             return false;
         QPointer<QWidget> target = m_viewer();
-        if (!target || !target->isVisible() || target->isMinimized() || target == m_host)
+        if (!target || !target->isVisible() || target->isMinimized() || target == m_host->window())
             return false;
 
         // Deactivation may cancel a depressed button. Preserve the user's
@@ -49,7 +49,7 @@ protected:
         QTimer::singleShot(0, this, [this, target, picker, saved] {
             if (!available() || !target || QApplication::activeWindow() != target
                 || !picker || !picker->isVisible() || !picker->isEnabled()
-                || picker->window() != m_host || m_viewer() != target)
+                || picker->window() != m_host->window() || m_viewer() != target)
                 return;
             QMouseEvent finish(saved);
             picker->setDown(true);
@@ -60,7 +60,7 @@ protected:
 
 private:
     bool available() const {
-        return !QCoreApplication::closingDown() && m_host->isVisible() && !m_host->isMinimized()
+        return !QCoreApplication::closingDown() && m_host->isVisible() && !m_host->window()->isMinimized()
             && !QApplication::activeModalWidget() && !QApplication::activePopupWidget();
     }
     QWidget *m_host;

@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QScopedValueRollback>
 #include <QTimer>
+#include <functional>
 #include "panecatalogue.h"
 #include "layoutreadiness.h"
 namespace Unbound {
@@ -19,6 +20,7 @@ public:
         qApp->installEventFilter(this);
     }
     ~ColorToolSelection() override {cancel();if(qApp)qApp->removeEventFilter(this);}
+    std::function<QString(const QString &)> displayedSelector;
     void cancel() {stop();m_selected.clear();m_buttons.clear();}
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
@@ -60,7 +62,15 @@ private:
                 if(button->objectName()==tool.selector){known=true;break;}
             if(!known || !button->isCheckable() || !button->isVisibleTo(m_page))continue;
             m_buttons.append(button);
-            if(button->isChecked())m_selected.append(button);
+        }
+        for(auto button:m_buttons) {
+            if(!button || !button->isChecked())continue;
+            const auto name=displayedSelector ? displayedSelector(button->objectName()) : button->objectName();
+            auto target=button;
+            if(name!=button->objectName())
+                for(auto candidate:m_buttons)
+                    if(candidate && candidate->objectName()==name) {target=candidate;break;}
+            if(!m_selected.contains(target))m_selected.append(target);
         }
     }
     void stop() {

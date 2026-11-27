@@ -19,18 +19,133 @@ void press(QWidget *widget) {
     QMouseEvent event(QEvent::MouseButtonPress,QPointF(2,2),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
     QApplication::sendEvent(widget,&event);
 }
+
+void testTrayPresentation() {
+    using LayoutTest::require;
+    QWidget page, host;
+    auto bottom=new QWidget(&page); bottom->setObjectName("frameColorBottom");
+    auto pageLayout=new QVBoxLayout(&page); pageLayout->addWidget(bottom);
+    auto rows=new QVBoxLayout(bottom);
+    auto toolbar=new QWidget; toolbar->setObjectName("frameColorBottomToolbar"); rows->addWidget(toolbar);
+    auto buttons=new QHBoxLayout(toolbar);
+    auto region=new QWidget; region->setObjectName("frameColorBottomToolsContainer"); rows->addWidget(region);
+    auto stacks=new QHBoxLayout(region);
+    auto stack=new QStackedWidget; stacks->addWidget(stack);
+    auto neighbor=new QStackedWidget; stacks->addWidget(neighbor);
+    QMap<QString,QWidget *> slotsByName;
+    auto slot=[&](const QString &name,QStackedWidget *parent) {
+        auto w=new QWidget; parent->addWidget(w); w->setObjectName(name);
+        slotsByName.insert(name,w); return w;
+    };
+    auto mask=slot("personMaskTab",stack),qual=slot("qualTab",stack),rgb=slot("maskingTab",neighbor);
+    auto adjacentLayout=new QVBoxLayout(rgb);
+    auto holder=new QWidget(mask); holder->setObjectName("personMaskTabWidget");
+    (new QVBoxLayout(mask))->addWidget(holder);
+    auto inner=new QVBoxLayout(holder);
+    auto faster=new Picker; faster->setObjectName("fasterQualityBtn"); inner->addWidget(faster);
+    auto point=new Picker; point->setObjectName("btnForegroundStroke"); inner->addWidget(point);
+    auto addButton=[&](const char *name,QWidget *slot) {
+        auto b=new QPushButton(name); b->setObjectName(name); buttons->addWidget(b);
+        QObject::connect(b,&QPushButton::clicked,&page,[slot]{
+            qobject_cast<QStackedWidget *>(slot->parentWidget())->setCurrentWidget(slot);
+        });
+        return b;
+    };
+    auto qualifier=addButton("btnQualifier",qual),magic=addButton("btnPersonMask",mask);
+    auto primaries=slot("colorWheelsTab",neighbor);
+    auto wheels=addButton("btnColorWheels",primaries);
+    Unbound::ColorToolTray tray(&page,[&](const QString &name){return slotsByName.value(name);},
+        [&](const QString &name)->QWidget * { return name=="qualTab" ? &host : nullptr; },{},&page);
+    auto qualifierBody=new Picker;
+    (new QVBoxLayout(&host))->addWidget(qualifierBody);
+    page.show(); host.show(); LayoutTest::settle();
+    LayoutTest::activate(page);
+    Unbound::ColorToolActivation activation(&host,&page,"btnQualifier",&page,&tray,qual);
+    magic->click();
+    QApplication::setActiveWindow(&host);
+    int qualifierPresses=0;
+    qualifierBody->pressed=[&] {
+        require(stack->currentWidget()==qual && tray.owns(qual),
+            "An ordinary floating Qualifier press left the viewer assigned to docked Magic Mask");
+        ++qualifierPresses;
+    };
+    press(qualifierBody);
+    LayoutTest::settle();
+    require(qualifierPresses==1,"The original floating palette press was lost or replayed");
+    require(stack->currentWidget()==qual && !holder->layout() && faster->isVisible() && rgb->layout()==adjacentLayout,
+        "Selecting floating tool failed to keep the docked palette in its own region");
+    require(tray.displayedSelector("btnQualifier")=="btnPersonMask",
+        "Page-return capture remembered the placeholder instead of the displayed palette");
+    tray.prepareTransfer(rgb);
+    require(!holder->layout() && tray.owns(qual),"Moving an unrelated palette disturbed the active tray");
+    press(faster);
+    require(stack->currentWidget()==qual && !holder->layout(),"Local settings took the viewer away");
+    QMouseEvent release(QEvent::MouseButtonRelease,QPointF(2,2),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+    press(wheels);
+    QApplication::sendEvent(wheels,&release);
+    LayoutTest::settle();
+    require(neighbor->currentWidget()==primaries && !tray.owns(qual),"Split tray toolbar selection did not take effect");
+    require(faster->isVisible() && !holder->layout() && tray.displayedSelector("btnQualifier")=="btnPersonMask",
+        "Selecting Primaries removed the displayed Magic Mask palette from the adjacent tray");
+    bool routed=false;
+    point->pressed=[&]{ routed=stack->currentWidget()==mask && holder->layout()==inner; };
+    press(point);
+    require(routed && !tray.owns(qual),"Docked picker did not reclaim its own native slot before the first press");
+    press(qualifierBody);
+    require(qualifierPresses==2 && !holder->layout(),"An already-active floating palette could not reclaim the viewer");
+    // A completed toolbar click selects its native palette on the first click.
+    press(magic);
+    QApplication::sendEvent(magic,&release);
+    LayoutTest::settle();
+    require(!tray.owns(qual) && stack->currentWidget()==mask && faster->isVisible() && holder->layout()==inner,
+        "First toolbar click failed to restore the borrowed palette to its native slot");
+    press(qualifierBody);
+    require(tray.owns(qual) && !holder->layout(),"Floating Qualifier failed to reclaim viewer input");
+    // In combined mode Resolve can put different stacks in the same rectangle.
+    stacks->removeWidget(neighbor);
+    LayoutTest::settle();
+    neighbor->setGeometry(stack->geometry());
+    neighbor->setCurrentWidget(rgb);
+    press(wheels);
+    QApplication::sendEvent(wheels,&release);
+    LayoutTest::settle();
+    require(neighbor->currentWidget()==primaries && holder->layout()==inner && !tray.owns(qual),
+        "Combined tray selection left a borrowed palette covering the selected stack");
+    // The lazy palette can also belong to the same stack as the floating tool.
+    neighbor->hide();
+    stack->addWidget(primaries);
+    magic->click(); tray.activate(qual,qualifier);
+    press(wheels);
+    QApplication::sendEvent(wheels,&release);
+    LayoutTest::settle();
+    require(stack->currentWidget()==primaries && primaries->isVisible() && !tray.owns(qual),
+        "First Primaries toolbar click left a floating Qualifier placeholder");
+    require(holder->layout()==inner,"Combined tray selection did not return Magic Mask to its native slot");
+    magic->click(); tray.activate(qual,qualifier);
+    require(!holder->layout(),"Tearoff fixture needs an actively borrowed palette");
+    tray.prepareTransfer(mask);
+    require(holder->layout()==inner && stack->indexOf(mask)>=0,"Tearoff could not recover the real docked layout");
+    magic->click(); tray.activate(qual,qualifier);
+    page.hide(); LayoutTest::settle();
+    require(holder->layout()==inner && !tray.owns(qual) && rgb->layout()==adjacentLayout,
+        "Page hide failed to restore native ownership");
+}
+
 }
 
 void testColorToolActivation() {
     using LayoutTest::require;
     using LayoutTest::settle;
+    testTrayPresentation();
     QStringList affected;
     for(const auto &tool:Unbound::PaneCatalogue::colorControls())
         if(tool.selectOnFloatingInput) {
-            require(!tool.retainedContainer.isEmpty(),"Viewer tool activation lost its native container");
+            if(tool.objectName=="colorHDRTab")
+                require(tool.wholeLayout && tool.selector=="btnHdr","Floating HDR lost its complete layout or native selector");
+            else require(!tool.retainedContainer.isEmpty(),"Viewer tool activation lost its native container");
             affected.append(tool.objectName);
         }
-    require(affected==QStringList({"qualTab","windowTab","trackerTab","personMaskTab"}),
+    require(affected==QStringList({"colorHDRTab","qualTab","windowTab","trackerTab","personMaskTab"}),
         "Native tool selection escaped the validated catalogue scope");
 
     QWidget main;auto layout=new QVBoxLayout(&main);
