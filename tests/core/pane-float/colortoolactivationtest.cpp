@@ -82,14 +82,24 @@ void testTrayPresentation() {
     require(routed && !tray.owns(qual),"Docked picker did not reclaim its own native slot before the first press");
     press(qualifierBody);
     require(qualifierPresses==2 && !holder->layout(),"An already-active floating palette could not reclaim the viewer");
-    // Native press/release selects the displayed palette. The deferred handoff
-    // can only run after all its clicked handlers return.
+    // A completed toolbar click selects its native palette on the first click.
     press(magic);
     QMouseEvent release(QEvent::MouseButtonRelease,QPointF(2,2),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
     QApplication::sendEvent(magic,&release);
     LayoutTest::settle();
-    require(tray.owns(qual) && stack->currentWidget()==qual && faster->isVisible() && !holder->layout(),
-        "Choosing a docked toolbar palette displaced the floating viewer tool");
+    require(!tray.owns(qual) && stack->currentWidget()==mask && faster->isVisible() && holder->layout()==inner,
+        "First toolbar click failed to restore the borrowed palette to its native slot");
+    press(qualifierBody);
+    require(tray.owns(qual) && !holder->layout(),"Floating Qualifier failed to reclaim viewer input");
+    // A lazily populated Primaries slot has no layout to borrow yet.
+    auto primaries=slot("colorWheelsTab",stack);
+    auto wheels=addButton("btnColorWheels",primaries);
+    wheels->show();
+    press(wheels);
+    QApplication::sendEvent(wheels,&release);
+    LayoutTest::settle();
+    require(stack->currentWidget()==primaries && primaries->isVisible() && !tray.owns(qual),
+        "First Primaries toolbar click left a floating Qualifier placeholder");
     tray.prepareTransfer(mask);
     require(holder->layout()==inner && stack->indexOf(mask)>=0,"Tearoff could not recover the real docked layout");
     magic->click(); tray.activate(qual,qualifier);

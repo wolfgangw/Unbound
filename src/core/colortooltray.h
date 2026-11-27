@@ -37,7 +37,6 @@ public:
         ++m_generation;
         m_departingChoices.clear();
         m_owner.clear();
-        m_pendingToolbar=false;
         QObject::disconnect(m_click);
         if (m_observing && qApp) qApp->removeEventFilter(this);
         m_observing = false;
@@ -149,7 +148,6 @@ protected:
         }
         if (type==QEvent::ApplicationDeactivate) { ++m_generation; return false; }
         if (type!=QEvent::MouseButtonPress && type!=QEvent::KeyPress && type!=QEvent::Shortcut) return false;
-        if (m_pendingToolbar) { ++m_generation; m_pendingToolbar=false; }
         if (!object->isWidgetType() || QApplication::activeModalWidget() || QApplication::activePopupWidget()) return false;
         if (type==QEvent::MouseButtonPress && static_cast<QMouseEvent *>(event)->button()!=Qt::LeftButton) return false;
         if (type==QEvent::KeyPress) {
@@ -161,7 +159,7 @@ protected:
         if (auto button=qobject_cast<QAbstractButton *>(receiver.data())) {
             if (ancestor(button,"frameColorBottomToolbar") && m_page->isAncestorOf(button)) {
                 for (const auto &tool:PaneCatalogue::colorControls())
-                    if (button->objectName()==tool.selector) { watchClick(button,tool); return false; }
+                    if (button->objectName()==tool.selector) { watchClick(button); return false; }
             }
         }
         for (int i=0;i<m_presentations.size();++i) {
@@ -228,35 +226,14 @@ private:
             if (b->isVisible() && b->isEnabled()) return b;
         return nullptr;
     }
-    void watchClick(QAbstractButton *button,const Tool &tool) {
+    void watchClick(QAbstractButton *button) {
         const auto press=++m_generation;
         QObject::disconnect(m_click);
-        m_click=connect(button,&QAbstractButton::clicked,this,[this,press,name=tool.objectName] {
+        m_click=connect(button,&QAbstractButton::clicked,this,[this,press] {
             QObject::disconnect(m_click);
-            if (m_busy || press!=m_generation || m_owner.isEmpty()) return;
-            const auto generation=++m_generation;
-            if (m_host(name)) { reset(); return; }
-            // Wait for Resolve's clicked handler and native action dispatch to
-            // unwind. Re-selecting inside that handler loses viewer ownership.
-            m_pendingToolbar=true;
-            QTimer::singleShot(0,this,[this,name,generation] {
-                if (generation!=m_generation) return;
-                m_pendingToolbar=false;
-                if (!m_page || !m_page->isVisible() || !m_region
-                    || QApplication::activePopupWidget() || QApplication::activeModalWidget()) return;
-                auto owner=m_slot(m_owner),host=m_host(m_owner),chosen=m_slot(name);
-                const auto tool=PaneCatalogue::colorControl(m_owner);
-                if (!owner || !host || !host->isVisible() || !chosen || !chosen->isVisible()
-                    || !m_region->isAncestorOf(chosen) || !tool) return;
-                auto selector=availableButton(*tool);
-                if (!selector) return;
-                const auto area=bounds(chosen);
-                for (int i=m_presentations.size()-1;i>=0;--i) {
-                    const auto surface=m_presentations.at(i).surface;
-                    if (!surface || sameArea(surface->geometry(),area)) release(i);
-                }
-                selectAndPresent(owner,selector,{{chosen,area}});
-            });
+            // An explicit toolbar choice ends the floating tool's ownership.
+            // Return borrowed controls and let Resolve keep its selected slot.
+            if (!m_busy && press==m_generation) reset();
         });
     }
     void selectAndPresent(QPointer<QWidget> anchor,QAbstractButton *button,const QList<Choice> &choices) {
@@ -349,6 +326,6 @@ private:
     QString m_owner;
     QMetaObject::Connection m_click;
     unsigned m_generation=0;
-    bool m_busy=false,m_observing=false,m_cleanupQueued=false,m_pendingToolbar=false;
+    bool m_busy=false,m_observing=false,m_cleanupQueued=false;
 };
 }

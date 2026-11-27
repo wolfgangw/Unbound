@@ -337,7 +337,8 @@ its native layout to a child at the floating tool's placeholder, leaving the
 original stack intact. With a docked tool active, clicking into a floating viewer
 tool selects it even when its picker is already armed. Local adjustments in the
 displayed docked palette preserve that choice. Its viewer actions return the
-palette to its slot and select it before native input. Return
+palette to its slot and select it before native input. A completed toolbar click
+returns borrowed controls and leaves the clicked palette selected. Return
 borrowed layouts before docking, transfer or page departure. Page return remembers
 the displayed palette. Use this policy across tool pairs and split trays.
 
