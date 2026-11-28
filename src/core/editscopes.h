@@ -48,9 +48,18 @@ public:
         refresh();
     }
     ~EditScopes() override {
-        m_stopping=true;flushGeometry();release();
+        m_stopping=true;flushGeometry();
+        const bool released=release();
         if(m_page)m_page->removeEventFilter(this);
-        delete m_host.data();
+        if(m_host) {
+            m_host->removeEventFilter(this);
+            if(released) delete m_host.data();
+            else {
+                // Never delete a host that still owns Resolve's global Scopes window.
+                m_host->hide();
+                if(m_main) m_host->setParent(m_main,m_host->windowFlags());
+            }
+        }
     }
     bool active() const {return m_enabled;}
     QWidget *host() const {return m_host;}
@@ -83,7 +92,9 @@ public:
     }
     void refresh() {
         if(!m_main || !m_page || m_stopping)return;
-        auto action=m_main->findChild<QAction *>(PaneCatalogue::find(key())->nativeVisibilityAction);
+        const auto descriptor=PaneCatalogue::find(key());
+        if(!descriptor)return;
+        auto action=m_main->findChild<QAction *>(descriptor->nativeVisibilityAction);
         if(action && action!=m_action) {
             disconnect(m_actionConnection);m_action=action;
             m_actionConnection=connect(action,&QAction::triggered,this,[this](bool on) {
@@ -186,7 +197,10 @@ private:
             m_host->resize(dialog->size());m_host->installEventFilter(this);
         }
         const auto error=m_content.adopt(m_page,dialog,m_host,m_page,false);
-        if(!error.isEmpty()){check(error);return;}
+        if(!error.isEmpty()) {
+            if(created) { delete m_host.data(); m_host=nullptr; }
+            check(error);return;
+        }
         m_embedded=true;
         m_expand=new ColorExpandGuard(m_host,this);
         m_button=new UndockButton(anchor->parentWidget());

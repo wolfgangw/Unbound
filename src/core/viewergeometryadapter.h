@@ -155,10 +155,12 @@ class ViewerGeometryAdapter final : public QObject
             // Higher ancestors can assign regions again after a nested root
             // resize returns. Keep the entire outer pass visually atomic,
             // including synchronous repaint requests from native handlers.
+            QPointer<ViewerGeometryAdapter> alive(this);
             const bool alreadyHeld=m_presentationHeld;
             holdUpdates();
             m_forwardingNativeResize=true;
             QCoreApplication::sendEvent(object,event);
+            if(!alive) return true;
             m_forwardingNativeResize=false;
             apply();
             if(!alreadyHeld) releaseUpdates();
@@ -178,10 +180,11 @@ class ViewerGeometryAdapter final : public QObject
             if(m_applying && previous.isValid() && resize->oldSize()!=previous) {
                 // Report the actual transition seen by native content, not the
                 // suppressed interim size. Keep one resize delivery per update.
+                QPointer<ViewerGeometryAdapter> alive(this);
                 QResizeEvent coalesced(resize->size(),previous);
                 m_deliveringTimeline=true;
                 QCoreApplication::sendEvent(object,&coalesced);
-                m_deliveringTimeline=false;
+                if(alive) m_deliveringTimeline=false;
                 return true;
             }
         }
@@ -248,7 +251,7 @@ public:
     ~ViewerGeometryAdapter() override { setEnabled(false); }
     bool setEnabled(bool enabled) {
         if (enabled==m_enabled) return m_enabled;
-        if (!enabled) { m_enabled=false; restore(); releaseUpdates(); qApp->removeEventFilter(m_resizeGate); return false; }
+        if (!enabled) { m_enabled=false; restore(); releaseUpdates(); if(qApp) qApp->removeEventFilter(m_resizeGate); return false; }
         if (!valid()) return false;
         capture(m_viewers); capture(m_timeline);
         m_deliveredTimelineSize=m_timeline.widget->size();

@@ -18,6 +18,7 @@ public:
         return button && button->property(property()).isValid();
     }
     static bool checked(QAbstractButton *button) {
+        if(!button) return false;
         return temporary(button) ? button->property(property()).toBool() : button->isChecked();
     }
     void begin(QAbstractButton *button) {

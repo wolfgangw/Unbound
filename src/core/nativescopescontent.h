@@ -16,7 +16,11 @@ namespace Unbound {
 class NativeScopesContent : public QObject {
 public:
  explicit NativeScopesContent(QObject *owner):QObject(owner){}
- ~NativeScopesContent() override { if(m_dialog && !m_stopping)stop(); delete m_expandGuard; delete m_layoutRefresh; }
+ ~NativeScopesContent() override {
+  if(m_dialog && !m_stopping)stop();
+  disconnect(m_destroyed);
+  delete m_expandGuard; delete m_layoutRefresh;
+ }
  std::function<void()> dockRequested;
  std::function<bool()> reacquire;
  static QWidget *content(QWidget *slot) {
@@ -39,9 +43,9 @@ public:
   slot->setProperty("unboundNativeScopes",QVariant::fromValue(static_cast<QObject *>(dialog)));
   disconnect(m_destroyed);
   m_destroyed=connect(dialog,&QObject::destroyed,this,[this]{if(m_slot)m_slot->setProperty("unboundNativeScopes",QVariant());});
-  m_layoutRefresh=new ColorScopesLayoutRefresh(dialog,host,this);
+  delete m_layoutRefresh; m_layoutRefresh=new ColorScopesLayoutRefresh(dialog,host,this);
   dialog->show();dialog->installEventFilter(this);
-  if(slot!=page)m_expandGuard=new ColorExpandGuard(slot,this);
+  delete m_expandGuard; m_expandGuard=(slot!=page) ? new ColorExpandGuard(slot,this) : nullptr;
   return {};
  }
  bool intact()const{return m_slot && m_host && (m_suspended || (m_dialog && m_dialog->parentWidget()==m_host));}
@@ -78,8 +82,9 @@ private:
   }
   delete m_layoutRefresh;m_layoutRefresh=nullptr;
   delete m_expandGuard;m_expandGuard=nullptr;
-  m_slot->setProperty("unboundNativeScopes",QVariant());
-  m_host->layout()->removeWidget(m_dialog);
+  disconnect(m_destroyed);
+  if(m_slot) m_slot->setProperty("unboundNativeScopes",QVariant());
+  if(m_host && m_host->layout()) m_host->layout()->removeWidget(m_dialog);
   m_dialog->setParent(m_parent,m_flags);m_dialog->setMinimumSize(m_minimum);
   m_dialog->setGeometry(m_geometry);
   if(!docking && m_outsideVisible) {
@@ -94,11 +99,12 @@ private:
   if(m_dialog && m_dialog->parentWidget()==m_parent && !m_dialog->isVisible()) {
    m_suspended=!docking;return true;
   }
-  if(m_dialog) {
+  if(m_dialog && m_host && m_host->layout() && m_slot) {
    m_dialog->setAttribute(Qt::WA_ShowWithoutActivating);
    m_dialog->setParent(m_host,Qt::Widget);m_dialog->setMinimumSize(0,0);
    m_host->layout()->addWidget(m_dialog);
    m_slot->setProperty("unboundNativeScopes",QVariant::fromValue(static_cast<QObject *>(m_dialog.data())));
+   m_destroyed=connect(m_dialog,&QObject::destroyed,this,[this]{if(m_slot)m_slot->setProperty("unboundNativeScopes",QVariant());});
    m_layoutRefresh=new ColorScopesLayoutRefresh(m_dialog,m_host,this);
    m_dialog->show();m_dialog->installEventFilter(this);
    if(m_slot!=m_page)m_expandGuard=new ColorExpandGuard(m_slot,this);

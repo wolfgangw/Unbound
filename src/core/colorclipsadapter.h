@@ -118,7 +118,7 @@ class ColorClipsAdapter final : public QObject {
             QPointer<ColorClipsAdapter> alive(this);
             m_presentation->begin({m_repaintWindow,m_host},[alive,generation](bool ready) {
                 if(!alive || !alive->m_drag || generation!=alive->m_dragGeneration)return;
-                if(!ready) {
+                if(!ready || !alive->m_mode) {
                     // Keep native Lightbox and existing allocations intact if
                     // the platform cannot protect their interim presentation.
                     QTimer::singleShot(0,alive,[alive,generation] {
@@ -127,7 +127,9 @@ class ColorClipsAdapter final : public QObject {
                     return;
                 }
                 alive->m_dragPrepared=true;
-                alive->m_busy=true;alive->m_mode->click();alive->m_busy=false;
+                alive->m_busy=true;alive->m_mode->click();
+                if(!alive)return;
+                alive->m_busy=false;
                 const auto waiting=std::move(alive->m_waitingInput);
                 alive->m_waitingInput.clear();
                 for(const auto &input:waiting)QTimer::singleShot(0,alive,input);
@@ -143,9 +145,12 @@ class ColorClipsAdapter final : public QObject {
         // Preserve ordering and map coordinates against the current native handle.
         auto deliver=[this,generation,type,global,button,buttons,modifiers] {
             if(!m_drag || generation!=m_dragGeneration || !m_dragTarget) return;
+            QPointer<ColorClipsAdapter> alive(this);
             m_dragGlobal=global;
             QMouseEvent copy(type,m_dragTarget->mapFromGlobal(global),global,button,buttons,modifiers);
-            m_busy=true;QCoreApplication::sendEvent(m_dragTarget,&copy);m_busy=false;
+            m_busy=true;QCoreApplication::sendEvent(m_dragTarget,&copy);
+            if(!alive) return;
+            m_busy=false;
             if(m_dragGuide && m_dragTarget) {
                 const int x=m_dragTarget->mapToGlobal(QPoint(m_dragTarget->width()/2,0)).x();
                 m_dragGuide->move(x-1,m_dragGuide->y());
@@ -213,10 +218,17 @@ class ColorClipsAdapter final : public QObject {
             prepareModeChange();
         m_busy=true;
         // Controls must be restored while their native Lightbox is still open.
-        if(!restoreControls()) {m_busy=false;return;}
+        if(!restoreControls()) {
+            m_busy=false;
+            m_restoreWork.clear();
+            ColorPlaybackPause::cancelActive("clips_controls_rejected");
+            m_playbackHold.reset();
+            return;
+        }
         if(m_mode->isChecked()!=m_originalMode) m_mode->click();
         m_restorePending=m_mode->isChecked()!=m_originalMode;
         if(!m_restorePending) m_restoreWork.clear();
+        else { m_restoreWork.clear(); ColorPlaybackPause::cancelActive("clips_mode_rejected"); m_playbackHold.reset(); }
         m_busy=false;
         finishPlaybackChange();
     }
@@ -438,15 +450,22 @@ protected:
         if(type==QEvent::Hide || type==QEvent::Show || type==QEvent::Move) {schedule(); return false;}
         // Deliver the entire native pass once, then fix its allocation before
         // painting. Nested events are allowed through while this pass is busy.
-        const bool updates=m_root && m_root->updatesEnabled();
-        if(updates) m_root->setUpdatesEnabled(false);
-        m_busy=true; QCoreApplication::sendEvent(object,event); m_busy=false;
+        QPointer<ColorClipsAdapter> alive(this);
+        QPointer<QWidget> root=m_root;
+        const bool updates=root && root->updatesEnabled();
+        if(updates) root->setUpdatesEnabled(false);
+        m_busy=true; QCoreApplication::sendEvent(object,event);
+        if(!alive) {
+            if(updates && root) root->setUpdatesEnabled(true);
+            return true;
+        }
+        m_busy=false;
         // A native ancestor pass can resize the region through nested events
         // while our reentrancy guard is set. Capture that allocation too.
         if(m_region && m_region->geometry()!=m_appliedRegion)
             m_nativeAllocation=m_region->geometry();
         apply();
-        if(updates && m_root) m_root->setUpdatesEnabled(true);
+        if(updates && root) root->setUpdatesEnabled(true);
         schedule(); return true;
     }
 };

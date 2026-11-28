@@ -113,13 +113,15 @@ private:
         QMouseEvent press(QEvent::MouseButtonPress,local,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
         QMouseEvent move(QEvent::MouseMove,local,global,Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
         QMouseEvent release(QEvent::MouseButtonRelease,local,global,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+        QPointer<ColorScopesLayoutRefresh> alive(this);
         m_refreshing=true;
         // Public QObject virtual dispatch, scoped to this native widget. Going
         // through QApplication would expose synthetic input to menu dismissal,
         // focus tracking and geometry-restore cancellation filters.
         static_cast<QObject *>(m_dialog.data())->event(&press);
-        if(m_dialog)static_cast<QObject *>(m_dialog.data())->event(&move);
-        if(m_dialog)static_cast<QObject *>(m_dialog.data())->event(&release);
+        if(alive && m_dialog)static_cast<QObject *>(m_dialog.data())->event(&move);
+        if(alive && m_dialog)static_cast<QObject *>(m_dialog.data())->event(&release);
+        if(!alive)return;
         if(m_dialog && m_dialog->parentWidget()==m_host) {
             m_dialog->setGeometry(geometry);
             restoreCursor(m_dialog,m_dialogCursor);

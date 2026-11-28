@@ -105,6 +105,18 @@ void testEditScopes() {
             require(restored.host() && registered,"Cold Edit Scopes restoration failed");}
         require(native->parentWidget()==&main && !registered && settings.floating(Unbound::EditScopes::key()),
             "Shutdown lost Edit intent or stranded the global renderer");
+        // If native release fails on teardown, do not destroy Resolve's global Scopes window.
+        {
+            QPointer<QWidget> globalScopes(native.get());
+            {
+                Unbound::EditScopes blocked(&main,&edit,settings,&main);settle();
+                require(blocked.host() && native->parentWidget()==blocked.host(),"Blocked teardown setup failed");
+                hide->setEnabled(false);
+            }
+            require(globalScopes,"Failed Scopes release on teardown destroyed Resolve's global window");
+            hide->setEnabled(true);
+            native->setParent(&main,dialogShell ? Qt::Dialog : Qt::Window);
+        }
     }
     std::puts("PASS: Edit native Scopes direct opening, close/menu, page ownership, geometry, layouts and startup");
 }

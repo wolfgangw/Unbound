@@ -31,6 +31,7 @@ public:
         if(!supports(slot)) return nullptr;
         if(slot->objectName()==QLatin1String("scopesWidget"))return ColorNativeScopes::content(slot);
         const auto control=PaneCatalogue::colorControl(slot->objectName());
+        if(!control) return nullptr;
         if(auto content=slot->findChild<QWidget *>(control->headerOwner)) return content;
         // Already expanded natively: its dialog is owned by this tool family.
         for(auto scope=slot->parentWidget();scope;scope=scope->parentWidget()) {

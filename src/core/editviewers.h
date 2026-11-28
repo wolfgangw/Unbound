@@ -80,7 +80,7 @@ public:
     std::function<void()> dockingWarningChanged;
     void flushGeometry() { rememberAll(); }
     void prepareLayout(const QJsonObject &panes) {
-        for(auto pane:{&m_source,&m_program}) if(pane->host &&
+        for(auto pane:{&m_source,&m_program}) if(pane->host && pane->content &&
             !panes.value(pane->content->objectName()).toObject().value("floating").toBool()) dock(*pane);
     }
     void restoreLayout() {
@@ -254,16 +254,28 @@ private:
         restoreArea();
         auto host=pane.host;
         delete pane.mainResizeGeometry; pane.mainResizeGeometry=nullptr;
+        bool returned=false;
         if(pane.content && pane.originalLayout && pane.placeholder) {
-            host->layout()->removeWidget(pane.content);
+            if(host->layout()) host->layout()->removeWidget(pane.content);
             auto item=pane.originalLayout->replaceWidget(pane.placeholder,pane.content,Qt::FindDirectChildrenOnly);
-            delete item;
-            const int index=pane.originalLayout->indexOf(pane.content);
-            if(index>=0) { pane.originalLayout->setStretch(index,pane.stretch); pane.originalLayout->setAlignment(pane.content,pane.alignment); }
-            delete pane.placeholder.data(); pane.placeholder=nullptr;
-            pane.content->setVisible(!pane.hidden);
+            if(item) {
+                delete item;
+                const int index=pane.originalLayout->indexOf(pane.content);
+                if(index>=0) { pane.originalLayout->setStretch(index,pane.stretch); pane.originalLayout->setAlignment(pane.content,pane.alignment); }
+                delete pane.placeholder.data(); pane.placeholder=nullptr;
+                pane.content->setVisible(!pane.hidden);
+                returned=true;
+            }
         }
-        host->removeEventFilter(this); host->hide(); host->deleteLater(); pane.host=nullptr;
+        // Never let host teardown destroy a Resolve-owned viewer widget.
+        if(!returned && pane.content && pane.content->parentWidget()==host) {
+            if(host->layout()) host->layout()->removeWidget(pane.content);
+            if(pane.parent) pane.content->setParent(pane.parent);
+            else if(m_players) pane.content->setParent(m_players);
+        }
+        host->removeEventFilter(this); host->hide();
+        if(!pane.content || pane.content->parentWidget()!=host) host->deleteLater();
+        pane.host=nullptr;
         for(auto b:pane.buttons) if(b) b->setFloatingState(false);
         if(user && pane.content) {
             check(m_settings.saveFloating(pane.content->objectName(),false));

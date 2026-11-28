@@ -93,7 +93,9 @@ public:
         m_pageFocus.attach(nullptr);
         m_pageTransition.attach(nullptr);
         qDeleteAll(m_decorations);
+        m_decorations.clear();
         qDeleteAll(m_sessions);
+        m_sessions.clear();
     }
     void executeCommand(const Unbound::CommandRequest &request) {
         if(!m_window || !Unbound::nativeApplicationActive() || QApplication::activeModalWidget()
@@ -262,7 +264,7 @@ private:
         delete m_layoutMenu.data();
         auto menu=new Unbound::PageLayoutMenu(m_settings,page,m_window,[this,page] {
             if(currentPage()!=page) return false;
-            if(page=="WStackPage_Conform" && m_editScopes && m_editScopes->active())return true;
+            if(page=="WStackPage_Conform" && m_editScopes && m_editScopes->host())return true;
             if(page=="WStackPage_Conform" && m_viewers && m_viewers->hasFloating()) return true;
             for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it)
                 if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && it.value()->active()) return true;
@@ -592,7 +594,8 @@ private:
         for (auto it=m_decorations.cbegin();it!=m_decorations.cend();++it) {
             if (it.key()==QLatin1String("m_pLightBox") || !preservesNativeLayout(it.key()) || !m_settings.floating(settingsKey(it.key()))) continue;
             auto pane=it.value()->pane();
-            if (pane && panePage(pane)->isVisible() && !m_restoreAttempted.contains(it.key())) return;
+            auto page=pane ? panePage(pane) : nullptr;
+            if (page && page->isVisible() && !m_restoreAttempted.contains(it.key())) return;
         }
         m_restoringToggles=true;
         // Off first, then the selected pane: do not let an off action hide a
@@ -773,7 +776,7 @@ private:
     }
     void error(const QString &text)
     {
-        if (text.isEmpty()) return;
+        if (text.isEmpty() || QCoreApplication::closingDown()) return;
         auto box = new QMessageBox(QMessageBox::Warning, QStringLiteral("Unbound"), text, QMessageBox::Ok);
         box->setAttribute(Qt::WA_DeleteOnClose);
         box->setAttribute(Qt::WA_QuitOnClose, false);
@@ -889,7 +892,7 @@ private:
             if (program && source) {
                 m_viewers=new EditViewers(m_window,players,program,source,m_settings,this,
                     [this](QWidget *button,const QPoint &position) {
-                        openLayouts("WStackPage_Conform",button,position,button->property("unboundPaneName").toString());
+                        openLayouts("WStackPage_Conform",button,position,button ? button->property("unboundPaneName").toString() : QString());
                     });
                 m_viewers->dockingWarningChanged=[this] { if(m_layoutMenu) m_layoutMenu->refreshDockingWarning(); };
             }
@@ -989,7 +992,7 @@ bool Unbound::startController()
     if (!QMetaObject::invokeMethod(app, [app] {
         // The GUI thread owns one controller, including repeated startup requests
         // from separate helper images with independent guards.
-        if (!app->findChild<QObject *>(QStringLiteral("UnboundPaneController"))) new Controller;
+        if (!QCoreApplication::closingDown() && !app->findChild<QObject *>(QStringLiteral("UnboundPaneController"))) new Controller;
     }, Qt::QueuedConnection)) {
         started = false;
         return 0;
