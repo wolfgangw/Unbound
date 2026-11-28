@@ -59,7 +59,6 @@ private:
     QMap<QOpenGLWidget *,QPair<QPointer<QWidget>,int>> composing;
     int epoch=0,m_pending=-1,workPending=0,surfaceCount=0;
     bool candidate=false,finalSurfaces=false,finalUpdate=false,presentationReported=false;
-    int finalUpdateRounds=0;
     std::function<void()> presentationReady,presentationInvalidated;
     void invalidateCandidate() {
         if(!candidate)return;
@@ -69,13 +68,6 @@ private:
     void requestFinalUpdate() {
         if(!presentationReady || !candidate || finalUpdate)return;
         finalUpdate=true;presentationReported=false;
-        if(++finalUpdateRounds>3) {
-            // Bounded update rounds: accept the settled quiet candidate rather
-            // than deadlocking until the 3s fallback deadline.
-            presentationReported=true;finalUpdateRounds=0;
-            presentationReady();
-            return;
-        }
         for(auto &e:windows)if(e.window && e.window->isVisible() && !e.window->isMinimized()) {
             e.composedRevision=-1;e.rasterRevision=-1;e.window->update();
         }
@@ -111,7 +103,7 @@ private:
             if(e.revision!=(e.hasGl?e.composedRevision:e.rasterRevision))++waiting;
         }
         if(finalUpdate && visible && !waiting && !presentationReported) {
-            presentationReported=true;finalUpdateRounds=0;if(presentationReady)presentationReady();
+            presentationReported=true;if(presentationReady)presentationReady();
         }
     }
     explicit LayoutReadiness(QWidget *root,const QString &pageName):QObject(qApp),main(root),page(pageName) {

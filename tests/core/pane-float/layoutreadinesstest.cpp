@@ -18,11 +18,14 @@ void testLayoutReadiness() {
     require(reveals==1,"Final raster update did not yield one ready candidate");
     root.resize(root.width()+1,root.height());wait();wait();
     require(invalidations>=1 && reveals==2,"Geometry change failed to invalidate readiness");
-    // Repeated invalidations beyond 3 rounds must still reach readiness without deadlocking.
+    // Let each quiet interval expire, but withhold raster delivery across revisions.
+    root.setUpdatesEnabled(false);
     for(int round=0;round<4;++round) {
-        root.resize(root.width()+1,root.height());wait();wait();
+        root.resize(root.width()+1,root.height());wait();
+        require(reveals==2,"Interrupted final updates revealed an unpainted revision");
     }
-    require(reveals>=6,"Repeated candidate invalidations deadlocked readiness");
+    root.setUpdatesEnabled(true);wait();
+    require(reveals==3,"Delivering the latest raster update did not release the cover");
     release();require(!LayoutReadiness::active(),"Completed presentation retained readiness observation");
     LayoutReadiness::begin(&root,"replacement");
     release();require(LayoutReadiness::active(),"Old presentation cleanup cancelled its successor");
