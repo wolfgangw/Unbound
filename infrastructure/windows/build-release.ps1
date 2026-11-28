@@ -122,9 +122,11 @@ try {
     }
     finally { $env:QT_QPA_PLATFORM = 'offscreen' }
     $resolveDir = if ($env:UNBOUND_RESOLVE_DIR) { $env:UNBOUND_RESOLVE_DIR } else { 'C:\Program Files\Blackmagic Design\DaVinci Resolve' }
-    if (Test-Path -LiteralPath (Join-Path $resolveDir 'lua5.1.dll')) {
+    $luaLibrary = Join-Path $resolveDir 'lua5.1.dll'
+    if (Test-Path -LiteralPath $luaLibrary) {
         Invoke-Checked 'python' @((Join-Path $repoRoot 'tests\platforms\windows\loading\lua\script_test.py'), $loader)
         Invoke-Checked 'python' @((Join-Path $repoRoot 'tests\platforms\windows\loading\lua\command_script_test.py'), $dll)
+        Invoke-Checked 'python' @((Join-Path $repoRoot 'tests\core\scripts\command_test.py'), $luaLibrary, 'python', (Join-Path $repoRoot 'tests\platforms\windows\loading\lua\run_lua.py'))
     }
     Copy-Item -LiteralPath (Join-Path $repoRoot 'src\platforms\windows\loading\lua\startup\Unbound.scriptlib') -Destination (Join-Path $build 'Unbound.scriptlib')
     Copy-Item -LiteralPath (Join-Path $repoRoot 'src\scripts\commands.json') -Destination (Join-Path $build 'commands.json')
