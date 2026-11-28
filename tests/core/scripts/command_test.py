@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MIT
 """Validate edition routing in both generated payloads using a Lua 5.1 runner."""
-import json
 from pathlib import Path
 import subprocess
 import sys
@@ -28,7 +27,7 @@ local fakeffi = {
     C={GetModuleHandleW=function() return 1 end, GetProcAddress=function() return 1 end,
        dlopen=function() return 1 end, dlsym=function() return 1 end, dlclose=function() end}
 }
-local outer=assert(loadfile(SCRIPT))
+local outer=assert(loadfile()) -- The generated command is supplied on stdin.
 local function run(edition, viaFusion)
     local nativeHost={IsStudio=function() if edition=="error" then error("Unavailable") end; return edition end}
     local app={Execute=function(self,payload)
@@ -48,8 +47,9 @@ run(nil,false)
 assert(deliveries==3,'Unknown edition did not retain existing route')
 run('error',false)
 assert(deliveries==4,'Edition query failure broke existing route')
-'''.replace('SCRIPT', json.dumps(str(script)))
+'''
             path = temporary / 'routing.lua'
             path.write_text(fixture)
-            subprocess.run([*runner, library, str(path), str(root)], check=True)
+            with script.open('rb') as command:
+                subprocess.run([*runner, library, str(path), str(root)], stdin=command, check=True)
 print('PASS: both platforms, all eight scripts, Free without FFI, Studio and unknown-edition routing')
