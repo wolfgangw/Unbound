@@ -39,10 +39,14 @@ struct Surface {
     NSView *view=nil;
     Surface() = default;
     Surface(const Surface &)=delete;
-    ~Surface() { if(image)CGImageRelease(image); }
+    ~Surface() {
+        if(view) { [view removeFromSuperview]; [view release]; view=nil; }
+        if(image) CGImageRelease(image);
+    }
 };
 struct Presentation {
     bool cancelled=false;
+    bool installed=false;
     int pending=0;
     std::function<void(bool)> ready;
     std::vector<std::unique_ptr<Surface>> surfaces;
@@ -77,17 +81,25 @@ struct Presentation {
             [content addSubview:surface->view positioned:NSWindowAbove relativeTo:nil];
         }
         [CATransaction commit];
+        installed=true;
         auto callback=std::move(ready);callback(true);
     }
 };
 class CocoaPresentation final : public WindowPresentationHold {
     std::shared_ptr<Presentation> state;
+    std::vector<std::shared_ptr<Presentation>> retired;
+    void clearRetired() {
+        for(auto &item:retired) if(item) item->clear();
+        retired.clear();
+    }
 public:
-    ~CocoaPresentation() override {if(state)state->clear();}
+    ~CocoaPresentation() override { clearRetired(); if(state) state->clear(); }
     void begin(const QList<QWidget *> &windows,std::function<void(bool)> ready) override {
+        clearRetired();
         if(state)state->clear();
         state=std::make_shared<Presentation>();
         auto current=state;current->ready=std::move(ready);
+        if(QGuiApplication::platformName()!=QLatin1String("cocoa")) {current->complete(false);return;}
         for(auto w:windows) {
             if(!w || !w->isVisible())continue;
             NSView *content=w->internalWinId()
@@ -125,13 +137,15 @@ public:
                             dispatch_async(dispatch_get_main_queue(),^{
                                 if(!current->cancelled && image && !captureError) {
                                     auto &target=*current->surfaces[index];
-                                    const CGFloat sx=CGImageGetWidth(image)/target.windowFrame.size.width;
-                                    const CGFloat sy=CGImageGetHeight(image)/target.windowFrame.size.height;
-                                    const CGRect crop=CGRectMake(
-                                        (NSMinX(target.contentFrame)-NSMinX(target.windowFrame))*sx,
-                                        (NSMaxY(target.windowFrame)-NSMaxY(target.contentFrame))*sy,
-                                        target.contentFrame.size.width*sx,target.contentFrame.size.height*sy);
-                                    target.image=CGImageCreateWithImageInRect(image,crop);
+                                    if(target.windowFrame.size.width>0 && target.windowFrame.size.height>0) {
+                                        const CGFloat sx=CGImageGetWidth(image)/target.windowFrame.size.width;
+                                        const CGFloat sy=CGImageGetHeight(image)/target.windowFrame.size.height;
+                                        const CGRect crop=CGRectMake(
+                                            (NSMinX(target.contentFrame)-NSMinX(target.windowFrame))*sx,
+                                            (NSMaxY(target.windowFrame)-NSMaxY(target.contentFrame))*sy,
+                                            target.contentFrame.size.width*sx,target.contentFrame.size.height*sy);
+                                        target.image=CGImageCreateWithImageInRect(image,crop);
+                                    }
                                     current->complete(target.image!=nullptr);
                                 } else if(!current->cancelled)current->complete(false);
                                 if(image)CGImageRelease(image);
@@ -145,10 +159,15 @@ public:
     }
     void release() override {
         auto current=std::move(state);if(!current)return;
+        // Cancel in-flight captures immediately so they cannot install covers after release.
+        if(!current->installed) { current->clear(); return; }
+        if(!qApp) { current->clear(); return; }
+        retired.push_back(current);
         // Let the restored Qt layout and its queued backing-store update reach
         // Cocoa before revealing native surfaces. No persistent timer or stream.
         QTimer::singleShot(0,qApp,[current] {
-            QTimer::singleShot(0,qApp,[current] {current->clear();});
+            if(qApp) QTimer::singleShot(0,qApp,[current] {current->clear();});
+            else current->clear();
         });
     }
 };

@@ -15,14 +15,15 @@ class WindowsMenuTracking final : public NativeMenuTracking {
     static QHash<HWINEVENTHOOK,WindowsMenuTracking *> &observers() {
         static QHash<HWINEVENTHOOK,WindowsMenuTracking *> value;return value;
     }
-    static void CALLBACK changed(HWINEVENTHOOK hook,DWORD,HWND,LONG,LONG,DWORD,DWORD) {
+    static void CALLBACK changed(HWINEVENTHOOK hook,DWORD event,HWND,LONG,LONG,DWORD,DWORD) {
         auto observer=observers().value(hook);
-        if(!observer || nativeApplicationActive())return;
+        if(!observer)return;
+        if(event==EVENT_SYSTEM_FOREGROUND && nativeApplicationActive())return;
         auto callback=observer->departed;callback(); // May destroy this observer.
     }
 public:
     explicit WindowsMenuTracking(std::function<void()> callback):departed(std::move(callback)) {
-        hook=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,changed,0,0,WINEVENT_OUTOFCONTEXT);
+        hook=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_MENUSTART,nullptr,changed,0,0,WINEVENT_OUTOFCONTEXT);
         if(hook)observers().insert(hook,this);
     }
     ~WindowsMenuTracking() override {

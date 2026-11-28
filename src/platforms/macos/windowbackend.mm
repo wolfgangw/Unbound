@@ -25,8 +25,16 @@
 namespace Unbound {
 static NSWindow *nativeWindow(QWidget *widget)
 {
-    if (!widget || !widget->testAttribute(Qt::WA_WState_Created)) return nil;
+    if (!widget || !widget->testAttribute(Qt::WA_WState_Created)
+        || QGuiApplication::platformName()!=QLatin1String("cocoa")) return nil;
     return reinterpret_cast<NSView *>(widget->effectiveWinId()).window;
+}
+static bool primaryDesktopTop(CGFloat &top)
+{
+    NSScreen *first = NSScreen.screens.firstObject;
+    if (!first) return false;
+    top = NSMaxY(first.frame);
+    return true;
 }
 // QWidget geometry and QCursor are logical, top-left screen coordinates.
 // Cocoa frames are bottom-left points. Only native event hit-testing uses Cocoa;
@@ -69,8 +77,12 @@ public:
             if (alive->m_active && alive->m_floating) alive->deferLayout();
         }];
         m_move = [center addObserverForName:NSWindowDidMoveNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            if (alive && note.object == nativeWindow(alive->m_window) && alive->followsNativeFrame() && alive->m_active && !alive->m_applying)
-                alive->updateNativeGeometry();
+            if (!alive || note.object != nativeWindow(alive->m_window) || !alive->followsNativeFrame() || alive->m_applying) return;
+            if (!alive->m_active && alive->m_pendingTitleDrag) {
+                alive->m_pendingTitleDrag = false;
+                if (alive->begin({})) alive->m_start = alive->m_pendingTitleStart;
+            }
+            if (alive->m_active) alive->updateNativeGeometry();
         }];
         m_resize = [center addObserverForName:NSWindowDidResizeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
             if (alive && note.object == nativeWindow(alive->m_window) && alive->followsNativeFrame() && alive->m_active && !alive->m_applying)
@@ -84,7 +96,11 @@ public:
     }
     ~MacWindowInteraction() override
     {
-        finish(false);
+        // Never mutate geometry or show overlays while the owning widget is tearing down.
+        m_active = m_button = m_nativeResize = m_resizePress = m_pendingTitleDrag = false;
+        m_frame.stop();
+        m_gridGuide.hide();
+        if (m_layout) { auto layout=m_layout.data(); m_layout=nullptr; layout->setEnabled(true); }
         mainResizeGesture(false);
         if (m_hostDragWindow && nativeWindow(m_window)==m_hostDragWindow)
             m_hostDragWindow.movable=m_originalMovable;
@@ -161,11 +177,11 @@ public:
         m_target = frame.marginsRemoved(m_margins);
         applyGeometry(m_target);
     }
-    void finish(bool cancel)
+    void finish(bool cancel, bool settle = true)
     {
         if (m_active && m_window) {
             if (cancel) applyGeometry(m_start);
-            else {
+            else if (settle) {
                 update(m_cursor,true);
                 if (followsNativeFrame()) {
                     // The local mouse-up monitor runs before Cocoa finishes its
@@ -177,7 +193,7 @@ public:
                 }
             }
         }
-        m_active = m_button = m_nativeResize = m_resizePress = false; m_frame.stop();m_gridGuide.hide();
+        m_active = m_button = m_nativeResize = m_resizePress = m_pendingTitleDrag = false; m_frame.stop();m_gridGuide.hide();
         if (m_layout) { auto layout=m_layout.data(); m_layout=nullptr; layout->setEnabled(true); layout->invalidate(); layout->activate(); }
     }
 protected:
@@ -185,7 +201,7 @@ protected:
     {
         if (event->type()==QEvent::ApplicationDeactivate
             || (object==m_window && (event->type()==QEvent::Hide || event->type()==QEvent::Destroy))) {
-            ++m_gesture; m_releasePending=false;
+            ++m_gesture; m_releasePending=false; m_pendingTitleDrag=false;
             if (m_active) finish(true);
         }
         if (m_releasePending && m_window && event->type()==QEvent::MouseButtonRelease) {
@@ -229,24 +245,26 @@ private:
             // Qt's cached geometry can still describe our previous correction
             // while Cocoa is delivering a new native frame. Compare and apply
             // in native coordinates so that cache cannot suppress a correction.
-            const auto contact=target.marginsAdded(m_margins);
-            const CGFloat desktopTop=NSMaxY(NSScreen.screens.firstObject.frame);
-            const NSRect frame=NSMakeRect(contact.x(),desktopTop-contact.y()-contact.height(),
-                contact.width(),contact.height());
-            if (!NSEqualRects(native.frame,frame)) [native setFrame:frame display:YES];
+            CGFloat desktopTop=0;
+            if (primaryDesktopTop(desktopTop)) {
+                const auto contact=target.marginsAdded(m_margins);
+                const NSRect frame=NSMakeRect(contact.x(),desktopTop-contact.y()-contact.height(),
+                    contact.width(),contact.height());
+                if (!NSEqualRects(native.frame,frame)) [native setFrame:frame display:YES];
+            }
         }
         m_applying=false;
     }
     void updateNativeGeometry()
     {
         auto native = nativeWindow(m_window);
-        if (!native || !m_active || m_applying) return;
+        CGFloat desktopTop = 0;
+        if (!native || !m_active || m_applying || !primaryDesktopTop(desktopTop)) return;
         // Cocoa owns frame resizing and main-window movement and constraints.
         // Read its proposed frame directly: Qt geometry/cursor delivery can lag
         // the native notification. Keep this proposal separate from our snap
         // corrections so animation/release cannot feed an adjusted frame back in.
         const NSRect frame = native.frame;
-        const CGFloat desktopTop = NSMaxY(NSScreen.screens.firstObject.frame);
         const QRect contact(qRound(frame.origin.x), qRound(desktopTop-NSMaxY(frame)),
             qRound(frame.size.width), qRound(frame.size.height));
         m_nativeProposal = contact.marginsRemoved(m_margins);
@@ -279,7 +297,10 @@ private:
         if (event.type==NSEventTypeLeftMouseDown) {
             // Even a content click must invalidate the preceding gesture's
             // completion; it may trigger a layout or another placement change.
-            ++m_gesture; m_releasePending=false;
+            ++m_gesture; m_releasePending=false; m_pendingTitleDrag=false;
+        }
+        if (event.type==NSEventTypeLeftMouseUp && m_pendingTitleDrag && !m_active) {
+            m_pendingTitleDrag=false;
         }
         if (m_active && event.type == NSEventTypeKeyDown && event.keyCode == 53) { finish(true); return nil; }
         if (m_active && !m_button && event.type == NSEventTypeLeftMouseDragged) {
@@ -309,21 +330,31 @@ private:
             // frame proposals for snapping and defers content layout until end.
             if (edges) begin({},false,true);
         } else {
+            // Never intercept traffic-light buttons or unmaximize/snap on stationary
+            // title-bar clicks. Enter main-window move snapping only once the window moves.
+            for (NSWindowButton type : {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton}) {
+                NSButton *button = [event.window standardWindowButton:type];
+                if (button && !button.hiddenOrHasHiddenAncestor
+                    && NSPointInRect(p, [button convertRect:button.bounds toView:nil])) return event;
+            }
             // Cocoa resize presses can lie just outside the content rectangle,
             // including below its bottom edge. Classify those edges before the
             // title bar, or our move handler restores the original window size.
-            const bool title = !edges && !NSPointInRect(p,event.window.contentLayoutRect);
-            if (title || edges) begin(edges);
+            if (edges) begin(edges);
+            else if (!NSPointInRect(p,event.window.contentLayoutRect)) {
+                m_pendingTitleDrag=true;
+                m_pendingTitleStart=m_window->geometry();
+            }
         }
         return event;
     }
     QPointer<QWidget> m_window;
     QPointer<QLayout> m_layout;
     bool m_floating=false, m_active=false, m_button=false, m_applying=false, m_nativeResize=false;
-    bool m_resizePress=false;
+    bool m_resizePress=false, m_pendingTitleDrag=false;
     Qt::Edges m_edges;
     QPoint m_startCursor, m_cursor;
-    QRect m_start, m_nativeProposal, m_target;
+    QRect m_start, m_nativeProposal, m_target, m_pendingTitleStart;
     quint64 m_gesture=0;
     bool m_releasePending=false;
     ulong m_releaseTimestamp=0;
@@ -360,7 +391,7 @@ void PaneFloatingWindow::updateButtonMove() { m_interaction->update(QCursor::pos
 void PaneFloatingWindow::finishButtonMove(bool cancel) { m_interaction->finish(cancel); }
 bool PaneFloatingWindow::interactiveDragActive() const { return m_interaction->active(); }
 void PaneFloatingWindow::beginDeferredResize() { m_interaction->deferLayout(); }
-void PaneFloatingWindow::finishDeferredResize(bool settle) { m_interaction->finish(!settle); }
+void PaneFloatingWindow::finishDeferredResize(bool settle) { m_interaction->finish(false, settle); }
 bool PaneFloatingWindow::event(QEvent *event)
 {
     const bool result=QWidget::event(event);
@@ -387,10 +418,17 @@ MainWindowSnap::MainWindowSnap() = default;
 MainWindowSnap::~MainWindowSnap() = default;
 void MainWindowSnap::setWindow(QWidget *window)
 {
-    // The controller calls this repeatedly during discovery. Keep the observer.
-    if (m_interaction && m_interaction->property("window").value<QObject *>()==window) return;
+    // The controller calls this repeatedly during discovery. Keep the observer,
+    // but rebuild it if Resolve recreates the native NSWindow.
+    NSWindow *native=nativeWindow(window);
+    if (m_interaction && m_interaction->property("window").value<QObject *>()==window
+        && m_interaction->property("nativeWindow").value<quintptr>()==reinterpret_cast<quintptr>(native)) return;
     m_interaction.reset();
-    if (window) { m_interaction.reset(new MacWindowInteraction(window,false)); m_interaction->setProperty("window",QVariant::fromValue<QObject *>(window)); }
+    if (window) {
+        m_interaction.reset(new MacWindowInteraction(window,false));
+        m_interaction->setProperty("window",QVariant::fromValue<QObject *>(window));
+        m_interaction->setProperty("nativeWindow",QVariant::fromValue<quintptr>(reinterpret_cast<quintptr>(native)));
+    }
 }
 // Pin levels are temporary application-local presentation state. Retain native
 // windows until their original level is restored, including native recreation.
@@ -452,6 +490,8 @@ void WindowGroupActivation::setWindow(QWidget *window) {
 void WindowGroupActivation::refreshLevels() {
     if(!m_levels || m_updatingLevels) return;
     m_updatingLevels=true;
+    for(int i=m_levelBlockers.size()-1;i>=0;--i)
+        if(!m_levelBlockers[i] || !m_levelBlockers[i]->isVisible()) m_levelBlockers.removeAt(i);
     QList<QPair<QWidget *,NSInteger>> desired;
     bool ownsKey=false;
     if(m_levelBlockers.isEmpty() && NSApp.active && NSApp.keyWindow && stackingAllowed())
@@ -481,11 +521,11 @@ bool WindowGroupActivation::eventFilter(QObject *object,QEvent *event) {
     // defer restoration until Qt has removed its active popup/modal state.
     if(type==QEvent::Show && window && window->isWindow()
         && (window->isModal() || window->windowType()==Qt::Popup)) {
-        m_levelBlockers.insert(object);
+        if(!m_levelBlockers.contains(window)) m_levelBlockers.append(window);
         m_levels->apply({});
         return result;
     }
-    if((type==QEvent::Hide || type==QEvent::Destroy) && m_levelBlockers.remove(object)) {
+    if((type==QEvent::Hide || type==QEvent::Destroy) && window && m_levelBlockers.removeAll(window)>0) {
         scheduleLevels();
         return result;
     }
@@ -527,12 +567,22 @@ bool WindowGroupActivation::raiseGroup(QWidget *selected,const QList<QWidget *> 
     }
     if(member(selected) && !ordered.contains(key)) ordered.append(key);
     ordered.append(peers);
-    // Build the final order directly; do not first lower pinned panes behind key.
-    if(ordered.isEmpty()) return true;
-    NSWindow *front=ordered.takeFirst();
-    [front orderFront:nil];
-    NSInteger above=front.windowNumber;
-    for (NSWindow *window : ordered) { [window orderWindow:NSWindowBelow relativeTo:above]; above=window.windowNumber; }
+    // Build the final order per window-level band; AppKit relative ordering
+    // does not reliably span NSFloatingWindowLevel and NSNormalWindowLevel.
+    QList<NSWindow *> floatingBand, normalBand;
+    for (NSWindow *window : ordered) {
+        if (window.level >= NSFloatingWindowLevel) floatingBand.append(window);
+        else normalBand.append(window);
+    }
+    auto applyBand = [](QList<NSWindow *> band) {
+        if (band.isEmpty()) return;
+        NSWindow *front = band.takeFirst();
+        [front orderFront:nil];
+        NSInteger above = front.windowNumber;
+        for (NSWindow *window : band) { [window orderWindow:NSWindowBelow relativeTo:above]; above = window.windowNumber; }
+    };
+    applyBand(normalBand);
+    applyBand(floatingBand);
     return true;
 }
 }

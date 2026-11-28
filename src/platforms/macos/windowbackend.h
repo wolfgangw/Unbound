@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "panefloatingwindow.h"
+#include <QList>
 #include <QObject>
 #include <QPointer>
-#include <QSet>
 #include "panewindowgroup.h"
 namespace Unbound {
 class MainWindowSnap {
@@ -22,11 +22,11 @@ public:
     ~WindowGroupActivation() override;
     void setWindow(QWidget *window);
 private:
-    std::unique_ptr<CocoaGroupLevels> m_levels;
+    QList<QPointer<QWidget>> m_levelBlockers;
     std::unique_ptr<CocoaKeyWindowFocus> m_keyFocus;
+    std::unique_ptr<CocoaGroupLevels> m_levels;
     bool m_updatingLevels=false;
     bool m_levelsQueued=false;
-    QSet<QObject *> m_levelBlockers;
     void refreshLevels();
     void scheduleLevels();
     bool eventFilter(QObject *,QEvent *) override;

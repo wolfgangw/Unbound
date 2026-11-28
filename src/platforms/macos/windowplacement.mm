@@ -4,29 +4,36 @@
 #include "geometryjson.h"
 #include "panegeometryrestore.h"
 #include "panegridreferences.h"
+#include <QGuiApplication>
 #include <QWidget>
 namespace Unbound { namespace Platform {
 namespace {
 NSWindow *nativeWindow(QWidget *window)
 {
     return window && window->testAttribute(Qt::WA_WState_Created)
+        && QGuiApplication::platformName()==QLatin1String("cocoa")
         ? reinterpret_cast<NSView *>(window->effectiveWinId()).window : nil;
 }
+bool hasPrimaryScreen() { return NSScreen.screens.firstObject != nil; }
 QRect logicalRect(NSRect rect)
 {
-    return QRect(qRound(rect.origin.x),qRound(NSMaxY(NSScreen.screens.firstObject.frame)-NSMaxY(rect)),
+    NSScreen *first=NSScreen.screens.firstObject;
+    const CGFloat top=first ? NSMaxY(first.frame) : 0;
+    return QRect(qRound(rect.origin.x),qRound(top-NSMaxY(rect)),
         qRound(rect.size.width),qRound(rect.size.height));
 }
 NSRect cocoaRect(const QRect &rect)
 {
-    return NSMakeRect(rect.x(),NSMaxY(NSScreen.screens.firstObject.frame)-rect.y()-rect.height(),
+    NSScreen *first=NSScreen.screens.firstObject;
+    const CGFloat top=first ? NSMaxY(first.frame) : 0;
+    return NSMakeRect(rect.x(),top-rect.y()-rect.height(),
         rect.width(),rect.height());
 }
 }
 bool restoreWindowPlacement(QWidget *window,const QJsonObject &document,const QJsonArray &)
 {
     auto native=nativeWindow(window);
-    if (!native || !windowPlacementEligible(window)) return false;
+    if (!native || !hasPrimaryScreen() || !windowPlacementEligible(window)) return false;
     // Existing Mac records use the shared geometry fields. A Windows record
     // supplies those same fields in its Qt fallback; never use workspace units.
     const auto saved=document.value("format").toString()==QLatin1String("unbound-main-placement-1")
@@ -58,7 +65,7 @@ bool restoreWindowPlacement(QWidget *window,const QJsonObject &document,const QJ
 QByteArray saveWindowPlacement(QWidget *window,const QJsonArray &)
 {
     auto saved=qtGeometryJson(window->saveGeometry());
-    if (auto native=nativeWindow(window)) {
+    if (auto native=nativeWindow(window); native && hasPrimaryScreen()) {
         const auto frame=native.frame;
         const auto client=logicalRect([native contentRectForFrameRect:frame]);
         saved.insert("frameRect",rectangleJson(logicalRect(frame)));
@@ -72,7 +79,7 @@ bool windowPlacementEligible(QWidget *window)
 {
     if (window->isFullScreen()) return false;
     if (!window->testAttribute(Qt::WA_WState_Created)) return true;
-    auto native=reinterpret_cast<NSView *>(window->effectiveWinId()).window;
+    auto native=nativeWindow(window);
     // Qt can report normal state while Cocoa is still changing Spaces and
     // temporarily removing the title frame. Never persist that intermediate frame.
     return !native || !(native.styleMask & NSWindowStyleMaskFullScreen);
@@ -83,6 +90,6 @@ QRect windowPlacementReference(QWidget *window,const QJsonObject &saved)
     const auto rect=gridSavedRect(saved,areas);
     if(rect.isEmpty() || saved.value("maximized").toBool() || saved.value("fullScreen").toBool())return rect;
     auto native=nativeWindow(window);
-    return native ? reachableWindowGeometry(logicalRect([native frameRectForContentRect:cocoaRect(rect)]),areas) : rect;
+    return native && hasPrimaryScreen() ? reachableWindowGeometry(logicalRect([native frameRectForContentRect:cocoaRect(rect)]),areas) : rect;
 }
 } }

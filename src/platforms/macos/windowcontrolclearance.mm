@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #import <AppKit/AppKit.h>
 #include "windowcontrolclearance.h"
+#include <QGuiApplication>
 #include <QLayout>
 #include <QPointer>
 #include <QTimer>
@@ -24,11 +25,13 @@ class CocoaWindowControlClearance final : public QObject {
         if(!m_row || !m_row->layout())return;
         auto margins=m_original;
         auto top=m_row->window();
-        if(top->testAttribute(Qt::WA_WState_Created)) {
+        NSScreen *firstScreen=NSScreen.screens.firstObject;
+        if(top->testAttribute(Qt::WA_WState_Created)
+            && QGuiApplication::platformName()==QLatin1String("cocoa") && firstScreen) {
             NSWindow *window=reinterpret_cast<NSView *>(top->effectiveWinId()).window;
             const auto origin=m_row->mapToGlobal(QPoint());
             const QRect rowRect(origin,m_row->size());
-            const CGFloat desktopTop=NSMaxY(NSScreen.screens.firstObject.frame);
+            const CGFloat desktopTop=NSMaxY(firstScreen.frame);
             for(auto type:{NSWindowCloseButton,NSWindowMiniaturizeButton,NSWindowZoomButton}) {
                 NSButton *button=[window standardWindowButton:type];
                 if(!button || button.hiddenOrHasHiddenAncestor)continue;

@@ -2,6 +2,7 @@
 #include "layouttransitionpresentation.h"
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QTimer>
 #include <QWidget>
 #include <QOperatingSystemVersion>
@@ -35,7 +36,15 @@ class DesktopCover final : public QObject,public LayoutTransitionPresentation {
     std::function<void(bool)> completion;
     bool interruptionQueued=false;
     HWINEVENTHOOK foregroundHook=nullptr;
-    static DesktopCover *&current() {static DesktopCover *value=nullptr;return value;}
+    static QHash<HWINEVENTHOOK,DesktopCover *> &observers() {
+        static QHash<HWINEVENTHOOK,DesktopCover *> value;return value;
+    }
+    static HINSTANCE moduleInstance() {
+        HMODULE module=nullptr;
+        if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&procedure),&module) && module) return module;
+        return GetModuleHandleW(nullptr);
+    }
     static bool ownForeground() {
         DWORD pid=0;GetWindowThreadProcessId(GetForegroundWindow(),&pid);
         return pid==GetCurrentProcessId();
@@ -47,8 +56,8 @@ class DesktopCover final : public QObject,public LayoutTransitionPresentation {
         for(auto &s:surfaces) if(s->window) ShowWindow(s->window,SW_HIDE);
         QTimer::singleShot(0,this,[this] {auto callback=interrupted;if(callback)callback();});
     }
-    static void CALLBACK foregroundChanged(HWINEVENTHOOK,DWORD,HWND,LONG,LONG,DWORD,DWORD) {
-        if(current() && !ownForeground())current()->interrupt();
+    static void CALLBACK foregroundChanged(HWINEVENTHOOK hook,DWORD,HWND,LONG,LONG,DWORD,DWORD) {
+        if(auto observer=observers().value(hook); observer && !ownForeground()) observer->interrupt();
     }
     static LRESULT CALLBACK procedure(HWND hwnd,UINT message,WPARAM wp,LPARAM lp) {
         auto s=reinterpret_cast<Surface *>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
@@ -102,15 +111,15 @@ public:
             // baking its old content into the snapshot. Older Windows versions
             // interpret EXCLUDEFROMCAPTURE as black instead of excluding it.
             const auto version=QOperatingSystemVersion::current();
-            if(version.majorVersion()<10 || (version.majorVersion()==10 && version.microVersion()<19041))return false;
+            if(version.majorVersion()<10 || (version.majorVersion()==10 && version.microVersion()<19041)) {cancel();return false;}
             const auto handle=reinterpret_cast<HWND>(widget->effectiveWinId());DWORD affinity=0;
             if(!widget->isWindow() || !handle || !(GetWindowLongPtr(handle,GWL_EXSTYLE)&WS_EX_TOPMOST)
-                || !GetWindowDisplayAffinity(handle,&affinity))return false;
+                || !GetWindowDisplayAffinity(handle,&affinity)) {cancel();return false;}
             exclusions.previous.emplace_back(handle,affinity);
-            if(!SetWindowDisplayAffinity(handle,WDA_EXCLUDEFROMCAPTURE))return false;
+            if(!SetWindowDisplayAffinity(handle,WDA_EXCLUDEFROMCAPTURE)) {cancel();return false;}
             live.append(handle);
         }
-        if(!live.isEmpty() && FAILED(DwmFlush()))return false;
+        if(!live.isEmpty() && FAILED(DwmFlush())) {cancel();return false;}
         std::vector<RECT> monitors;
         EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR,HDC,LPRECT rect,LPARAM data)->BOOL {
             reinterpret_cast<std::vector<RECT> *>(data)->push_back(*rect);return TRUE;
@@ -137,7 +146,7 @@ public:
         ReleaseDC(nullptr,screen);
         if(!captured) {cancel();return false;}
         if(!exclusions.restore()) {cancel();return false;}
-        WNDCLASSW wc{};wc.lpfnWndProc=procedure;wc.hInstance=GetModuleHandleW(nullptr);
+        WNDCLASSW wc{};wc.lpfnWndProc=procedure;wc.hInstance=moduleInstance();
         wc.hCursor=LoadCursorW(nullptr,MAKEINTRESOURCEW(32512));wc.lpszClassName=L"UnboundLayoutTransitionCover";
         if(!RegisterClassW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {cancel();return false;}
         for(auto &s:surfaces) {
@@ -147,10 +156,10 @@ public:
             if(!s->window) {cancel();return false;}
             SetLayeredWindowAttributes(s->window,0,255,LWA_ALPHA);
         }
-        current()=this;
         foregroundHook=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,
             foregroundChanged,0,0,WINEVENT_OUTOFCONTEXT);
         if(!foregroundHook) {cancel();return false;}
+        observers().insert(foregroundHook,this);
         // Every screenshot exists before any cover appears, preventing recursive capture.
         HWND after=HWND_TOPMOST;
         for(auto handle=GetTopWindow(nullptr);handle;handle=GetWindow(handle,GW_HWNDNEXT))
@@ -170,13 +179,12 @@ public:
     void reveal(int milliseconds,std::function<void(bool)> callback) override {
         hold();
         // This acknowledges already-submitted application updates, not future Resolve rendering.
-        if(FAILED(DwmFlush()) || !ownForeground()) {callback(false);return;}
+        if(FAILED(DwmFlush()) || !ownForeground()) {if(callback)callback(false);return;}
         completion=std::move(callback);duration=qMax(1,milliseconds);elapsed.start();animation.start();
     }
     void cancel() override {
         animation.stop();completion={};interrupted={};
-        if(foregroundHook) {UnhookWinEvent(foregroundHook);foregroundHook=nullptr;}
-        if(current()==this)current()=nullptr;
+        if(foregroundHook) {observers().remove(foregroundHook);UnhookWinEvent(foregroundHook);foregroundHook=nullptr;}
         surfaces.clear();bytes=0;
     }
 };

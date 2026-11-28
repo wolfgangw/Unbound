@@ -16,7 +16,8 @@ void CocoaKeyWindowFocus::hostHidden(bool restoreResponder) {
         m_queued=false;
         const bool restoreResponder=m_restoreResponder;
         m_restoreResponder=false;
-        if(!qApp || QCoreApplication::closingDown() || !NSApp.active
+        if(!qApp || QCoreApplication::closingDown() || QGuiApplication::platformName()!=QLatin1String("cocoa")
+            || !NSApp.active
             || QApplication::activeWindow() || QApplication::focusWidget()
             || QApplication::activeModalWidget() || QApplication::activePopupWidget())return;
         NSWindow *key=NSApp.keyWindow;

@@ -62,8 +62,25 @@ QRect windowPlacementReference(QWidget *window,const QJsonObject &saved)
         {"name",screen->name()},{"workArea",rectangleJson(screen->availableGeometry())},{"scaleFactor",screen->devicePixelRatio()}});
     if(monitors!=saved.value("monitors").toArray())return fallback;
     RECT raw{normal.x(),normal.y(),normal.x()+normal.width(),normal.y()+normal.height()};
+    // WINDOWPLACEMENT stores workspace coordinates relative to the monitor's work
+    // area offset. Match the monitor using each monitor's own workspace-to-screen
+    // shift so top/left taskbars near an adjacent monitor do not pick the neighbor.
+    struct Match { RECT raw; MONITORINFOEXW info{}; qint64 overlap=-1; bool found=false; } match{raw};
+    EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR monitor,HDC,LPRECT,LPARAM data)->BOOL {
+        auto &m=*reinterpret_cast<Match *>(data);
+        MONITORINFOEXW candidate{};candidate.cbSize=sizeof(candidate);
+        if(!GetMonitorInfoW(monitor,&candidate))return TRUE;
+        RECT shifted=m.raw;
+        OffsetRect(&shifted,candidate.rcWork.left-candidate.rcMonitor.left,candidate.rcWork.top-candidate.rcMonitor.top);
+        RECT inter{};
+        const qint64 area=IntersectRect(&inter,&shifted,&candidate.rcMonitor)
+            ? qint64(inter.right-inter.left)*qint64(inter.bottom-inter.top) : 0;
+        if(area>m.overlap) { m.overlap=area; m.info=candidate; m.found=true; }
+        return TRUE;
+    },reinterpret_cast<LPARAM>(&match));
     MONITORINFOEXW info{};info.cbSize=sizeof(info);
-    if(!GetMonitorInfoW(MonitorFromRect(&raw,MONITOR_DEFAULTTONEAREST),&info))return fallback;
+    if(match.found && match.overlap>0) info=match.info;
+    else if(!GetMonitorInfoW(MonitorFromRect(&raw,MONITOR_DEFAULTTONEAREST),&info))return fallback;
     QScreen *screen=nullptr;
     for(auto item:QGuiApplication::screens())if(item->name()==QString::fromWCharArray(info.szDevice)) {screen=item;break;}
     if(!screen)return fallback;
@@ -73,7 +90,8 @@ QRect windowPlacementReference(QWidget *window,const QJsonObject &saved)
     if(window->isMaximized() || window->isFullScreen() || !GetWindowRect(handle,&current))return fallback;
     const auto contact=paneContactBounds(handle);
     const double scale=screen->devicePixelRatio();
-    const double ratio=scale/(double(GetDpiForWindow(handle))/96.);
+    const UINT windowDpi=GetDpiForWindow(handle);
+    const double ratio=scale/(double(windowDpi ? windowDpi : 96)/96.);
     const int left=qRound((contact.x()-current.left)*ratio),top=qRound((contact.y()-current.top)*ratio);
     const int right=qRound((current.right-contact.x()-contact.width())*ratio);
     const int bottom=qRound((current.bottom-contact.y()-contact.height())*ratio);
