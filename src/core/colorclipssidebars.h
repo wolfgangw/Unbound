@@ -81,7 +81,8 @@ public:
                 const int width=qBound(min,c.width,qMax(min,qMin(available,c.widget->maximumWidth())));
                 const int x=c.left ? viewer.left() : viewer.right()-width+1;
                 c.widget->setGeometry(x,viewer.y(),width,viewer.height());
-                if(c.left) viewer.setLeft(x+width+1);else viewer.setRight(x-2);
+                if(c.left) viewer.setLeft(qMin(viewer.right()+1,x+width+1));
+                else viewer.setRight(qMax(viewer.left()-1,x-2));
                 if(c.divider) {
                     const int thickness=c.dividerThickness;
                     const int edge=c.left ? x+width : x;

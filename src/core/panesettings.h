@@ -37,7 +37,7 @@ public:
         QFile file(previousPath.isEmpty() ? m_path : previousPath);
         if(!file.exists()) return;
         if(!file.open(QIODevice::ReadOnly) || file.size()>1024*1024) {
-            m_readError=QStringLiteral("Cannot read Unbound settings: %1").arg(m_path); return;
+            m_readError=QStringLiteral("Cannot read Unbound settings: %1").arg(file.fileName()); return;
         }
         QJsonParseError error;
         const auto document=QJsonDocument::fromJson(file.readAll(),&error);
@@ -47,17 +47,17 @@ public:
         if(error.error!=QJsonParseError::NoError || !document.isObject() || version<1 || version>8
             || !(version>=4 ? root.value("pages").isObject() : root.value("panes").isObject())
             || (version>=6 && !validLayouts(root.value("pages").toObject(),version>=7,version>=8))) {
-            m_readError=QStringLiteral("Unbound settings are invalid or unsupported: %1. The file was left unchanged.").arg(m_path); return;
+            m_readError=QStringLiteral("Unbound settings are invalid or unsupported: %1. The file was left unchanged.").arg(file.fileName()); return;
         }
         if(version>=4) {
-            m_pages=root.value("pages").toObject();
+            auto pages=root.value("pages").toObject();
             if(version==4) {
                 QJsonObject converted;
                 const auto pageNames=legacyPages();
                 const auto paneNames=legacyPanes();
                 for(auto page=pageNames.begin();page!=pageNames.end();++page) {
-                    if(!m_pages.contains(page.value())) continue;
-                    auto value=m_pages.value(page.value()).toObject();
+                    if(!pages.contains(page.value())) continue;
+                    auto value=pages.value(page.value()).toObject();
                     const auto oldPanes=value.value("panes").toObject();
                     QJsonObject panes;
                     for(auto pane=paneNames.begin();pane!=paneNames.end();++pane) {
@@ -68,40 +68,43 @@ public:
                     if(value.contains("panes")) value.insert("panes",panes);
                     converted.insert(page.key(),value);
                 }
-                m_pages=converted;
+                pages=converted;
             }
-            if(version<7) m_pages=withLayoutIds(m_pages);
+            if(version<7) pages=withLayoutIds(pages);
             if(version<8) {
                 bool hasLayouts=false;
-                for(auto page:m_pages)if(!page.toObject().value(LayoutsKey).toArray().isEmpty())hasLayouts=true;
+                for(auto page:pages)if(!page.toObject().value(LayoutsKey).toArray().isEmpty())hasLayouts=true;
                 // Preserve the pre-slot file for rollback to an older Unbound.
                 const auto backup=file.fileName()+".pre-v8";
                 if(hasLayouts && !QFile::exists(backup) && !QFile::copy(file.fileName(),backup)) {
                     m_readError=QStringLiteral("Cannot back up Unbound settings: %1").arg(backup);return;
                 }
-                m_pages=withLayoutSlots(m_pages);
+                pages=withLayoutSlots(pages);
             }
             if(version<8 || !previousPath.isEmpty()) {
-                m_readError=write(m_pages);
+                m_readError=write(pages);
                 if(m_readError.isEmpty() && !previousPath.isEmpty()) QFile::remove(previousPath);
+            } else {
+                m_pages=pages;
             }
             return;
         }
         // One-time conversion preserves the user's arrangement. Unsupported
         // experimental panes (including Clips/LightBox) are deliberately dropped.
+        QJsonObject pages;
         const auto panes=root.value("panes").toObject();
         const auto floating=root.value("floating").toObject();
         const auto toggles=root.value("toggles").toObject();
         for(auto it=panes.begin();it!=panes.end();++it) {
             if(it.key()==QLatin1String("Color/m_pLightBox")) continue; // Retired pre-format-4 experiment.
             const auto geometry=placementJson(QByteArray::fromBase64(it.value().toString().toLatin1()));
-            if(!geometry.isEmpty()) setEntry(m_pages,it.key(),"window",geometry);
+            if(!geometry.isEmpty()) setEntry(pages,it.key(),"window",geometry);
         }
         for(auto it=floating.begin();it!=floating.end();++it)
-            if(it.key()!=QLatin1String("Color/m_pLightBox") && it.value().isBool()) setEntry(m_pages,it.key(),"floating",it.value());
+            if(it.key()!=QLatin1String("Color/m_pLightBox") && it.value().isBool()) setEntry(pages,it.key(),"floating",it.value());
         for(auto it=toggles.begin();it!=toggles.end();++it)
-            if(it.key()!=QLatin1String("Color/m_pLightBox") && it.value().isBool()) setEntry(m_pages,it.key(),"toolbarButtonChecked",it.value());
-        m_readError=write(m_pages);
+            if(it.key()!=QLatin1String("Color/m_pLightBox") && it.value().isBool()) setEntry(pages,it.key(),"toolbarButtonChecked",it.value());
+        m_readError=write(pages);
         if(m_readError.isEmpty() && !previousPath.isEmpty()) QFile::remove(previousPath);
     }
     QByteArray geometry(const QString &name) const { return placementBytes(entry(name).value("window").toObject()); }
@@ -272,7 +275,10 @@ private:
     static bool validLayouts(const QJsonObject &pages,bool stableIds,bool stableSlots) {
         for(auto page:pages) {
             const auto state=page.toObject();
-            if(!state.contains(LayoutsKey)) continue;
+            if(!state.contains(LayoutsKey)) {
+                if(stableIds && state.contains(ActiveLayoutKey)) return false;
+                continue;
+            }
             if(!state.value(LayoutsKey).isArray() || state.value(LayoutsKey).toArray().size()>5) return false;
             QSet<QString> identities;
             QSet<int> occupiedSlots;

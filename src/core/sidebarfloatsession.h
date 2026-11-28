@@ -289,7 +289,6 @@ public:
         // and reparents its child widgets into the new host.
         host->setLayout(layout);
         if (layoutSlot->layout() || host->layout() != layout) {
-            if (!layoutSlot->layout() && host->layout() == layout) layoutSlot->setLayout(layout);
             delete host;
             clear();
             return QStringLiteral("Could not transfer the pane layout.");
@@ -507,7 +506,6 @@ public:
             if (sameChildren) m_splitter->setSizes(m_splitterSizes);
         }
         // Other sidebar slots retain their current toolbar visibility.
-        restoreNativeExpand();
         auto host = m_host.data();
         clear();
         host->hide();

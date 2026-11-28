@@ -25,6 +25,7 @@ public:
         if(!widget || !m_main) return;
         for(const auto &page:PaneCatalogue::pages())
             if(!page.auxiliaryWindow.isEmpty() && widget->objectName()==page.auxiliaryWindow) {
+                for(int i=m_auxiliaryPages.size()-1;i>=0;--i) if(!m_auxiliaryPages[i]) m_auxiliaryPages.removeAt(i);
                 if(!m_auxiliaryPages.contains(widget)) m_auxiliaryPages.append(widget);
                 return;
             }

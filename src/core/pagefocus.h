@@ -32,6 +32,7 @@ protected:
         if(!m_stack) return false;
         const auto type=event->type();
         if(type==QEvent::ApplicationDeactivate) { m_mousePressed=false; cancel(); return false; }
+        if(type==QEvent::UngrabMouse || type==QEvent::WindowDeactivate) m_mousePressed=false;
         if(type==QEvent::MouseButtonPress) m_mousePressed=true;
         if(type==QEvent::MouseButtonRelease) {
             m_mousePressed=false;
@@ -42,7 +43,7 @@ protected:
         // No widget inspection on paint, playback, timer or pointer movement.
         if(type!=QEvent::Hide && type!=QEvent::WindowActivate) return false;
         auto widget=qobject_cast<QWidget *>(object);
-        if(type==QEvent::Hide && widget==m_stack->currentWidget() && m_main && m_main->isVisible()) {
+        if(type==QEvent::Hide && widget==m_stack->currentWidget() && m_main && m_main->isVisible() && !m_main->isMinimized()) {
             // Application filters run before the pane sessions hide their hosts.
             m_pending=true;
         }

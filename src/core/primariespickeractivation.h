@@ -15,21 +15,27 @@ public:
     using Viewer = std::function<QWidget *()>;
     PrimariesPickerActivation(QWidget *host, Viewer viewer)
         : QObject(host), m_host(host), m_viewer(std::move(viewer)) {
-        for (auto button : host->findChildren<QAbstractButton *>()) {
-            const auto name = button->objectName();
-            if (name == QLatin1String("whitePickerPushBtn")
-                || name == QLatin1String("blackPickerPushBtn")
-                || name == QLatin1String("whiteBalancePickerPushBtn"))
-                button->installEventFilter(this);
+        if (m_host) {
+            m_host->installEventFilter(this);
+            observe();
         }
+    }
+    ~PrimariesPickerActivation() override {
+        for (const auto &widget : m_observed) if (widget) widget->removeEventFilter(this);
     }
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override {
+        if (event->type() == QEvent::ChildAdded && !m_queued) {
+            m_queued = true;
+            QTimer::singleShot(0, this, [this] { m_queued = false; observe(); });
+            return false;
+        }
         if (event->type() != QEvent::MouseButtonRelease || !available()
             || QApplication::activeWindow() != m_host->window())
             return false;
-        auto button = static_cast<QAbstractButton *>(object);
+        auto button = qobject_cast<QAbstractButton *>(object);
+        if (!button || !isPicker(button->objectName())) return false;
         auto release = static_cast<QMouseEvent *>(event);
         if (button->window() != m_host->window() || !button->isDown() || release->button() != Qt::LeftButton
             || !button->rect().contains(release->pos()))
@@ -59,11 +65,30 @@ protected:
     }
 
 private:
+    static bool isPicker(const QString &name) {
+        return name == QLatin1String("whitePickerPushBtn")
+            || name == QLatin1String("blackPickerPushBtn")
+            || name == QLatin1String("whiteBalancePickerPushBtn");
+    }
+    void observe() {
+        if (!m_host) return;
+        for (int i = m_observed.size() - 1; i >= 0; --i) if (!m_observed[i]) m_observed.removeAt(i);
+        auto widgets = m_host->findChildren<QWidget *>();
+        widgets.prepend(m_host.data());
+        for (auto widget : widgets) {
+            if (!m_observed.contains(widget)) {
+                m_observed.append(widget);
+                widget->installEventFilter(this);
+            }
+        }
+    }
     bool available() const {
-        return !QCoreApplication::closingDown() && m_host->isVisible() && !m_host->window()->isMinimized()
+        return !QCoreApplication::closingDown() && m_host && m_host->isVisible() && !m_host->window()->isMinimized()
             && !QApplication::activeModalWidget() && !QApplication::activePopupWidget();
     }
-    QWidget *m_host;
+    QPointer<QWidget> m_host;
+    QList<QPointer<QWidget>> m_observed;
+    bool m_queued = false;
     Viewer m_viewer;
 };
 }

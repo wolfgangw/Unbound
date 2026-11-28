@@ -58,7 +58,7 @@ private:
     void finish() {
         if(m_finished) return;
         m_finished=true;
-        qApp->removeEventFilter(this);
+        if(qApp) qApp->removeEventFilter(this);
         const auto path=QDir::tempPath()+"/Unbound-palette-restoration";
         QDir().mkpath(path);
         static unsigned sequence=0;

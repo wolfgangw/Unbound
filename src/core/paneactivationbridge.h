@@ -21,13 +21,13 @@ public:
         m_enabled = true;
         qApp->installEventFilter(this);
     }
-    ~PaneActivationBridge() override { qApp->removeEventFilter(this); }
+    ~PaneActivationBridge() override { if (qApp) qApp->removeEventFilter(this); }
     bool enabled() const { return m_enabled; }
     void stop()
     {
         m_enabled = false;
         // Docking during nested native processing must still consume our event.
-        if (!m_synthetic) qApp->removeEventFilter(this);
+        if (!m_synthetic && qApp) qApp->removeEventFilter(this);
     }
 protected:
     bool eventFilter(QObject *object, QEvent *event) override
@@ -51,7 +51,7 @@ protected:
         QApplication::sendEvent(m_main, &notification);
         if (!alive) return false;
         m_synthetic = nullptr;
-        if (!m_enabled) qApp->removeEventFilter(this);
+        if (!m_enabled && qApp) qApp->removeEventFilter(this);
         return false; // Preserve the original activation and subsequent focus.
     }
 private:

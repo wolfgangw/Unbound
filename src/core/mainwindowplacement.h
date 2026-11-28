@@ -24,7 +24,11 @@ public:
         m_save.setSingleShot(true); m_save.setInterval(750);
         connect(&m_save,&QTimer::timeout,this,[this] { flush(); });
     }
-    ~MainWindowPlacement() override { flush(); }
+    ~MainWindowPlacement() override {
+        flush();
+        for (auto marker:m_dualScreenMarkers) if (marker) marker->removeEventFilter(this);
+        if (m_window) m_window->removeEventFilter(this);
+    }
     std::function<void(const QString &)> error;
     void attach(QWidget *window)
     {
@@ -52,6 +56,7 @@ public:
         if (!m_window || !m_window->isAncestorOf(widget)) return;
         const auto name=widget->objectName();
         if (!name.contains(QLatin1String("DualScreenMode")) && !name.endsWith(QLatin1String("InDSM"))) return;
+        for (int i=m_dualScreenMarkers.size()-1; i>=0; --i) if (!m_dualScreenMarkers[i]) m_dualScreenMarkers.removeAt(i);
         for (auto marker:m_dualScreenMarkers) if (marker==widget) return;
         m_dualScreenMarkers.append(widget);
         widget->installEventFilter(this);

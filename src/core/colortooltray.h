@@ -146,7 +146,14 @@ protected:
             }
             return false;
         }
-        if (type==QEvent::ApplicationDeactivate) { ++m_generation; return false; }
+        if (type==QEvent::ApplicationDeactivate) { ++m_generation; QObject::disconnect(m_click); return false; }
+        if (type==QEvent::MouseButtonRelease && m_click) {
+            const auto generation=m_generation;
+            QTimer::singleShot(0,this,[this,generation] {
+                if(generation==m_generation) QObject::disconnect(m_click);
+            });
+            return false;
+        }
         if (type!=QEvent::MouseButtonPress && type!=QEvent::KeyPress && type!=QEvent::Shortcut) return false;
         if (!object->isWidgetType() || QApplication::activeModalWidget() || QApplication::activePopupWidget()) return false;
         if (type==QEvent::MouseButtonPress && static_cast<QMouseEvent *>(event)->button()!=Qt::LeftButton) return false;

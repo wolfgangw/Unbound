@@ -114,6 +114,7 @@ private:
         m_attaching=false;
         if(m_released || !(QApplication::mouseButtons() & Qt::LeftButton)) { finish(false); return; }
         if(!host->beginButtonMove(false)) { finish(true); return; }
+        m_moving=true;
         host->grabMouse();
     }
     void reveal() {
@@ -125,8 +126,9 @@ private:
         if(qApp) qApp->removeEventFilter(this);
         if(auto button=qobject_cast<QAbstractButton *>(m_source.data())) button->setDown(false);
         const auto host=m_host; m_host=nullptr;
+        const bool moving=m_moving; m_moving=false;
         if(host) {
-            host->finishButtonMove(cancel);
+            if(moving) host->finishButtonMove(cancel);
             if(QWidget::mouseGrabber()==host) host->releaseMouse();
             host->setProperty("unboundUndockDragging",QVariant());
         }
@@ -147,6 +149,6 @@ private:
     Target m_target;
     QString m_paneName;
     qreal m_opacity=1;
-    bool m_transferring=true,m_released=false,m_queued=false,m_done=false,m_attaching=false;
+    bool m_transferring=true,m_released=false,m_queued=false,m_done=false,m_attaching=false,m_moving=false;
 };
 }

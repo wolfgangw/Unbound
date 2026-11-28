@@ -52,8 +52,11 @@ public:
         // wait, let a new request replace persistent native layout churn.
         return pendingDeadline.elapsed()<3000;
     }
+    static QString busyMessage() {
+        return QStringLiteral("A layout change is still in progress. Please try again.");
+    }
     QString run(QWidget *window,const std::function<QString()> &operation) {
-        if(busy())return QStringLiteral("A layout change is still in progress. Please try again.");
+        if(busy())return busyMessage();
         main=window;running=true;settling=true;changed=false;pendingDeadline.start();
         ++commandContext(); // A menu operation supersedes an older queued script.
         commandOperationActive()=true;

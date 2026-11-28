@@ -60,9 +60,23 @@ void testLayoutSlots() {
     require(file.open(QIODevice::WriteOnly|QIODevice::Truncate),"Cannot seed duplicate slot");
     file.write(QJsonDocument(QJsonObject{{"version",8},{"pages",QJsonObject{{page,badState}}}}).toJson());file.close();
     require(!PaneSettings(path).readError().isEmpty(),"Duplicate slot accepted");
+    // Reject dangling activePreset when presets array is absent.
+    {
+        QJsonObject dangling{{"version",8},{"pages",QJsonObject{{page,QJsonObject{{"panes",QJsonObject{}},{"activePreset","ghost"}}}}}};
+        require(file.open(QIODevice::WriteOnly|QIODevice::Truncate),"Cannot seed dangling activePreset");
+        file.write(QJsonDocument(dangling).toJson());file.close();
+        require(!PaneSettings(path).readError().isEmpty(),"Dangling activePreset without presets accepted");
+    }
     QWidget main;
     PaneSettings empty(directory.filePath("empty.json"));
     PageLayoutMenu menu(empty,page,&main);
+    int feedbackPulses=0;
+    menu.feedback=[&](bool) { ++feedbackPulses; };
+    menu.dockAll=[] { return LayoutCommandGate::busyMessage(); };
+    if(auto dockButton=menu.findChild<QPushButton *>("unboundLayoutDockAll")) {
+        dockButton->setEnabled(true); dockButton->click();
+        require(feedbackPulses==0,"Busy menu action pulsed feedback instead of staying silent");
+    }
     const auto numbers=menu.findChildren<QLabel *>("unboundLayoutSlotNumber");
     const auto names=menu.findChildren<QPushButton *>("unboundLayoutRecall");
     require(numbers.size()==5 && names.size()==5,"Menu does not allocate five slots");

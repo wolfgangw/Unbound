@@ -37,6 +37,11 @@ public:
         QTimer::singleShot(3000,this,[this] { finish("observer_deadline"); });
         queue();
     }
+    ~PaneGeometryTransaction() override {
+        m_quiet.stop();
+        m_work.clear();
+        if(qApp) qApp->removeEventFilter(this);
+    }
     bool refresh() {
         if(m_done) return false;
         m_quiet.start(); queue(); return true;

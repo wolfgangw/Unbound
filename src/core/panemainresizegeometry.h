@@ -15,6 +15,7 @@ public:
         : QObject(host),m_host(host),m_main(main),m_restore(std::move(restore)) {
         qApp->installEventFilter(this);
     }
+    ~PaneMainResizeGeometry() override { if(qApp) qApp->removeEventFilter(this); }
     void reset(const QByteArray &geometry={}) { ++m_generation; m_requested=geometry; m_transaction=nullptr; }
     QByteArray intendedGeometry(const QByteArray &fallback) const {
         return m_requested.isEmpty()?fallback:m_requested;

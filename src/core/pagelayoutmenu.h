@@ -30,6 +30,7 @@
 #include <QCloseEvent>
 #include <functional>
 #include "panesettings.h"
+#include "layoutcommandgate.h"
 #include "windowinteraction.h"
 #include "nativemenutracking.h"
 #include "panepopupsurface.h"
@@ -179,7 +180,8 @@ public:
         m_hoverDismiss.setInterval(PanePopupDismissDelayMs);
         connect(&m_hoverDismiss,&QTimer::timeout,this,[this] {
             // Native layout changes can produce transient leave events.
-            if(isVisible() && !geometry().contains(QCursor::pos())) dismiss();
+            // Never abort an active inline rename while the user is typing.
+            if(isVisible() && m_editing.isEmpty() && !geometry().contains(QCursor::pos())) dismiss();
         });
         m_layout=new QVBoxLayout(this); m_layout->setContentsMargins(6,6,6,6); m_layout->setSpacing(0);
         m_dockingWarning=new QLabel(this); m_dockingWarning->setObjectName("unboundDockingWarning");
@@ -295,7 +297,7 @@ protected:
         QFrame::enterEvent(event);
     }
     void leaveEvent(QEvent *event) override {
-        if(isVisible()) m_hoverDismiss.start();
+        if(isVisible() && m_editing.isEmpty()) m_hoverDismiss.start();
         QFrame::leaveEvent(event);
     }
     void closeEvent(QCloseEvent *event) override {
@@ -414,7 +416,8 @@ private:
     }
     void addWidget(QWidget *widget) { m_layout->addWidget(widget); }
     void afterAction(const QString &error,bool saved=false) {
-        if(feedback && (!error.isEmpty() || saved)) feedback(error.isEmpty());
+        if(feedback && error!=LayoutCommandGate::busyMessage() && (!error.isEmpty() || saved))
+            feedback(error.isEmpty());
         // Recall and its completion can request refresh in the same event turn.
         // Commit one update, preserving the existing rows.
         if(m_refreshQueued) return;
@@ -455,7 +458,10 @@ private:
         const auto &row=m_rows[id];
         if(submit) {
             const auto error=rename ? rename(id,row.editor->text()) : m_settings.renameLayout(m_page,id,row.editor->text());
-            if(!error.isEmpty()) { if(feedback)feedback(false); row.editor->setFocus(); return; }
+            if(!error.isEmpty()) {
+                if(feedback && error!=LayoutCommandGate::busyMessage()) feedback(false);
+                row.editor->setFocus(); return;
+            }
         }
         m_editing.clear();
         const bool focused=row.editor->hasFocus();
@@ -528,6 +534,7 @@ private:
         for(auto it=m_rows.begin();it!=m_rows.end();) {
             if(ids.contains(it.key())) { ++it; continue; }
             if(m_editing==it.key()) m_editing.clear();
+            it.value().editor->finish={}; it.value().load->renameRequested={};
             auto widget=it.value().widget; m_layout->removeWidget(widget); widget->hide();
             widget->deleteLater(); it=m_rows.erase(it);
         }

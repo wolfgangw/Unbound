@@ -29,6 +29,8 @@ public:
     ~MediaMetadataSpace() override {
         QScopedValueRollback<bool> guard(m_changing,true);
         restoreRegions();
+        if(m_page) m_page->removeEventFilter(this);
+        if(m_main && m_main!=m_page) m_main->removeEventFilter(this);
         if(m_button && NativeToggleState::temporary(m_button) && m_button->isChecked()
             && !QCoreApplication::closingDown()) m_button->click();
         m_intent.end();

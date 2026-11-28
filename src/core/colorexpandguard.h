@@ -37,6 +37,8 @@ private:
     void observe() {
         if(!m_host) return;
         auto widgets=m_host->findChildren<QWidget *>(); widgets.prepend(m_host);
+        for(int i=m_widgets.size()-1;i>=0;--i) if(!m_widgets[i]) m_widgets.removeAt(i);
+        for(int i=m_buttons.size()-1;i>=0;--i) if(!m_buttons[i].first) m_buttons.removeAt(i);
         QSet<QWidget *> known;
         for(auto widget:m_widgets) if(widget) known.insert(widget);
         for(auto widget:widgets) {

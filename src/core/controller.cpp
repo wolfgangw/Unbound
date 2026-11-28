@@ -732,12 +732,25 @@ private:
                 m_pendingLayoutToggles.remove(name); m_pendingColorToggles.remove(name);
                 m_restoreAttempted.insert(name);
                 settingsError(m_settings.saveFloating(settingsKey(name),true));
+                auto recovered=m_sessions.value(name);
+                if(recovered && recovered->active()) {
+                    if(name==QLatin1String("colorWheelsTab")) {
+                        const QPointer<Controller> owner(this);
+                        new Unbound::PrimariesPickerActivation(recovered->floatingWindow(),
+                            [owner] { return owner ? owner->colorViewerWindow() : nullptr; });
+                    }
+                    if(preservesNativeLayout(name)) for(auto button:m_toggles.value(name))
+                        if(button) recovered->observeNativeToggle(button);
+                }
                 if(auto decoration=m_decorations.value(name)) {
                     decoration->setFloating(true);
                     decoration->setDockingFailure(Unbound::dockingFailureMessage(name));
-                    if(auto toggle=nativeToggle(decoration->pane(),name)) {
-                        settingsError(m_settings.saveToggle(settingsKey(name),toggle->isChecked()));
-                        if(preservesNativeLayout(name)) m_sessions.value(name)->observeNativeToggle(toggle);
+                    if(auto pane=decoration->pane()) if(auto toggle=nativeToggle(pane,name)) {
+                        const auto key=settingsKey(name);
+                        if(name==QLatin1String("frameMediaPageMetadataWidget") && recovered && recovered->active()) {
+                            recovered->setMediaMetadataExpanded(toggle,m_settings.hasToggle(key) && m_settings.toggle(key));
+                        }
+                        settingsError(m_settings.saveToggle(key,Unbound::NativeToggleState::checked(toggle)));
                     }
                 }
                 if(m_layoutMenu) m_layoutMenu->refreshDockingWarning();

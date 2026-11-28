@@ -98,6 +98,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override
     {
         if (m_dragged) {
+            if (!(event->buttons() & Qt::LeftButton)) { finishMove(true); event->accept(); return; }
             if (m_dragHost) m_dragHost->updateButtonMove();
             event->accept();
             return;
@@ -265,7 +266,8 @@ protected:
             for(const auto &pair:m_menuButtons) if(pair.first==object && pair.second)
                 pair.second->setVisible(!pair.first->isHidden());
         if(event->type()==QEvent::Resize || event->type()==QEvent::Show || event->type()==QEvent::LayoutRequest) {
-            if(!m_floating) refresh();
+            const bool colorControl=m_pane && PaneCatalogue::colorControl(m_pane->objectName());
+            if(!m_floating && (!colorControl || event->type()==QEvent::Show || !m_native)) refresh();
             position();
         }
         return false;
@@ -355,12 +357,15 @@ private:
         if(!updateScopesContext())return;
 
         m_refreshing=true;
-        bool any=false; for(auto b:m_buttons) if(b) any=true;
+        for(int i=m_buttons.size()-1;i>=0;--i) if(!m_buttons[i]) m_buttons.removeAt(i);
+        for(int i=m_controlDragSurfaces.size()-1;i>=0;--i) if(!m_controlDragSurfaces[i]) m_controlDragSurfaces.removeAt(i);
+        for(int i=m_menuButtons.size()-1;i>=0;--i) if(!m_menuButtons[i].first || !m_menuButtons[i].second) m_menuButtons.removeAt(i);
+        const bool any=!m_buttons.isEmpty();
         if(m_native && any && !PaneCatalogue::colorControl(m_pane->objectName())) {m_refreshing=false; return;}
         const auto paneDescriptor=PaneCatalogue::find(m_pane->objectName());
         if(const auto control=PaneCatalogue::colorControl(m_pane->objectName())) {
             auto root=m_floating && button() ? button()->window() : m_pane.data();
-            if((!m_floating || m_pane->objectName()==QLatin1String("scopesWidget")) && ColorNativePalette::supports(m_pane))
+            if((!m_floating || !button() || m_pane->objectName()==QLatin1String("scopesWidget")) && ColorNativePalette::supports(m_pane))
                 if(auto palette=ColorNativePalette::palette(m_pane)) root=palette;
             auto add=[this](QWidget *header,QBoxLayout *row,QAbstractButton *anchor,bool mirror=false) {
                 // Retain installed rows and add only newly created native variants.
@@ -522,7 +527,7 @@ private:
         }
         // Center the 20 px control in Timeline's 32 px track-label gutter.
         if(m_cornerOverlay && button()) {
-            if(button()->parentWidget()->objectName()!=QLatin1String("unboundColorTimelineHeader"))
+            if(auto parent=button()->parentWidget(); !parent || parent->objectName()!=QLatin1String("unboundColorTimelineHeader"))
                 button()->move(6,2);
             button()->raise(); return;
         }
