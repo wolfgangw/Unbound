@@ -46,6 +46,16 @@ void initializePlatformTests()
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 }
 void settlePlatformWindowState(QWidget &) {}
+// A fixture launched by a background build may start outside the foreground input queue.
+static void acquireFixtureForeground(HWND window)
+{
+    const auto foreground = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+    const auto thread = GetCurrentThreadId();
+    const bool attached = foreground && foreground != thread && AttachThreadInput(thread, foreground, TRUE);
+    SetForegroundWindow(window);
+    SetFocus(window);
+    if (attached) AttachThreadInput(thread, foreground, FALSE);
+}
 std::function<unsigned long(void *)> resolveBootstrap(QLibrary &helper)
 {
     auto start=reinterpret_cast<int (*)(void (*)(int))>(helper.resolve("UnboundLuaAttach"));
@@ -544,6 +554,8 @@ bool runPlatformWindowTests(QApplication &app)
             return -1;
         };
         const auto mainRect = nativeWindowBounds(main), firstRect = nativeWindowBounds(first), secondRect = nativeWindowBounds(second);
+        acquireFixtureForeground(handle(outsider));
+        check(GetForegroundWindow() == handle(outsider), "Group fixture could not acquire foreground input");
         for (auto selected : {&main, static_cast<QWidget *>(&first), static_cast<QWidget *>(&second)}) {
             SetWindowPos(handle(second), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             SetWindowPos(handle(first), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -582,11 +594,7 @@ bool runPlatformWindowTests(QApplication &app)
         Unbound::PaneFloatingWindow pane;
         pane.setGeometry(301,251,401,303);pane.show();pane.activateWindow();app.processEvents();
         const auto hwnd=reinterpret_cast<HWND>(pane.winId());
-        const auto foregroundThread=GetWindowThreadProcessId(GetForegroundWindow(),nullptr);
-        const auto thread=GetCurrentThreadId();
-        const bool attached=foregroundThread!=thread && AttachThreadInput(thread,foregroundThread,TRUE);
-        SetForegroundWindow(hwnd);SetFocus(hwnd);
-        if(attached)AttachThreadInput(thread,foregroundThread,FALSE);
+        acquireFixtureForeground(hwnd);
         app.processEvents();
         check(GetForegroundWindow()==hwnd,"Grid fixture could not acquire foreground input");
         const auto original=Unbound::paneContactBounds(hwnd);
