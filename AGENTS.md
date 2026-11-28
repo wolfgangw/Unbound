@@ -12,8 +12,10 @@
 - Use widget/page/layout events and bounded deferred work, not recurring discovery
   scans or polling. Initialize lazy native content before automatic detachment,
   then restore saved native toggle states.
-- Feature/fix work produces internal builds. Keep VERSION unchanged; do not tag,
-  publish or package without an explicit request. Never overwrite published output.
+- Feature/fix work produces internal builds. On a `<version>-dev` branch, bump
+  VERSION to that target `<version>`; otherwise keep VERSION unchanged. Do not
+  tag, publish or package without an explicit request. Never overwrite published
+  output.
 - Validate a rebuilt helper in a fresh Resolve process: replacing a loaded library
   does not update it. Fixtures cannot fully model Resolve. Do not terminate the
   user's Resolve session without instruction; installation requires Resolve closed.
@@ -445,8 +447,9 @@ without a fixed offset or tolerance that would mask an error.
 
 ## Build and validate
 
-Internal builds keep `VERSION` and use a fresh `yyyy.mm.dd.NNN` runtime build
-ID. Deliver `Unbound <version> (<build>).exe` under `release/win/<build>/` or
+Internal builds use the current `VERSION` (bumped to `<version>` on a
+`<version>-dev` branch) and a fresh `yyyy.mm.dd.NNN` runtime build ID. Deliver
+`Unbound <version> (<build>).exe` under `release/win/<build>/` or
 the corresponding `.app` under `release/mac/installer/<package-build>/`. Use
 the runtime build ID in the app name even when packaging has its own counter.
 
