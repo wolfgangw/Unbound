@@ -12,24 +12,18 @@
 - Use widget/page/layout events and bounded deferred work, not recurring discovery
   scans or polling. Initialize lazy native content before automatic detachment,
   then restore saved native toggle states.
-- Feature/fix work produces internal builds. On a `<version>-dev` branch, bump
-  VERSION to that target `<version>`; otherwise keep VERSION unchanged. Do not
-  tag, publish or package without an explicit request. Never overwrite published
-  output.
-- Validate a rebuilt helper in a fresh Resolve process: replacing a loaded library
-  does not update it. Fixtures cannot fully model Resolve. Do not terminate the
-  user's Resolve session without instruction; installation requires Resolve closed.
-- Distinguish Qt logical client geometry, native placement coordinates and visible
-  frame/contact bounds. Diagnose restoration errors before adding compensation.
+- Make internal builds for features and fixes. Follow the [version and packaging
+  rules](#build-and-validate). Install with Resolve closed and validate in a fresh
+  process. Never terminate the user's session without instruction.
+- Distinguish Qt logical client geometry, native placement and visible frame
+  bounds. Diagnose restoration errors before adding compensation.
 - Do not change Resolve preferences/project resolution automatically, intercept
   transport/page shortcuts globally, or introduce an extra workspace/control window.
-- Root README.md belongs to the user; do not modify it. Keep current technical
-  mechanisms and development rules here, explaining each in one place. Test and
-  infrastructure READMEs retain reproducible tool usage and link here for design.
-- Keep only open investigations and unsettled designs in `doc/` and `doc/issues/`.
-  When resolved, move the durable result here and remove the investigation. No
-  histories of attempts, closed reports, PIDs or session/build diaries; Git and
-  build logs retain history. Announce documentation changes.
+- Leave the user's root README.md alone. Keep AGENTS.md below 32 KB. Record
+  durable design and development rules here once, tool procedures in their
+  READMEs, and only open investigations in `doc/`. Remove settled issue notes
+  after incorporating their conclusions. Announce documentation changes.
+
 - Source and symbol artwork are MIT licensed. Preserve applicable third-party
   notices. GammaRay is an inspection tool, not shipped code or a runtime dependency.
 
@@ -77,28 +71,24 @@ fixtures supply the native operations through their layout adapters.
 
 ## Startup and installation
 
-Install into the current account with Resolve closed. The per-user Fusion Scripts
-root contains the startup hook `Unbound.scriptlib`. Managed menu scripts belong
-in `Scripts/Utility/Unbound`. Leave other Utility scripts alone and move obsolete
-launchers outside the Scripts scan tree. The private runtime lives under
-`%LOCALAPPDATA%/Unbound/Runtime` on Windows and
-`~/Library/Application Support/Unbound/Runtime` on macOS.
+Install per user. Put `Unbound.scriptlib` at the Fusion Scripts root and managed
+commands in `Scripts/Utility/Unbound`. Move obsolete launchers outside the scan
+tree and preserve unrelated scripts. Runtime directories are
+`%LOCALAPPDATA%/Unbound/Runtime` and `~/Library/Application Support/Unbound/Runtime`.
 
-Resolve evaluates script libraries in several Lua contexts. The hook requires
-usable global FFI and checks process identity through public OS APIs before
-loading native code. External Workspace script hosts skip startup silently.
-The Qt-free `UnboundLuaLoader` validates the host and queues attachment of
-`Unbound.dll` or `Unbound.dylib` on the Qt GUI thread. Repeated startup reuses
-one controller. Use Resolve's Qt runtime. The installer must never re-sign
-Resolve, start or terminate it, or install an external service.
+The hook requires global FFI and checks process identity through public OS APIs.
+External Workspace hosts skip startup silently. The Qt-free `UnboundLuaLoader`
+validates the host and queues `Unbound.dll` or `Unbound.dylib` attachment on
+Resolve's Qt GUI thread. Repeated startup reuses the controller. Never re-sign,
+launch or terminate Resolve during installation or install an external service.
 
-Install/update/uninstall preserve settings and layouts. Replace runtime and
-commands transactionally, rolling back on failure. Omit stale `UnboundHelper.dylib`
-from Mac payloads. [Installer wording](src/installer/dialog.json) and `presentation.h`
-are shared. A matching intact installation shows disabled Install and enabled
-Uninstall. Repair requires a damaged matching payload. A newer installation
-disables both actions and points to the newer installer. Compare semantic
-versions first, then internal builds of the same base version.
+Preserve settings and layouts through install, update and removal. On Windows,
+stage on each destination volume so publication and rollback use renames even
+with redirected AppData. On macOS, hold the install lock through rollback and
+exclude obsolete `UnboundHelper.dylib` from payloads. Share [installer wording](src/installer/dialog.json)
+and `presentation.h`. Compare semantic versions first, then internal builds.
+An intact match enables only Uninstall. A damaged match offers Repair. A newer
+installation disables both actions and directs users to its installer.
 
 ### Script commands
 
@@ -128,29 +118,26 @@ Never replay a burst of shortcuts or install a global key handler.
 
 ## Pane lifecycle and interaction
 
-The Unbound button clicks to undock/dock and drags to move. A docked button
-starts tearoff after Qt's drag threshold. Anchor the pressed point to the pointer
-at the initial floating size. `PaneUndockDrag` owns the gesture across header or
-button replacement. Raise the host without activation while dragging, above
-ordinary windows and below pins. Activate on release if Resolve is still active
-and no modal intervened. Cancel on actual app departure, Escape, owner loss or
-interruption. Preserve native accessibility and input delivery.
+Click the Unbound button to dock or undock. After Qt's drag threshold,
+`PaneUndockDrag` anchors the pressed point at the initial floating size and owns
+tearoff across header replacement. Raise above ordinary windows and below pins
+without activation. Activate on release if Resolve is active and no modal
+intervened. Cancel on Escape, owner loss, interruption or application departure.
 
-Decorate existing headers. Drag from titles and unused background. Controls
-and selectable text keep native input. Decorate both populated and empty
-Media/Edit/Fairlight Metadata headers so the button and dragging survive selection changes.
+Decorate existing headers. Titles and unused background drag. Controls and
+selectable text keep native input and accessibility. Decorate both empty and
+populated Media/Edit/Fairlight Metadata headers.
 
-Manual undocking turns off the corresponding native visibility toggle. Docking
-turns it on, deferred on an inactive page. Queue native actions only for panes
-with a known toggle or selector. Preserve saved choices across lazy initialization.
-Serialize Edit Inspector/Metadata initialization so a queued native sidebar
-deselection cannot strand the other pane. On Media, the Metadata selector also
-enables clip updates. To reclaim its sidebar, measure where Resolve places the
-other regions with Metadata closed, then keep those bounds with the selector on.
-Persist the user's sidebar choice. During interactive main-window resize, leave
-the reclaimed sidebar closed until the native resize ends, then resume delivery.
-Keep occupied hosts on page switches.
-After successful docking, delete empty hosts and their compositors.
+Undocking disables the native visibility toggle. Docking enables it when the
+page is active. Queue actions only for known toggles/selectors and preserve
+saved choices during lazy initialization. Initialize Edit Inspector and Metadata
+in sequence so sidebar deselection cannot strand the other pane.
+
+Media Metadata needs its selector on to receive clip updates. Measure the
+regions with Metadata closed and retain those bounds with its selector on.
+Persist the user's sidebar choice. During main-window resize keep the reclaimed
+sidebar closed, then resume delivery. Keep occupied hosts on page switches and
+delete empty hosts and compositors after docking.
 
 Associate panes with their **logical page**, including named auxiliary pages in
 Dual Screen mode. A pane changing top-level owner or an auxiliary window closing
@@ -228,57 +215,48 @@ video/audio divider ratio alone.
 
 ### Shared native Scopes on Edit and Color
 
-Resolve has one globally registered floating `UiWaveformWindow`. Keep that
-registration so Scopes update independently of the docked Color tool. Share
-`NativeScopesContent` for exclusive ownership. Scope count, types and settings
-are native global state. Window visibility, geometry and layout membership are
-page-specific. Discover the native shell as QWidget on both platforms.
+Resolve registers one floating `UiWaveformWindow`. `NativeScopesContent` borrows
+that QWidget exclusively and preserves registration for independent updates.
+Scope types, count and settings are global. Visibility, geometry and layout
+membership belong to each page.
 
-- **Edit** has no dock slot. [Edit Scopes](src/core/editscopes.h) adopts the
-  window directly when opened through Workspace > Video Scopes. Explicit On
-  brings the host forward. Startup, layout recall and page return are
-  nonactivating. Host close, Unbound docking, Workspace Off and Dock all close
-  it. Older layouts with no Scopes entry recall it closed.
-- **Color** embeds the native floating window while leaving the single docked
-  scope in place. Keep native view-count controls and plot input. Decorate the
-  outer header once. Prevent the embedded shell from resizing independently
-  of its host.
-- **Cinema Viewer** may hide the native Scopes shell before hiding the workspace.
-  Preserve floating intent and keep the shell visible on a separate display.
-  Resolve supplies the signal. See the [paused Color Cinema limitation](doc/issues/color-viewer.md).
-- **Sizing on Edit and Color.** Scopes can restore its former native size on
-  show. Reapply the host layout before exposure if the embedded window no
-  longer fills it. Let Qt deliver the normal paint. Keep the native view-count
-  refresh for size changes and reuse its result on same-size reveals. Returning
-  from Cinema Viewer with resized Color Scopes is validated on Windows.
-- **Page handoff** must close the borrowed native renderer **while visible**,
-  restore native ownership and remembered placement, then hide the outgoing
-  host. Otherwise Resolve can reopen Scopes on the destination page or lose
-  its position. Retain each page's intent for reacquisition. Run handoff after
-  outgoing transition capture so Scopes stays in the captured layout. Main
-  minimization alone is not page departure.
+- **Edit.** [Edit Scopes](src/core/editscopes.h) adopts the Workspace > Video
+  Scopes window directly. Explicit On brings it forward. Startup, recall and
+  page return are nonactivating. Close, docking, Workspace Off and Dock all
+  close it. Older layouts without Scopes recall it closed.
+- **Color.** Embed the floating shell and keep the single docked scope in place.
+  Decorate only the outer header. Preserve native view controls and plot input.
+  The embedded shell fills its host and has no independent resize.
+- **Cinema Viewer.** Preserve floating intent and keep the shell visible on a
+  separate display. Resolve supplies the signal. See the [paused Color Cinema
+  limitation](doc/issues/color-viewer.md).
+- **Sizing.** If the shell restores its former size on show, reapply host layout
+  before exposure and let Qt paint. Refresh the native view count on size
+  changes and reuse it on same-size reveals.
+- **Page handoff.** After outgoing transition capture, close the borrowed
+  renderer while visible, restore native ownership and placement, then hide
+  the outgoing host. Retain each page's intent for reacquisition. Minimizing
+  the main window keeps ownership.
 
 ### Pane command activation and audition players
 
-Qt focus on the selected child does not always restore Resolve's command context.
-On genuine floating-host activation, [PaneActivationBridge](src/core/paneactivationbridge.h)
-delivers one main-window `WindowActivate` through application notify, then
-consumes that exact event before QWidget propagation. Native focus continues to
-choose the subcontrol and transport. Never forward keys or synthesize a click.
-Bind before first show, gate on real host activation and visible page/content,
-and stop before docking. Popups, dialogs and newer focus choices take priority.
+[PaneActivationBridge](src/core/paneactivationbridge.h) restores Resolve's
+command context when a visible floating host genuinely activates. Deliver one
+main-window `WindowActivate` through application notify and consume that event
+before QWidget propagation. Native focus selects the subcontrol and transport.
+Bind before first show and stop before docking. Yield to popups, dialogs and
+newer focus. Never forward keys or synthesize clicks.
 
-Catalogue scope covers Media Pool on all supported pages, Edit Keyframe Editor,
-Color Nodes/Gallery/Timeline/Keyframes, Edit/Fairlight Sound Library and both
-Edit viewers. Program needs the page command context even when Source is docked.
-Local text editing alone does not justify enabling the bridge elsewhere.
+Enable the bridge for Media Pool on supported pages, Edit Keyframe Editor, both
+Edit viewers (including floating Program with docked Source), Color Nodes,
+Gallery, Timeline and Keyframes, and Edit/Fairlight Sound Library. Local text
+editing alone does not require it.
 
-Sound Library also has a separate audition audio player. On Edit/Fairlight,
-`AuditionPlayerActivation` briefly focuses the native preview after host
-activation settles, then restores the selected control if focus is still ours
-to restore. Preserve field/list selection and transport position. Header focus
-does not imply result-list focus. Fairlight Media Pool's preview player retains
-its native owner, with Windows taskbar identity set before first show.
+On Sound Library activation, `AuditionPlayerActivation` briefly focuses the
+native preview, then restores the selected control if focus is still ours.
+Preserve field/list selection and transport position. Header focus does not
+imply list focus. Fairlight Media Pool's preview keeps its native owner and
+receives its Windows taskbar identity before first show.
 
 ### Color Timeline and Clips
 
@@ -447,35 +425,31 @@ without a fixed offset or tolerance that would mask an error.
 
 ## Build and validate
 
-Internal builds use the current `VERSION` (bumped to `<version>` on a
-`<version>-dev` branch) and a fresh `yyyy.mm.dd.NNN` runtime build ID. Deliver
-`Unbound <version> (<build>).exe` under `release/win/<build>/` or
-the corresponding `.app` under `release/mac/installer/<package-build>/`. Use
-the runtime build ID in the app name even when packaging has its own counter.
+On `<version>-dev`, set VERSION to the branch's target version for internal
+builds. Otherwise keep VERSION unchanged. Assign a fresh `yyyy.mm.dd.NNN`
+runtime ID. Deliver `Unbound <version> (<build>).exe` in `release/win/<build>/`
+or the corresponding app in `release/mac/installer/<package-build>/`. The app
+name uses the runtime ID even when the package counter differs.
 
-Explicit public builds go in `release/packages/`. Windows delivers
-`Unbound-<version>-windows-x64.exe`. Mac distribution uses the basename
-`Unbound-<version>-macos-universal` with the applicable suffix. An archived
-Mac installer is `Unbound <version>.app` at the archive root. Staging output
-is intermediate. Verify versions, payload hashes and macOS signatures/slices.
-Do not overwrite existing output. Tagging, ZIP creation and publication each
-require an explicit request.
+Public builds go in `release/packages/` as `Unbound-<version>-windows-x64.exe`
+or `Unbound-<version>-macos-universal` with the applicable suffix. A Mac archive
+contains `Unbound <version>.app` at its root. Verify versions, payload hashes,
+Mac signatures and slices. Never overwrite published output. Public packaging,
+tagging, ZIP creation and publishing each need an explicit request.
 
 ### Windows
 
-Run `infrastructure/windows/build-release.cmd -InternalBuild` from the repo root
-for development. It builds the runtime and installer, runs shared and Windows
-fixtures, and audits dependencies. The [Windows build README](infrastructure/windows/README.md)
-covers prerequisites, release staging and the narrowly allowed Windows 10
-menu-exclusion fixture result. All other failures remain fatal.
+Run `infrastructure/windows/build-release.cmd -InternalBuild` from the repo root.
+It builds, tests and audits the runtime and installer. The [build README](infrastructure/windows/README.md)
+defines prerequisites, staging and the sole allowed Windows 10 menu-exclusion
+fixture result. Other failures are fatal.
 
 ### macOS
 
-Run `infrastructure/macos/build.sh` for a tested, audited and signed runtime
-candidate, then `infrastructure/macos/installer/build.sh <absolute-candidate>`
-for the self-contained installer. Use [macOS infrastructure](infrastructure/macos/README.md)
-and its [installer procedure](infrastructure/macos/installer/README.md) for
-staging and validation. Isolate fixture logs with `UNBOUND_LOG_FILE`.
+Run `infrastructure/macos/build.sh`, then
+`infrastructure/macos/installer/build.sh <absolute-candidate>`. Follow the
+[build](infrastructure/macos/README.md) and [installer](infrastructure/macos/installer/README.md)
+procedures. Isolate fixture logs with `UNBOUND_LOG_FILE`.
 
 ## Platform implementation and validation
 
