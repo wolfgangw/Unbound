@@ -52,8 +52,12 @@ int wmain(int argc,wchar_t **argv) {
                 throw std::runtime_error("root cause failure");
             });
         } catch(const std::runtime_error &e) { rollbackMessage=e.what(); }
-        if(lockedStage!=INVALID_HANDLE_VALUE) CloseHandle(lockedStage);
-        if(!retainedStage.empty()) { std::error_code ignore; fs::remove_all(retainedStage,ignore); }
+        require(lockedStage!=INVALID_HANDLE_VALUE,"Fixture did not lock the staging directory");
+        const bool stageSurvived=fs::is_directory(retainedStage);
+        CloseHandle(lockedStage);
+        require(stageSurvived,"Rollback cleanup did not leave the locked staging directory in place");
+        require(!fs::exists(p.scripts.parent_path()/retainedStage.filename()),"Rollback skipped cleanup of the unlocked scripts stage");
+        fs::remove_all(retainedStage);
         require(rollbackMessage=="root cause failure" && matches(p,first),
             "Rollback cleanup error masked the original installation failure");
         bool blocked=false; try { apply(p,&second,[]{return true;}); } catch(...) { blocked=true; }
