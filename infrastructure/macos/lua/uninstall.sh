@@ -10,6 +10,13 @@ scripts="$user_root/Library/Application Support/Blackmagic Design/DaVinci Resolv
 # move fails, restore previous files before reporting failure.
 parent="$user_root/Library/Application Support"
 [[ -d "$parent" ]] || { echo 'Unbound is not installed.'; exit 0; }
+lock=''
+if [[ -d "$support" && ! -L "$support" ]]; then
+    lock="$support/.install.lock"
+    if ! mkdir "$lock" 2>/dev/null; then
+        echo 'Another Unbound installation or removal is in progress.' >&2; exit 1
+    fi
+fi
 transaction=$(mktemp -d "$parent/.unbound-uninstall.XXXXXX")
 saved_count=0
 originals=()
@@ -24,6 +31,7 @@ rollback() {
         done
         echo "Uninstall failed; previous files restored where possible. Recovery folder: $transaction" >&2
     fi
+    if [[ -n "$lock" ]]; then rmdir "$lock" 2>/dev/null || true; fi
     exit "$status"
 }
 trap rollback EXIT
@@ -48,6 +56,7 @@ stage_removal "$support/StartupBackups" startup-backups
 # Scripts/support directories or unrelated installations.
 committed=1
 rm -rf -- "$transaction"
+if [[ -n "$lock" ]]; then rmdir "$lock" 2>/dev/null || true; fi
 # Remove the product directory only if empty; retain all unrelated files.
 rmdir "$support" 2>/dev/null || true
 echo 'Unbound removed. Settings and layouts kept.'

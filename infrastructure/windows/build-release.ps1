@@ -117,8 +117,17 @@ try {
         Invoke-UnboundNativeTest $test @('--grid-native')
         Invoke-UnboundNativeTest $test @('--captionless-native')
         Invoke-UnboundNativeTest $test @('--frame-paint-native')
+        Invoke-UnboundNativeTest $test @('--group-activation-native')
+        Invoke-UnboundNativeTest $test @('--taskbar-native')
     }
     finally { $env:QT_QPA_PLATFORM = 'offscreen' }
+    $resolveDir = if ($env:UNBOUND_RESOLVE_DIR) { $env:UNBOUND_RESOLVE_DIR } else { 'C:\Program Files\Blackmagic Design\DaVinci Resolve' }
+    if (Test-Path -LiteralPath (Join-Path $resolveDir 'lua5.1.dll')) {
+        Invoke-Checked 'python' @((Join-Path $repoRoot 'tests\platforms\windows\loading\lua\script_test.py'), $loader)
+        Invoke-Checked 'python' @((Join-Path $repoRoot 'tests\platforms\windows\loading\lua\command_script_test.py'), $dll)
+    }
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'src\platforms\windows\loading\lua\startup\Unbound.scriptlib') -Destination (Join-Path $build 'Unbound.scriptlib')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'src\scripts\commands.json') -Destination (Join-Path $build 'commands.json')
     # Runtime files stay in build/; the only deliverable is the native installer.
     $hashes = @(Get-FileHash -LiteralPath $loader, $dll)
     $manifest = @{ Version=$version; BuildId=$buildId; Revision=$BuildNumber; BuiltAt=(Get-Date).ToString('o'); Qt=$QtPath; Files=$hashes; Dependencies=$dependencyReport }

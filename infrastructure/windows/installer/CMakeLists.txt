@@ -8,10 +8,16 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${UNBOUND_ROOT}/infrastructure/installer/generate.py"
     "${UNBOUND_ROOT}/src/installer/dialog.json" "${CMAKE_CURRENT_BINARY_DIR}/installer-ui.generated.h"
     COMMAND_ERROR_IS_FATAL ANY)
+if(NOT UNBOUND_COMMANDS_JSON)
+    set(UNBOUND_COMMANDS_JSON "${UNBOUND_ROOT}/src/scripts/commands.json")
+endif()
+if(NOT UNBOUND_HOOK)
+    set(UNBOUND_HOOK "${UNBOUND_ROOT}/src/platforms/windows/loading/lua/startup/Unbound.scriptlib")
+endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    "${UNBOUND_ROOT}/src/scripts/commands.json" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py")
+    "${UNBOUND_COMMANDS_JSON}" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py")
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${UNBOUND_ROOT}/infrastructure/scripts/generate.py"
-    --platform windows --output "${CMAKE_CURRENT_BINARY_DIR}/commands"
+    --platform windows --commands "${UNBOUND_COMMANDS_JSON}" --output "${CMAKE_CURRENT_BINARY_DIR}/commands"
     --header "${CMAKE_CURRENT_BINARY_DIR}/commands.generated.h" COMMAND_ERROR_IS_FATAL ANY)
 include("${UNBOUND_ROOT}/infrastructure/windows/version.cmake")
 set(UNBOUND_FILE_TYPE VFT_APP)
@@ -31,7 +37,7 @@ configure_file("${UNBOUND_ROOT}/src/platforms/windows/resources/version.rc.in" v
 configure_file("${UNBOUND_ROOT}/src/platforms/windows/resources/icon.rc.in" icon.rc @ONLY)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/payload-version.txt" "${UNBOUND_VERSION}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/payload.rc"
-    "201 RCDATA \"${UNBOUND_PAYLOAD}/UnboundLuaLoader.dll\"\n202 RCDATA \"${UNBOUND_PAYLOAD}/Unbound.dll\"\n203 RCDATA \"${UNBOUND_ROOT}/src/platforms/windows/loading/lua/startup/Unbound.scriptlib\"\n204 RCDATA \"${CMAKE_CURRENT_BINARY_DIR}/payload-version.txt\"\n")
+    "201 RCDATA \"${UNBOUND_PAYLOAD}/UnboundLuaLoader.dll\"\n202 RCDATA \"${UNBOUND_PAYLOAD}/Unbound.dll\"\n203 RCDATA \"${UNBOUND_HOOK}\"\n204 RCDATA \"${CMAKE_CURRENT_BINARY_DIR}/payload-version.txt\"\n")
 add_executable(UnboundInstaller WIN32 "${UNBOUND_ROOT}/src/platforms/windows/installer/main.cpp" "${CMAKE_CURRENT_BINARY_DIR}/version.rc" "${CMAKE_CURRENT_BINARY_DIR}/icon.rc" "${CMAKE_CURRENT_BINARY_DIR}/payload.rc")
 target_include_directories(UnboundInstaller PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/payload.rc" "205 RCDATA \"${UNBOUND_ROOT}/LICENSE\"\n")

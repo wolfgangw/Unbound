@@ -36,18 +36,51 @@ inline void write(const fs::path &path,const std::string &bytes) {
     stream.write(bytes.data(),bytes.size()); stream.close();
     if(!stream) throw std::runtime_error("Cannot write installation files.");
 }
+inline bool isLinkOrJunction(const fs::path &path) {
+    const auto attr=GetFileAttributesW(path.c_str());
+    if(attr==INVALID_FILE_ATTRIBUTES || !(attr&FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    WIN32_FIND_DATAW data{};
+    auto find=FindFirstFileW(path.c_str(),&data);
+    if(find==INVALID_HANDLE_VALUE) return true; // Fail closed if reparse tag cannot be inspected.
+    FindClose(find);
+    return data.dwReserved0==IO_REPARSE_TAG_SYMLINK || data.dwReserved0==IO_REPARSE_TAG_MOUNT_POINT;
+}
 inline void rejectLinks(fs::path path) {
     for(;!path.empty() && path!=path.root_path();path=path.parent_path()) {
-        const auto attr=GetFileAttributesW(path.c_str());
-        if(attr!=INVALID_FILE_ATTRIBUTES && (attr&FILE_ATTRIBUTE_REPARSE_POINT))
+        if(isLinkOrJunction(path))
             throw std::runtime_error("Installation path contains a link or junction; no files changed.");
     }
+}
+// Prefer atomic rename; fall back to recursive copy+remove only across volumes
+// (e.g. when roaming APPDATA is redirected to a different drive or UNC share).
+inline void moveEntry(const fs::path &from,const fs::path &to,std::error_code &ec) {
+    fs::rename(from,to,ec);
+    if(!ec) return;
+    if(ec!=std::errc::cross_device_link && ec.value()!=ERROR_NOT_SAME_DEVICE) return;
+    ec.clear();
+    fs::copy(from,to,fs::copy_options::recursive,ec);
+    if(ec) { std::error_code ignore; fs::remove_all(to,ignore); return; }
+    fs::remove_all(from,ec);
+}
+inline void moveEntry(const fs::path &from,const fs::path &to) {
+    std::error_code ec;
+    moveEntry(from,to,ec);
+    if(ec) throw fs::filesystem_error("Cannot move installation files",from,to,ec);
 }
 // The executable embeds these exact files; no downloads, shell or Qt dependency.
 struct Payload { std::string loader,helper,hook,version; std::map<std::wstring,std::string> commands; };
 inline bool matches(const Paths &p,const Payload &payload) {
     for(const auto &command:payload.commands)
         if(read(p.commands()/command.first)!=command.second)return false;
+    if(fs::is_directory(p.commands())) {
+        std::error_code ec;
+        size_t count=0;
+        for(const auto &entry:fs::directory_iterator(p.commands(),ec)) {
+            if(ec || !entry.is_regular_file() || !payload.commands.count(entry.path().filename().wstring())) return false;
+            ++count;
+        }
+        if(ec || count!=payload.commands.size()) return false;
+    } else if(!payload.commands.empty()) return false;
     return read(p.runtime()/L"VERSION")==payload.version
         && read(p.runtime()/L"Unbound.dll")==payload.helper
         && read(p.runtime()/L"UnboundLuaLoader.dll")==payload.loader
@@ -89,18 +122,18 @@ inline void apply(const Paths &p,const Payload *payload,
             if(!fs::exists(original)) return;
             rejectLinks(original);
             const auto backup=transaction/std::to_wstring(previous.size());
-            fs::rename(original,backup); previous.emplace_back(original,backup);
+            moveEntry(original,backup); previous.emplace_back(original,backup);
         };
         save(p.hook()); save(p.runtime()); save(p.commands()); checkpoint(1);
         if(payload) {
-            fs::rename(transaction/L"new-runtime",p.runtime()); published.push_back(p.runtime()); checkpoint(2);
-            fs::rename(transaction/L"new-hook",p.hook()); published.push_back(p.hook()); checkpoint(3);
-            fs::rename(transaction/L"new-commands",p.commands()); published.push_back(p.commands()); checkpoint(4);
+            moveEntry(transaction/L"new-runtime",p.runtime()); published.push_back(p.runtime()); checkpoint(2);
+            moveEntry(transaction/L"new-hook",p.hook()); published.push_back(p.hook()); checkpoint(3);
+            moveEntry(transaction/L"new-commands",p.commands()); published.push_back(p.commands()); checkpoint(4);
         }
     } catch(...) {
         const auto failure=std::current_exception(); bool recovered=true;
         for(auto it=published.rbegin();it!=published.rend();++it) { std::error_code e; fs::remove_all(*it,e); if(e) recovered=false; }
-        for(auto it=previous.rbegin();it!=previous.rend();++it) { std::error_code e; fs::rename(it->second,it->first,e); if(e) recovered=false; }
+        for(auto it=previous.rbegin();it!=previous.rend();++it) { std::error_code e; moveEntry(it->second,it->first,e); if(e) recovered=false; }
         if(!recovered) throw std::runtime_error("Rollback could not finish. Retained recovery files in Unbound's transaction folder.");
         std::error_code e; fs::remove_all(transaction,e); std::rethrow_exception(failure);
     }

@@ -11,7 +11,7 @@ root=$(cd "$(dirname "$0")/../../.." && pwd)
 }
 version=$(head -n 1 "$candidate/VERSION" | tr -d '\r\n')
 runtime_build=$(head -n 1 "$candidate/BUILD" | tr -d '\r\n')
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && ( "$runtime_build" == "$version" || "$runtime_build" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{3,}$ ) ]] || {
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ && ( "$runtime_build" == "$version" || "$runtime_build" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{3,}$ ) ]] || {
     echo 'Invalid candidate version metadata.' >&2; exit 1;
 }
 source "$root/infrastructure/macos/architectures.sh"
@@ -38,7 +38,7 @@ mkdir -p "$app/Contents/MacOS" "$resources/payload" "$resources/scripts/startup"
 xcrun clang++ -std=c++17 -fobjc-arc "${MAC_ARCH_FLAGS[@]}" -mmacosx-version-min=11.0 -framework AppKit \
     -I"$build" \
     "$root/src/platforms/macos/installer/main.mm" -o "$app/Contents/MacOS/UnboundInstaller"
-sed -e "s/@VERSION@/$version/g" -e "s/@BUILD@/$(date +%Y%m%d).$counter/g" \
+sed -e "s/@VERSION@/$version/g" -e "s/@BUILD@/${stamp//./}.$counter/g" \
     -e "s/@RUNTIME_BUILD@/$runtime_build/g" \
     -e "s/@APP_NAME@/$app_name/g" \
     -e "s/@PACKAGE_BUILD@/$name/g" \

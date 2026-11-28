@@ -2,6 +2,7 @@
 """Generate native Resolve menu commands from the shared command catalogue."""
 import argparse
 import json
+import re
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
@@ -9,9 +10,29 @@ parser.add_argument('--platform', choices=['windows', 'macos'], default='macos')
 parser.add_argument('--output', type=Path)
 parser.add_argument('--header', type=Path)
 parser.add_argument('--catalogue-header', type=Path)
+parser.add_argument('--commands', type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
-commands = json.loads((root / 'src/scripts/commands.json').read_text())
+commands_path = args.commands or (root / 'src/scripts/commands.json')
+commands = json.loads(commands_path.read_text(encoding='utf-8'))
+if not isinstance(commands, list) or not commands:
+    raise SystemExit('commands.json must contain a non-empty list of commands')
+seen_labels = set()
+for entry in commands:
+    if not isinstance(entry, dict):
+        raise SystemExit('Invalid command entry')
+    label = entry.get('label')
+    cmd = entry.get('command')
+    cmd_args = entry.get('arguments')
+    if (not isinstance(label, str) or not label or label in seen_labels
+            or any(ch in label for ch in '/\\:"\'<>|?*') or label.strip() != label
+            or label in ('.', '..') or any(ord(ch) < 32 or ord(ch) > 126 for ch in label)):
+        raise SystemExit(f'Invalid command label: {label!r}')
+    if not isinstance(cmd, str) or not re.fullmatch(r'[A-Za-z0-9._-]+', cmd):
+        raise SystemExit(f'Invalid command id: {cmd!r}')
+    if not isinstance(cmd_args, dict):
+        raise SystemExit(f'Invalid command arguments for {label!r}')
+    seen_labels.add(label)
 windows = '''ffi.cdef[[
     void *GetModuleHandleW(const uint16_t *);
     void *GetProcAddress(void *, const char *);
@@ -31,8 +52,8 @@ macos = '''ffi.cdef[[
 ]]
 local path = assert(os.getenv("HOME"), "Cannot locate Unbound.")
     .. "/Library/Application Support/Unbound/Runtime/Unbound.dylib"
--- RTLD_NOW | RTLD_NOLOAD: never initialize another copy from a command.
-local library = ffi.C.dlopen(path, 0x12)
+-- RTLD_NOW | RTLD_LOCAL | RTLD_NOLOAD: never initialize or promote another copy.
+local library = ffi.C.dlopen(path, 0x16)
 assert(library ~= nil, "Unbound is not running.")
 local entry = ffi.C.dlsym(library, "UnboundExecuteCommand")
 if entry == nil then
@@ -58,7 +79,9 @@ args.output.mkdir(parents=True, exist_ok=True)
 entries = []
 for command in commands:
     name = command['label'] + '.lua'
-    arguments = json.dumps(command['arguments'], separators=(',', ':'))
+    arguments = json.dumps(command['arguments'], separators=(',', ':'), ensure_ascii=True)
+    if ']=]' in arguments or ']==]' in arguments:
+        raise SystemExit(f'Unsupported Lua delimiter in arguments for {name!r}')
     body = '-- SPDX-License-Identifier: MIT\n-- Generated Unbound command; shortcut assignment belongs to Resolve.\n'
     body += 'local known, studio = pcall(function()\n'
     body += '    local host = resolve or ((fusion or fu) and (fusion or fu):GetResolve())\n'
@@ -81,6 +104,8 @@ for command in commands:
             'if not app and bmd then app = bmd.scriptapp("Fusion") end\n'
             'assert(app, "Cannot connect to Resolve.")\n'
             'app:Execute([==[\n' + body + ']==])\n')
+    if ')UNBOUND"' in body:
+        raise SystemExit(f'Unsupported C++ raw string delimiter in generated script {name!r}')
     (args.output / name).write_text(body, encoding='utf-8', newline='\n')
     entries.append((name, body))
 if args.header:

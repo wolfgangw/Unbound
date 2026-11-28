@@ -30,7 +30,10 @@ inline std::string version(std::string value,std::string build={}) {
 }
 inline bool repairVersion(const std::string &installed,const std::string &bundled,
                           const std::string &installedBuild={},const std::string &bundledBuild={}) {
-    return !trim(installed).empty() && version(installed,installedBuild)==version(bundled,bundledBuild);
+    const auto a=trim(installed), b=trim(bundled);
+    if(a.empty() || version(a,installedBuild)!=version(b,bundledBuild)) return false;
+    const auto base=[](const std::string &v) { return v.substr(0,v.find('+')); };
+    return base(a)==base(b);
 }
 struct State { bool installed, running, sameBuild; };
 struct Presentation {

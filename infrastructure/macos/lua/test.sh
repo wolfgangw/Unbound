@@ -39,6 +39,10 @@ for mode in --mac-key-focus-test --mac-control-clearance-test --mac-menu-trackin
     --fairlight-test --edit-sidebar-startup-test --standalone-test --shutdown-test --close-all-test; do
     run_native "$binary" "$mode" "$helper"
 done
+run_native "$binary" --standalone-test --visible-start "$helper"
+run_native "$binary" --standalone-test --toggle-state-test "$helper"
+run_native "$binary" --standalone-test --color-selected-test "$helper"
+run_native "$binary" --fairlight-test --restore "$helper"
 run_native "$binary"
 echo "PASS: $architecture fixture suite on $(uname -m) host."
 done

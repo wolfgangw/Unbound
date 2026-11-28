@@ -55,9 +55,17 @@ void operation(HWND window,bool uninstall) {
         InstallerUI::repairVersion(Installation::read(paths.runtime()/L"VERSION"),payload.version)};
     if(uninstall && MessageBoxW(window,wide(op.confirmationText()).c_str(),
         wide(op.confirmationTitle()).c_str(),MB_OKCANCEL|MB_ICONQUESTION)!=IDOK) return;
-    Installation::apply(paths,uninstall ? nullptr : &payload);
-    refresh();
-    text(statusLabel,op.success());
+    EnableWindow(installButton,FALSE); EnableWindow(uninstallButton,FALSE);
+    text(statusLabel,op.progress()); UpdateWindow(window);
+    try {
+        Installation::apply(paths,uninstall ? nullptr : &payload);
+        refresh();
+        text(statusLabel,op.success());
+    } catch(const std::exception &e) {
+        refresh();
+        text(statusLabel,op.failure());
+        MessageBoxW(window,wide(e.what()).c_str(),L"Unbound",MB_OK|MB_ICONERROR);
+    }
 }
 HWND control(HWND parent,const wchar_t *kind,const wchar_t *text,DWORD style,int x,int y,int w,int h,int id=0) {
     auto child=CreateWindowExW(0,kind,text,WS_CHILD|WS_VISIBLE|style,x,y,w,h,parent,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);

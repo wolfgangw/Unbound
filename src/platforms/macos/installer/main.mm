@@ -18,7 +18,9 @@ static void buttonText(NSButton *button,const std::string &value) {
     cell.lineBreakMode=NSLineBreakByWordWrapping;
 }
 
-static BOOL exists(NSString *path) { return [NSFileManager.defaultManager fileExistsAtPath:path]; }
+static BOOL exists(NSString *path) {
+    return [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil] != nil;
+}
 static BOOL sameContents(NSString *installed, NSString *bundled) {
     NSData *actual = [NSData dataWithContentsOfFile:installed];
     NSData *expected = [NSData dataWithContentsOfFile:bundled];
@@ -142,11 +144,13 @@ static NSTextField *label(NSString *text, NSRect frame, CGFloat size, BOOL bold 
                           [payload stringByAppendingPathComponent:source])) return NO;
     }
     NSString *commands = [payload stringByAppendingPathComponent:@"commands"];
+    NSString *installedCommands = [self.scripts stringByAppendingPathComponent:@"Utility/Unbound"];
     NSArray<NSString *> *names = [NSFileManager.defaultManager contentsOfDirectoryAtPath:commands error:nil];
-    if (names.count == 0) return NO;
+    NSArray<NSString *> *installedNames = [NSFileManager.defaultManager contentsOfDirectoryAtPath:installedCommands error:nil];
+    if (names.count == 0 || installedNames.count != names.count) return NO;
     for (NSString *name in names)
         if (!sameContents([commands stringByAppendingPathComponent:name],
-            [[self.scripts stringByAppendingPathComponent:@"Utility/Unbound"] stringByAppendingPathComponent:name])) return NO;
+            [installedCommands stringByAppendingPathComponent:name])) return NO;
     return sameContents([self.scripts stringByAppendingPathComponent:@"Unbound.scriptlib"],
                         [payload stringByAppendingPathComponent:@"startup/Unbound.scriptlib"]);
 }

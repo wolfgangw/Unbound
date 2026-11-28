@@ -30,7 +30,14 @@ $packageBuild='{0}.{1:000}' -f $day,$counter
 $destination=if($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $root "release/win-installer/$packageBuild" }
 if(Test-Path -LiteralPath $destination) { throw "Installer destination already exists: $destination" }
 $build=Join-Path $root "build/windows/installer/$packageBuild"
-& cmake -S $PSScriptRoot -B $build -G 'Visual Studio 17 2022' -A x64 "-DUNBOUND_VERSION=$($manifest.Version)" "-DUNBOUND_BUILD=$($manifest.Revision)" "-DUNBOUND_PAYLOAD=$($payload.Replace('\','/'))"
+$cmakeArgs=@('-S', $PSScriptRoot, '-B', $build, '-G', 'Visual Studio 17 2022', '-A', 'x64',
+    "-DUNBOUND_VERSION=$($manifest.Version)", "-DUNBOUND_BUILD=$($manifest.Revision)",
+    "-DUNBOUND_BUILD_ID=$($manifest.BuildId)", "-DUNBOUND_PAYLOAD=$($payload.Replace('\','/'))")
+$stagedHook=Join-Path $candidate 'Unbound.scriptlib'
+if(Test-Path -LiteralPath $stagedHook) { $cmakeArgs+="-DUNBOUND_HOOK=$($stagedHook.Replace('\','/'))" }
+$stagedCommands=Join-Path $candidate 'commands.json'
+if(Test-Path -LiteralPath $stagedCommands) { $cmakeArgs+="-DUNBOUND_COMMANDS_JSON=$($stagedCommands.Replace('\','/'))" }
+& cmake @cmakeArgs
 if($LASTEXITCODE) { throw 'Installer configuration failed' }
 & cmake --build $build --config Release --parallel $BuildJobs -- /nr:false
 if($LASTEXITCODE) { throw 'Installer build failed' }

@@ -38,6 +38,9 @@ static void presentationTests() {
         std::string(older.status)==InstallerUI::text::newerInstalled,"Older installer offers update");
     const auto repair=InstallerUI::present({true,false,false},"0.7.0","0.7.0");
     require(repair.installEnabled && repair.install=="Repair\n0.7.0","Same-version repair label");
+    const auto crossBase=InstallerUI::present({true,false,false},"0.7.3","0.7.4","2026.11.28.001","2026.11.28.001");
+    require(crossBase.installEnabled && crossBase.install=="Update\n2026.11.28.001",
+        "Different base semver with matching dated build was misclassified as Repair");
     const auto intact=InstallerUI::present({true,false,true},"0.7.0","0.7.0");
     require(!intact.installEnabled && intact.install=="Install\n0.7.0" && intact.uninstallEnabled,
         "Intact installation must show disabled Install beside enabled Uninstall");

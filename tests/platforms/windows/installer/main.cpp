@@ -28,6 +28,14 @@ int main() {
         apply(p,&second,idle); require(matches(p,second),"Update mismatch");
         require(!fs::exists(p.runtime()/L"UnboundHelper.dll"),"Update retained obsolete runtime files");
         fs::remove(p.commands()/L"Layout 1.lua"); require(!matches(p,second),"Missing command disables repair"); apply(p,&second,idle);
+        write(p.commands()/L"Stale.lua","stale command");
+        require(!matches(p,second),"Extra stale command file did not trigger repair");
+        apply(p,&second,idle);
+        require(matches(p,second) && !fs::exists(p.commands()/L"Stale.lua"),"Repair did not remove stale command file");
+        // Invalid command filenames must be rejected before modifying existing files.
+        Payload badCommand=second; badCommand.commands[L"..\\evil.lua"]="bad";
+        bool rejected=false; try { apply(p,&badCommand,idle); } catch(...) { rejected=true; }
+        require(rejected && matches(p,second),"Path-traversal command filename was not rejected");
         fs::remove(p.hook()); require(!matches(p,second),"Broken hook disables repair"); apply(p,&second,idle);
         write(p.support/L"settings.json","legacy");
         const auto retained=[&]{return read(p.support/L"Unbound.json")=="saved layouts" && read(p.support/L"settings.json")=="legacy";};

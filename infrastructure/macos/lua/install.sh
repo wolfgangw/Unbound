@@ -15,7 +15,45 @@ scripts="$user_root/Library/Application Support/Blackmagic Design/DaVinci Resolv
 runtime="$support/Runtime"
 hook="$scripts/Unbound.scriptlib"
 commands="$scripts/Utility/Unbound"
+for ancestor in "$support" "$scripts" "$scripts/Utility"; do
+    if [[ -L "$ancestor" ]]; then
+        echo "Installation path contains a symlink; no files changed: $ancestor" >&2; exit 1
+    fi
+done
 mkdir -p "$support/InstallationBackups" "$scripts/Utility"
+lock="$support/.install.lock"
+if ! mkdir "$lock" 2>/dev/null; then
+    echo 'Another Unbound installation or removal is in progress.' >&2; exit 1
+fi
+transaction=''
+saved_count=0
+published_count=0
+originals=()
+backups=()
+published=()
+committed=0
+rollback() {
+    status=$?
+    trap - EXIT
+    if [[ $committed == 0 ]]; then
+        for ((i=published_count-1;i>=0;i--)); do
+            mv "${published[i]}" "$transaction/failed-$i" || echo "Could not retain failed installation: ${published[i]}" >&2
+        done
+        for ((i=saved_count-1;i>=0;i--)); do
+            mv "${backups[i]}" "${originals[i]}" || echo "Restore manually: ${backups[i]} -> ${originals[i]}" >&2
+        done
+        if [[ -n "$transaction" && $saved_count == 0 && $published_count == 0 ]]; then
+            rm -rf -- "$transaction"
+        elif [[ -n "$transaction" ]]; then
+            echo "Installation failed; previous files restored where possible. Backup: $transaction" >&2
+        fi
+    fi
+    rmdir "$lock" 2>/dev/null || true
+    exit "$status"
+}
+trap rollback EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 transaction=$(mktemp -d "$support/InstallationBackups/install.XXXXXX")
 # Stage and verify everything before moving an existing installation.
 mkdir "$transaction/runtime"
@@ -38,29 +76,6 @@ cmp "$candidate/runtime/load.lua" "$transaction/runtime/load.lua"
 cmp "$candidate/startup/Unbound.scriptlib" "$transaction/Unbound.scriptlib"
 # Recheck after staging in case Resolve was started during verification.
 if pgrep -x Resolve >/dev/null; then echo 'DaVinci Resolve started during installation; existing files were left in place.' >&2; exit 1; fi
-saved_count=0
-published_count=0
-originals=()
-backups=()
-published=()
-committed=0
-rollback() {
-    status=$?
-    trap - EXIT
-    if [[ $committed == 0 ]]; then
-        for ((i=published_count-1;i>=0;i--)); do
-            mv "${published[i]}" "$transaction/failed-$i" || echo "Could not retain failed installation: ${published[i]}" >&2
-        done
-        for ((i=saved_count-1;i>=0;i--)); do
-            mv "${backups[i]}" "${originals[i]}" || echo "Restore manually: ${backups[i]} -> ${originals[i]}" >&2
-        done
-        echo "Installation failed; previous files restored where possible. Backup: $transaction" >&2
-    fi
-    exit "$status"
-}
-trap rollback EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 save_previous() {
     if [[ -e "$1" || -L "$1" ]]; then
         mv "$1" "$transaction/$2"
@@ -82,4 +97,12 @@ published[published_count]="$hook"; published_count=$((published_count+1))
 mv "$transaction/commands" "$commands"
 published[published_count]="$commands"; published_count=$((published_count+1))
 committed=1
+# Retain only the newest 3 installation backups so repeated updates stay bounded.
+old_backups=()
+while IFS= read -r entry; do
+    old_backups+=("$entry")
+done < <(ls -1dt "$support/InstallationBackups"/install.* 2>/dev/null || true)
+for ((i=3;i<${#old_backups[@]};i++)); do
+    rm -rf -- "${old_backups[i]}"
+done
 printf 'Installed automatic Unbound startup. Open DaVinci Resolve normally.\nBackup: %s\n' "$transaction"
