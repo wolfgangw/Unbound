@@ -97,7 +97,8 @@ pass finishes a Space transition. No production Qt style is changed.
 
 Live checklist for a fresh Resolve instance (Free or Studio):
 
-1. Launch normally and confirm no Unbound entry appears in Workspace → Scripts.
+1. Launch normally and confirm the eight managed layout commands appear under
+   Workspace → Scripts → Unbound without a manual startup launcher.
    Confirm this PID's load, GUI-thread validation, controller attachment and first
    shared docking control in `~/Library/Logs/Unbound/lua-bootstrap.log`.
 2. Open a disposable project. Verify the existing overlapping-squares controls;

@@ -46,16 +46,17 @@ Older installations without metadata show "Version unknown" until updated;
 the installed-version line is omitted when Unbound is absent. Rebuild older candidates
 without that metadata before packaging; the current checkout's version is never
 substituted for the bundled runtime's version.
-Update is disabled only when the installed VERSION, BUILD, loader script, both
-native libraries and startup hook match the bundled payload byte-for-byte.
-Missing, unreadable or changed files remain updatable, including installations
-whose version metadata still matches, so Update can repair them.
+Install/Repair is disabled only when the installed VERSION, BUILD, loader script,
+both native libraries, startup hook and managed command scripts match the bundled
+payload byte-for-byte with no extra command files. Missing, unreadable or changed
+files remain repairable, including installations whose version metadata still
+matches, so **Repair** can restore them.
 
-Open the app in Finder. It offers **Install/Update** and **Uninstall** for the
+Open the app in Finder. It offers **Install** / **Update** / **Repair** and **Uninstall** for the
 current macOS account, and asks the user to close Resolve before making changes.
 It never quits Resolve automatically. Installation starts Unbound on the next
-normal Resolve launch; no permanent installer service or Resolve menu entry is
-created. The app can be run directly from its downloaded location.
+normal Resolve launch; no permanent installer service or manual activation step is
+created (managed layout commands live under Workspace > Scripts > Unbound). The app can be run directly from its downloaded location.
 
 Uninstall removes the private runtime, startup hook, legacy Utility-menu files
 and Lua installation/startup backups. Settings and layouts are always kept,
@@ -71,7 +72,7 @@ uses only macOS system frameworks. No development toolchain is needed to use it.
 Builds run isolated filesystem tests against the bundled scripts and a separate
 Cocoa UI fixture, then verify the app's ad-hoc signature. The release app excludes
 test-only switches and snapshot code. Builds are ad-hoc signed, without Developer ID
-signing or notarization; see the [README](../../../README.md#compatibility) for
+signing or notarization; see the [README](../../../README.md#is-it-safe-to-install-unbound) for
 the per-app Open Anyway procedure. These distribution limits do not affect
 feature parity with Windows. A browser-download test in another user account
 is useful but does not reset this

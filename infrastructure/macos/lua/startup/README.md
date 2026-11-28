@@ -3,8 +3,10 @@
 Normal Lua installation includes `Unbound.scriptlib` in the root of the user's
 Resolve Fusion Scripts directory. It calls the private loader under
 `~/Library/Application Support/Unbound/Runtime/` once and returns immediately.
-No Unbound shortcut is installed in Workspace → Scripts. The hook owns no
-controller, settings or UI logic and uses no polling loop or `fusion:Execute` call.
+The startup hook itself adds no manual activation menu item (the eight managed
+layout commands live separately under `Scripts/Utility/Unbound/`). The hook owns
+no controller, settings or UI logic and uses no polling loop or `fusion:Execute`
+call.
 Contexts without native FFI return silently; only an FFI-capable invocation calls
 the private loader. This avoids reporting a startup failure from an auxiliary Lua
 context when native attachment has already succeeded. Capable-context failures

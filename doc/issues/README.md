@@ -15,6 +15,8 @@ and remove the investigation. Git retains the history.
   activation correction and remaining validation.
 - [Layout keyboard shortcuts](layout-keyboard-shortcuts.md): native Scripts integration,
   proposed commands and remaining persistence/dispatch validation.
+- [Resolve Free layout shortcuts](layout-shortcuts-resolve-free.md): native menu-action
+  fallback status and remaining platform checks.
 - [Divider persistence](layout-divider-persistence.md): safe native restore and
   saved proportions/schema remain to be designed.
 - [Platform validation](platform-validation.md): outstanding native and
@@ -24,4 +26,6 @@ and remove the investigation. Git retains the history.
   and remaining restoration cases.
 - [Color controls](color-controls.md): mode/platform validation; reclamation deferred.
 - [Color viewer](color-viewer.md): viewer validation; reclamation deferred.
+- [Edit playback with populated Source](edit-source-playback-latency.md): open report
+  and diagnostic comparisons for intermittent playback choppiness.
 - [Native Edit navigation](native-edit-navigation-latency.md): intermittent session latency.

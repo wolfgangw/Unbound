@@ -40,7 +40,7 @@ and recording incomplete menu-capture coverage; see the
 
 ## Deferred
 
-Color All Out ? fully docked Edit can remain slow despite no pending pane/toggle
+Color All Out -> fully docked Edit can remain slow despite no pending pane/toggle
 work. Native resize, accessibility and GL costs are candidates; no low-impact fix
 is established. Preserve native accessibility and queued placement.
 

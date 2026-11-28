@@ -46,7 +46,7 @@ menu and Keyboard Customization. This managed folder is replaced/removed alongsi
 Runtime, with rollback on failure. No service, scheduled task or registry startup
 entry is installed. The installer uses Windows APIs directly and needs no Qt runtime
 or development toolchain. Current installers are unsigned; see the
-[README](../../../README.md#compatibility) for the per-app SmartScreen exception.
+[README](../../../README.md#is-it-safe-to-install-unbound) for the per-app SmartScreen exception.
 
 The startup hook uses wide-character Windows APIs to support non-ASCII account
 paths. It loads the Qt-free adapter once and returns. The adapter validates the

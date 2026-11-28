@@ -1,9 +1,10 @@
 # Internal Lua loading
 
 This approach starts the shared controller and Cocoa backend automatically through
-Resolve's internal Lua runtime. There is no Scripts-menu entry or manual activation
-step. See [platform status](../../../AGENTS.md#platform-implementation-and-validation) for compatibility and
-validation limits.
+Resolve's internal Lua runtime without a manual activation step. Managed layout
+commands are installed separately under `Workspace > Scripts > Unbound`. See
+[platform status](../../../AGENTS.md#platform-implementation-and-validation) for
+compatibility and validation limits.
 
 For graphical installation and removal, build the
 [self-contained installer app](../installer/README.md). Developer shell commands
@@ -45,8 +46,9 @@ Diagnostics: `~/Library/Logs/Unbound/lua-bootstrap.log`.
 The same installer handles updates and migration from the earlier Utility-menu
 layout. It verifies and stages the candidate before moving existing files, backs
 up the previous runtime/hook and legacy `Utility/Unbound.lua` / `Utility/UnboundLua`
-under `~/Library/Application Support/Unbound/InstallationBackups/`, and restores
-previous files if publishing fails. Backups stay outside Resolve's Scripts tree.
+under `~/Library/Application Support/Unbound/InstallationBackups/` (retaining the
+newest three backups), and restores previous files if publishing fails. Backups
+stay outside Resolve's Scripts tree.
 Settings are not part of the installation transaction.
 
 Uninstall with Resolve closed using `infrastructure/macos/lua/uninstall.sh`.

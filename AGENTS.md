@@ -59,7 +59,7 @@ backend. Narrow native workarounds belong in its `quirks/`.
 | Start here | Responsibility |
 | --- | --- |
 | [Controller](src/core/controller.cpp) and [catalogue](src/core/panecatalogue.h) | Discovery, lazy initialization, pane registration, native toggle tracking and deferred restoration |
-| [Pane sessions](src/core/panefloatsession.h) and [sidebar sessions](src/core/sidebarfloatsession.h) | Reversible native layout transfer and host lifetime |
+| [Sidebar sessions](src/core/sidebarfloatsession.h) | Reversible native layout transfer and host lifetime |
 | [Decoration](src/core/panedecoration.h), [header dragging](src/core/paneheaderdrag.h) and [window group](src/core/panewindowgroup.h) | User gestures, group visibility, activation and stacking |
 | [Page context](src/core/panepagecontext.h) and [restore policy](src/core/layoutrestorepolicy.h) | Logical page ownership and diagnosed pane/page exceptions across transitions |
 | [Settings](src/core/panesettings.h), [geometry](src/core/geometryjson.h) and [main placement](src/core/mainwindowplacement.h) | Shared persistence, coordinate representations and monitor recovery |
@@ -447,8 +447,8 @@ without a fixed offset or tolerance that would mask an error.
 
 Internal builds keep `VERSION` and use a fresh `yyyy.mm.dd.NNN` runtime build
 ID. Deliver `Unbound <version> (<build>).exe` under `release/win/<build>/` or
-the corresponding `.app` under `release/mac/<build>/`. Use the runtime build ID
-even when packaging has its own counter.
+the corresponding `.app` under `release/mac/installer/<package-build>/`. Use
+the runtime build ID in the app name even when packaging has its own counter.
 
 Explicit public builds go in `release/packages/`. Windows delivers
 `Unbound-<version>-windows-x64.exe`. Mac distribution uses the basename
