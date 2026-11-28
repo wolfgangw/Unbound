@@ -205,6 +205,31 @@ sys.exit(subprocess.call(['/bin/mv'] + sys.argv[1:]))'''.replace('import os, sys
         self.run_script(UNINSTALL, success=False, FIXTURE_FAIL_UNINSTALL='1')
         self.assert_previous()
 
+    def test_uninstall_staging_failure_releases_lock(self):
+        self.seed_previous()
+        self.mock('mktemp', 'raise SystemExit(1)')
+        self.run_script(UNINSTALL, success=False)
+        self.assert_previous()
+        self.assertFalse((self.support / '.install.lock').exists())
+        (self.bin / 'mktemp').unlink()
+        self.run_script(UNINSTALL)
+
+    def test_uninstall_leaves_next_owners_lock(self):
+        self.seed_previous()
+        # Simulate another installer acquiring the directory immediately after release.
+        self.mock('rmdir', '''import os, subprocess, sys
+from pathlib import Path
+path = Path(sys.argv[-1])
+status = subprocess.call(['/bin/rmdir', str(path)])
+if status == 0 and path.name == '.install.lock':
+    assert not Path(os.environ['FIXTURE_NEXT_LOCK']).exists(), 'lock released twice'
+    path.mkdir()
+    Path(os.environ['FIXTURE_NEXT_LOCK']).touch()
+sys.exit(status)''')
+        self.run_script(UNINSTALL, FIXTURE_NEXT_LOCK=str(self.base / 'next-owner'))
+        self.assertTrue((self.base / 'next-owner').exists())
+        self.assertTrue((self.support / '.install.lock').is_dir())
+
     def test_uninstall_without_installation_is_harmless(self):
         self.run_script(UNINSTALL)
         self.run_script(UNINSTALL)

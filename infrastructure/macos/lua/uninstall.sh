@@ -10,14 +10,9 @@ scripts="$user_root/Library/Application Support/Blackmagic Design/DaVinci Resolv
 # move fails, restore previous files before reporting failure.
 parent="$user_root/Library/Application Support"
 [[ -d "$parent" ]] || { echo 'Unbound is not installed.'; exit 0; }
-lock=''
-if [[ -d "$support" && ! -L "$support" ]]; then
-    lock="$support/.install.lock"
-    if ! mkdir "$lock" 2>/dev/null; then
-        echo 'Another Unbound installation or removal is in progress.' >&2; exit 1
-    fi
-fi
-transaction=$(mktemp -d "$parent/.unbound-uninstall.XXXXXX")
+lock="$support/.install.lock"
+owns_lock=0
+transaction=''
 saved_count=0
 originals=()
 backups=()
@@ -25,18 +20,28 @@ committed=0
 rollback() {
     status=$?
     trap - EXIT
-    if [[ $committed == 0 ]]; then
+    if [[ $committed == 0 && -n "$transaction" ]]; then
         for ((i=saved_count-1;i>=0;i--)); do
             mv "${backups[i]}" "${originals[i]}" || echo "Restore manually: ${backups[i]} -> ${originals[i]}" >&2
         done
         echo "Uninstall failed; previous files restored where possible. Recovery folder: $transaction" >&2
     fi
-    if [[ -n "$lock" ]]; then rmdir "$lock" 2>/dev/null || true; fi
+    if [[ $owns_lock == 1 ]]; then
+        rmdir "$lock" 2>/dev/null || true
+        if [[ $committed == 1 ]]; then rmdir "$support" 2>/dev/null || true; fi
+    fi
     exit "$status"
 }
 trap rollback EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+if [[ -L "$support" ]]; then echo "Cannot uninstall through a symlink: $support" >&2; exit 1; fi
+mkdir -p "$support"
+if ! mkdir "$lock" 2>/dev/null; then
+    echo 'Another Unbound installation or removal is in progress.' >&2; exit 1
+fi
+owns_lock=1
+transaction=$(mktemp -d "$parent/.unbound-uninstall.XXXXXX")
 stage_removal() {
     if [[ -e "$1" || -L "$1" ]]; then
         mv "$1" "$transaction/$2"
@@ -56,7 +61,4 @@ stage_removal "$support/StartupBackups" startup-backups
 # Scripts/support directories or unrelated installations.
 committed=1
 rm -rf -- "$transaction"
-if [[ -n "$lock" ]]; then rmdir "$lock" 2>/dev/null || true; fi
-# Remove the product directory only if empty; retain all unrelated files.
-rmdir "$support" 2>/dev/null || true
 echo 'Unbound removed. Settings and layouts kept.'
