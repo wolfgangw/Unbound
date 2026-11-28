@@ -2,8 +2,8 @@
 
 ## Current status
 
-The shared native-action fallback is implemented. macOS Resolve Free automatically
-selects it at startup through `IsStudio()`, and the user confirms the installed
+The shared native-action fallback is implemented. On macOS, Resolve Free
+21.1.1 Build 10 selects it at startup through `IsStudio()`, and the user confirms the installed
 build works. Menu and assigned-shortcut delivery were also verified independently
 with Dock all. No manual Console activation is required.
 
@@ -30,7 +30,8 @@ The Windows automated build checks also pass, including narrowed menu observatio
 
 ## Remaining platform coverage
 
-- Windows Free fallback behavior remains unvalidated; test it if available.
+- On Resolve Free 21.2 Build 6, validating shortcut delivery on either platform
+  depends on restoring automatic startup. See [platform validation](platform-validation.md).
 - Native Intel Mac execution remains unvalidated.
 
 See [layout shortcut validation](layout-keyboard-shortcuts.md) for broader command

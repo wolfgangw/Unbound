@@ -13,7 +13,16 @@ This file tracks validation gaps, not build/session history.
   release, stacking and cleanup; broader native Resolve coverage remains open.
 - Native Intel Mac installation, startup and pane interaction remain unvalidated.
   Collect hardware, macOS, Resolve and Unbound versions with community reports.
-- Windows Free Resolve needs validation of startup and pane behavior.
+- With Unbound 0.7.2, Resolve Free 21.1.1 Build 10 starts Unbound on both
+  Windows and macOS. The earliest confirmed failure is 21.1.2 Build 10 on
+  Windows: Workspace > Scripts > Unbound appears, but the panel buttons are
+  absent and neither Unbound DLL is loaded. Both platforms show the same
+  menu and missing buttons on 21.2 Build 6. Windows startup traces show that
+  21.1.1 searches the user and system Scripts roots and Utility folders for
+  `.scriptlib` files, and Resolve itself reads the installed hook. In 21.2,
+  Resolve still searches for `.lua` menu scripts. Neither startup on Color
+  nor the first Fusion visit showed a `.scriptlib` search or a read of the
+  root or composition hook. A supported startup path for the affected builds remains open.
 - Broaden Always-on-top coverage for fullscreen/maximized panes and unusual
   native dialog/ownership combinations on both platforms, plus Windows Dual Screen.
   General macOS application switching, menus/dialogs, main minimize/restore and

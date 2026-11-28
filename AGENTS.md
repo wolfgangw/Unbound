@@ -478,8 +478,9 @@ staging and validation. Isolate fixture logs with `UNBOUND_LOG_FILE`.
 
 Both backends use Resolve's Qt 5.15.2. Validate native interactions in a fresh
 Resolve process on the target platform. Rosetta execution does not validate
-native Intel operation. Windows Free and broader mode/material coverage remain
-open. See [platform validation](doc/issues/platform-validation.md).
+native Intel operation. Resolve Free startup is version-dependent on both
+platforms. See [platform validation](doc/issues/platform-validation.md) for the
+tested builds and remaining mode/material coverage.
 
 - **Windows.** Group reordering uses actual foreground ownership and a single
   nonactivating native batch to avoid main flashing through pins or menus.
