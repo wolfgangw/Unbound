@@ -17,7 +17,12 @@ public:
         qApp->installEventFilter(this);
 #endif
     }
-    ~PageTransition() override {cancel("page_observer_destroyed");}
+    ~PageTransition() override {
+#ifdef UNBOUND_LAYOUT_TRANSITIONS
+        if(qApp) qApp->removeEventFilter(this);
+#endif
+        cancel("page_observer_destroyed");
+    }
     void attach(QWidget *window) {
 #ifdef UNBOUND_LAYOUT_TRANSITIONS
         auto pages=window?window->findChild<QStackedWidget *>("widgetStack_Panel"):nullptr;
@@ -41,7 +46,7 @@ protected:
         if(!stack || !main)return false;
         const auto type=event->type();
         if(type!=QEvent::Show && type!=QEvent::Hide)return false;
-        if(object==main && type==QEvent::Hide) {cancel("main_hidden");departed=false;return false;}
+        if(object==main && type==QEvent::Hide) {cancel("main_hidden");departed=false;attempted=false;return false;}
         auto page=qobject_cast<QWidget *>(object);
         if(!page || stack->indexOf(page)<0 || !main->isVisible() || main->isMinimized()
             || !stack->isVisible())return false;
@@ -97,7 +102,7 @@ private:
                 [alive] {if(alive)alive->invalidate();});
         }
         if(!attempted && hasFloating && hasFloating(page->objectName()))start(page);
-        current=page;departed=false;
+        current=page;departed=false;attempted=false;
 
 #else
         Q_UNUSED(page);

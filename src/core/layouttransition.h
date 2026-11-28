@@ -85,7 +85,7 @@ public:
     }
     void cancel(const QString &reason) {
         if(done)return;
-        done=true;deadline.stop();qApp->removeEventFilter(this);
+        done=true;deadline.stop();if(qApp)qApp->removeEventFilter(this);
 
         // Keep the adapter alive until a native/animation callback has unwound.
         if(cover)cover->cancel();

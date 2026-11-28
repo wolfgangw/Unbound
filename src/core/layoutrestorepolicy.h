@@ -21,7 +21,8 @@ struct LayoutRestorePolicy {
     static PlaybackHold pauseForRecall(QWidget *main,const QString &page,
         const QJsonObject &panes,bool outgoingClips,bool clean=false) {
         if(!main || page!=QLatin1String("WStackPage_Color"))return {};
-        const auto mode=main->findChild<QAbstractButton *>("btnColorToggleLightbox");
+        const auto modes=main->findChildren<QAbstractButton *>("btnColorToggleLightbox");
+        const auto mode=modes.size()==1 ? modes.first() : nullptr;
         const bool lightbox=mode && mode->isChecked();
         const bool incomingClips=!normalColorMode(page,panes);
         const bool changesMode=clean ? (!incomingClips && lightbox)

@@ -67,7 +67,7 @@ private:
         int steps=0;double speed=1;
         while(speed<m_speed && steps<6) {speed*=2;++steps;}
         if(speed==m_speed && (steps==0 || (m_faster && m_faster->isEnabled()))) {
-            for(int i=0;i<steps;++i)m_faster->trigger();
+            for(int i=0;i<steps && m_faster && m_faster->isEnabled();++i)m_faster->trigger();
         }
         m_ownCommand=false;
     }
@@ -125,7 +125,9 @@ private:
             });break;
         case QEvent::Show:
             if(auto dialog=qobject_cast<QDialog *>(object))if(dialog->isWindow()
-                && dialog->objectName()!=QLatin1String("UiFloatingPaletteWidgetDialog"))cancel("dialog");
+                && dialog->objectName()!=QLatin1String("UiFloatingPaletteWidgetDialog")
+                && !(dialog->objectName()==QLatin1String("UiWaveformWindow") && dialog->windowModality()==Qt::NonModal))
+                cancel("dialog");
             break;
         default:break;
         }
@@ -134,7 +136,7 @@ private:
 public:
     void cancel(const QString &) {
         if(m_cancelled)return;
-        m_cancelled=true;m_deadline.stop();qApp->removeEventFilter(this);m_work.clear();
+        m_cancelled=true;m_deadline.stop();if(qApp)qApp->removeEventFilter(this);m_work.clear();
 
         if(active()==this)active().clear();
         ++m_generation;deleteLater();

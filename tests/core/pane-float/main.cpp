@@ -432,6 +432,11 @@ int main(int argc, char **argv)
         QGraphicsScene next; next.setSceneRect(-1250,-1250,2500,2500); view->setScene(&next);
         bounds.updateBounds();
         check(next.sceneRect().contains(view->mapToScene(view->viewport()->rect()).boundingRect()),"Replacement clip scene not expanded");
+        // Verify event-driven expansion without manual updateBounds() calls or idle polling.
+        host.resize(4000,350);
+        { QEventLoop loop; QTimer::singleShot(120,&loop,&QEventLoop::quit); loop.exec(); }
+        check(next.sceneRect().contains(view->mapToScene(view->viewport()->rect()).boundingRect()),
+            "Event-driven Nodes resize did not expand scene bounds automatically");
         std::puts("PASS: wide and zoomed Nodes viewport covered; node positions retained; no shrinking; scene replacement supported");
         return 0;
     }

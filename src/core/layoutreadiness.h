@@ -39,7 +39,8 @@ public:
     void finish() {
         if(active()!=this)return;
         active()=nullptr;
-        qApp->removeEventFilter(this);deadline.stop();quiet.stop();
+        if(qApp) qApp->removeEventFilter(this);
+        deadline.stop();quiet.stop();
         for(const auto &connection:connections)disconnect(connection);
         deleteLater();
     }
@@ -67,8 +68,14 @@ private:
     }
     void requestFinalUpdate() {
         if(!presentationReady || !candidate || finalUpdate)return;
-        if(++finalUpdateRounds>3)return;
         finalUpdate=true;presentationReported=false;
+        if(++finalUpdateRounds>3) {
+            // Bounded update rounds: accept the settled quiet candidate rather
+            // than deadlocking until the 3s fallback deadline.
+            presentationReported=true;finalUpdateRounds=0;
+            presentationReady();
+            return;
+        }
         for(auto &e:windows)if(e.window && e.window->isVisible() && !e.window->isMinimized()) {
             e.composedRevision=-1;e.rasterRevision=-1;e.window->update();
         }
@@ -104,7 +111,7 @@ private:
             if(e.revision!=(e.hasGl?e.composedRevision:e.rasterRevision))++waiting;
         }
         if(finalUpdate && visible && !waiting && !presentationReported) {
-            presentationReported=true;if(presentationReady)presentationReady();
+            presentationReported=true;finalUpdateRounds=0;if(presentationReady)presentationReady();
         }
     }
     explicit LayoutReadiness(QWidget *root,const QString &pageName):QObject(qApp),main(root),page(pageName) {

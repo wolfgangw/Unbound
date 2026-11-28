@@ -148,7 +148,7 @@ protected:
                 });
             return true;
         }
-        if(event->type()==QEvent::ApplicationDeactivate
+        if((event->type()==QEvent::ApplicationDeactivate && !Unbound::nativeApplicationActive())
             || ((event->type()==QEvent::Show || event->type()==QEvent::Hide)
                 && (!Catalogue::pageForRoot(object->objectName()).isEmpty() || object==m_window)))
             ++Unbound::commandContext();
@@ -320,11 +320,22 @@ private:
             outgoingClips->suspendClipsMode(true);
         for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
-            const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
+            const auto error=it.value()->dock();
+            if(!error.isEmpty()) {
+                if(page=="WStackPage_Color" && outgoingClips && outgoingClips->active()) outgoingClips->suspendClipsMode(false);
+                scheduleDiscovery();
+                return error;
+            }
         }
         normalColorLayout(page,{});
-        if(page=="WStackPage_Conform" && m_editScopes)m_editScopes->close();
-        if(page=="WStackPage_Conform" && m_viewers) m_viewers->prepareLayout({});
+        if(page=="WStackPage_Conform") {
+            if(m_editScopes) m_editScopes->close();
+            if(!m_editScopes || !m_editScopes->host()) {
+                const auto error=m_settings.saveFloating(Unbound::EditScopes::key(),false);
+                if(!error.isEmpty()) { scheduleDiscovery(); return error; }
+            }
+            if(m_viewers) m_viewers->prepareLayout({});
+        }
         // Clear retained startup intent too: a not-yet-created native pane or
         // Source viewer must not float later after the user chose Dock all.
         for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
@@ -394,13 +405,22 @@ private:
         for(auto it=m_sessions.cbegin();it!=m_sessions.cend();++it) {
             if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !it.value()->active()) continue;
             if(!panes.value(it.key()).toObject().value("floating").toBool()) {
-                const auto error=it.value()->dock(); if(!error.isEmpty()) return error;
+                const auto error=it.value()->dock();
+                if(!error.isEmpty()) {
+                    if(page=="WStackPage_Color") if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(false);
+                    scheduleDiscovery();
+                    return error;
+                }
             }
         }
         if(page=="WStackPage_Conform" && m_viewers) m_viewers->prepareLayout(panes);
         if(page=="WStackPage_Conform" && m_editScopes)m_editScopes->prepareLayout(panes);
         const auto error=m_settings.activateLayout(page,layoutId);
-        if(!error.isEmpty()) return error;
+        if(!error.isEmpty()) {
+            if(page=="WStackPage_Color") if(auto clips=m_sessions.value("m_pLightBox")) clips->suspendClipsMode(false);
+            scheduleDiscovery();
+            return error;
+        }
         normalColorLayout(page,panes);
         for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
             const auto key=settingsKey(it.key());
@@ -528,7 +548,12 @@ private:
                 } else if(!Unbound::LayoutRestorePolicy::ToggleState::temporary(button)) queueRememberUserToggles();
                 scheduleDiscovery();
             });
-            connect(button,&QObject::destroyed,this,[this,button] { m_watchedToggles.remove(button); scheduleDiscovery(); });
+            connect(button,&QObject::destroyed,this,[this,button,paneName=it.key()] {
+                m_watchedToggles.remove(button);
+                auto &list=m_toggles[paneName];
+                for(int i=list.size()-1;i>=0;--i) if(!list[i] || list[i]==button) list.removeAt(i);
+                scheduleDiscovery();
+            });
             if (auto session=m_sessions.value(it.key()))
                 if (session->active() && preservesNativeLayout(it.key())) session->observeNativeToggle(button);
             break;
@@ -826,12 +851,23 @@ private:
         int toggles=0,floating=0,initializing=0;
         const auto page=currentPage();
         for(const auto &name:m_initializingNative) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) ++initializing;
-        for(const auto &name:(m_pendingLayoutToggles | m_pendingColorToggles | m_pendingDockToggles)) if(Unbound::PaneSettings::pageForPane(settingsKey(name))==page) {
-            ++toggles;
+        for(const auto &name:(m_pendingLayoutToggles | m_pendingColorToggles | m_pendingDockToggles)) {
+            if(Unbound::PaneSettings::pageForPane(settingsKey(name))!=page) continue;
+            auto pane=m_candidates.value(name);
+            if(pane && (nativeToggle(pane,name) || Catalogue::colorControl(name))) ++toggles;
         }
-        for(auto it=m_names.cbegin();it!=m_names.cend();++it)
-            if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))==page && m_settings.floating(settingsKey(it.key()))
-                && !m_restoreAttempted.contains(it.key())) ++floating;
+        for(auto it=m_names.cbegin();it!=m_names.cend();++it) {
+            if(Unbound::PaneSettings::pageForPane(settingsKey(it.key()))!=page || !m_settings.floating(settingsKey(it.key()))
+                || m_restoreAttempted.contains(it.key())) continue;
+            auto decoration=m_decorations.value(it.key());
+            auto pane=decoration ? decoration->pane() : nullptr;
+            const auto descriptor=Catalogue::find(it.key());
+            if(!pane || !descriptor) continue;
+            if(descriptor->requireNativeHeader() && !decoration->usesNativeHeader()) continue;
+            if(descriptor->initializeBeforeRestore && m_activationRequested.contains(it.key())
+                && !m_initializingNative.contains(it.key())) continue;
+            ++floating;
+        }
         Unbound::LayoutReadiness::pending(m_discoveryQueued?1:0,initializing,toggles,floating);
 #endif
     }

@@ -85,8 +85,12 @@ void testLayoutTransition() {
         stack.setCurrentWidget(&audio);stack.setCurrentWidget(&color);settle();
         require(state->begins==7,"Hidden page selection started a cover");
         root.show();settle();require(state->begins==7,"Restoring main started a page-switch cover");
+        stack.setCurrentWidget(&edit);wait();wait();
+        require(state->begins==8 && state->reveals==5,"PageTransition failed to cover departure after main hide/show");
+        stack.setCurrentWidget(&color);wait();wait();
+        require(state->begins==9 && state->reveals==6,"PageTransition failed to cover incoming page after main hide/show");
         stack.hide();stack.setCurrentWidget(&audio);stack.setCurrentWidget(&color);settle();
-        require(state->begins==7,"Hidden page stack started a cover");
+        require(state->begins==9,"Hidden page stack started a cover");
         color.removeEventFilter(&boundary);
         delete Unbound::LayoutReadiness::active();
         std::puts("PASS: departure/arrival page capture, docked-to-docked bypass, deferred return, rapid switch and cancellation");
@@ -248,6 +252,13 @@ void testColorPlaybackPause() {
     expectCancelled([&] {stop.click();});
     expectCancelled([&] {main.setWindowTitle("Changed project");});
     expectCancelled([&] {page.hide();});page.show();LayoutTest::activate(main);
+    // Non-modal UiWaveformWindow handoff must not cancel Color playback resume.
+    {
+        playing(false);auto lease=Pause::acquire(&page);const int before=forwardCount;
+        QDialog scopes(&main);scopes.setObjectName("UiWaveformWindow");scopes.show();settle();
+        lease.reset();settle();
+        require(forwardCount==before+1,"Non-modal Scopes handoff cancelled Color playback resume");
+    }
     playing(false);auto old=Pause::acquire(&page);old.reset();
     auto newer=Pause::acquire(&page);const int before=forwardCount;settle();
     require(forwardCount==before,"Queued stale completion ignored a newer lease");

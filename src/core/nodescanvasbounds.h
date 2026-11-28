@@ -3,8 +3,10 @@
 #define UNBOUND_NODESCANVASBOUNDS_H
 #include <QGraphicsView>
 #include <QGraphicsScene>
+#include <QScrollBar>
 #include <QPointer>
 #include <QTimer>
+#include <QEvent>
 #include <QResizeEvent>
 #include <QApplication>
 namespace Unbound {
@@ -16,18 +18,32 @@ class NodesCanvasBounds : public QObject
 public:
     explicit NodesCanvasBounds(QWidget *content,QObject *parent=nullptr) : QObject(parent),m_content(content)
     {
-        m_timer.setInterval(150);
-        connect(&m_timer,&QTimer::timeout,this,[this] { updateBounds(); });
-        m_timer.start();
+        m_coalesce.setSingleShot(true);
+        m_coalesce.setInterval(50);
+        connect(&m_coalesce,&QTimer::timeout,this,[this] { updateBounds(); });
+        if (m_content) m_content->installEventFilter(this);
+        attachView();
         QTimer::singleShot(0,this,[this] { updateBounds(); });
+    }
+    ~NodesCanvasBounds() override
+    {
+        m_coalesce.stop();
+        if (m_content) m_content->removeEventFilter(this);
+        if (m_view) {
+            m_view->removeEventFilter(this);
+            if (auto viewport=m_view->viewport()) viewport->removeEventFilter(this);
+        }
+        for (const auto &connection : m_viewConnections) disconnect(connection);
+        disconnect(m_sceneConnection);
     }
     void updateBounds()
     {
         if (m_updating || !m_content || !m_content->isVisible()
             || QApplication::mouseButtons()!=Qt::NoButton) return;
-        if (!m_view) m_view=m_content->findChild<QGraphicsView *>(QStringLiteral("m_NodeGraphWgt"));
+        attachView();
         if (!m_view || !m_view->isVisible() || !m_view->scene() || m_view->viewport()->size().isEmpty()) return;
         auto scene=m_view->scene();
+        attachScene(scene);
         const auto visible=m_view->mapToScene(m_view->viewport()->rect()).boundingRect();
         const auto previous=scene->sceneRect();
         if (!visible.isValid() || previous.adjusted(-1,-1,1,1).contains(visible)) return;
@@ -49,10 +65,60 @@ public:
         QCoreApplication::sendEvent(m_view->viewport(),&resize);
         m_updating=false;
     }
+protected:
+    bool eventFilter(QObject *object,QEvent *event) override
+    {
+        if (m_updating) return false;
+        switch (event->type()) {
+        case QEvent::ChildAdded:
+            if (object==m_content && !m_view) schedule();
+            break;
+        case QEvent::Resize:
+        case QEvent::Show:
+        case QEvent::LayoutRequest:
+        case QEvent::Wheel:
+        case QEvent::MouseButtonRelease:
+        case QEvent::KeyRelease:
+            schedule();
+            break;
+        default: break;
+        }
+        return false;
+    }
 private:
+    void schedule()
+    {
+        if (!m_updating && m_content && m_content->isVisible() && !m_coalesce.isActive())
+            m_coalesce.start();
+    }
+    void attachView()
+    {
+        if (m_view || !m_content) return;
+        m_view=m_content->findChild<QGraphicsView *>(QStringLiteral("m_NodeGraphWgt"));
+        if (!m_view) return;
+        m_view->installEventFilter(this);
+        if (auto viewport=m_view->viewport()) viewport->installEventFilter(this);
+        for (auto bar : {m_view->horizontalScrollBar(), m_view->verticalScrollBar()}) {
+            if (!bar) continue;
+            m_viewConnections.append(connect(bar,&QAbstractSlider::rangeChanged,this,[this] { schedule(); }));
+            m_viewConnections.append(connect(bar,&QAbstractSlider::valueChanged,this,[this] { schedule(); }));
+        }
+        attachScene(m_view->scene());
+    }
+    void attachScene(QGraphicsScene *scene)
+    {
+        if (m_scene==scene) return;
+        disconnect(m_sceneConnection);
+        m_scene=scene;
+        if (m_scene)
+            m_sceneConnection=connect(m_scene,&QGraphicsScene::sceneRectChanged,this,[this] { schedule(); });
+    }
     QPointer<QWidget> m_content;
     QPointer<QGraphicsView> m_view;
-    QTimer m_timer;
+    QPointer<QGraphicsScene> m_scene;
+    QList<QMetaObject::Connection> m_viewConnections;
+    QMetaObject::Connection m_sceneConnection;
+    QTimer m_coalesce;
     bool m_updating=false;
 };
 }
