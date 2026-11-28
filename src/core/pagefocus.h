@@ -17,6 +17,7 @@ public:
         qApp->installEventFilter(this);
         connect(qApp,&QApplication::focusChanged,this,[this](QWidget *,QWidget *now) { remember(now); });
     }
+    ~PageFocus() override { if(qApp) qApp->removeEventFilter(this); }
     void attach(QWidget *main) {
         auto stack=main ? main->findChild<QStackedWidget *>("widgetStack_Panel") : nullptr;
         if(m_main==main && m_stack==stack) return;
@@ -32,7 +33,7 @@ protected:
         if(!m_stack) return false;
         const auto type=event->type();
         if(type==QEvent::ApplicationDeactivate) { m_mousePressed=false; cancel(); return false; }
-        if(type==QEvent::UngrabMouse || type==QEvent::WindowDeactivate) m_mousePressed=false;
+        if(type==QEvent::UngrabMouse && QApplication::mouseButtons()==Qt::NoButton) m_mousePressed=false;
         if(type==QEvent::MouseButtonPress) m_mousePressed=true;
         if(type==QEvent::MouseButtonRelease) {
             m_mousePressed=false;
