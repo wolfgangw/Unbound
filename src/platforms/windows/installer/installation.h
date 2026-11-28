@@ -51,22 +51,6 @@ inline void rejectLinks(fs::path path) {
             throw std::runtime_error("Installation path contains a link or junction; no files changed.");
     }
 }
-// Prefer atomic rename; fall back to recursive copy+remove only across volumes
-// (e.g. when roaming APPDATA is redirected to a different drive or UNC share).
-inline void moveEntry(const fs::path &from,const fs::path &to,std::error_code &ec) {
-    fs::rename(from,to,ec);
-    if(!ec) return;
-    if(ec!=std::errc::cross_device_link && ec.value()!=ERROR_NOT_SAME_DEVICE) return;
-    ec.clear();
-    fs::copy(from,to,fs::copy_options::recursive,ec);
-    if(ec) { std::error_code ignore; fs::remove_all(to,ignore); return; }
-    fs::remove_all(from,ec);
-}
-inline void moveEntry(const fs::path &from,const fs::path &to) {
-    std::error_code ec;
-    moveEntry(from,to,ec);
-    if(ec) throw fs::filesystem_error("Cannot move installation files",from,to,ec);
-}
 // The executable embeds these exact files; no downloads, shell or Qt dependency.
 struct Payload { std::string loader,helper,hook,version; std::map<std::wstring,std::string> commands; };
 inline bool matches(const Paths &p,const Payload &payload) {
@@ -96,11 +80,26 @@ inline void apply(const Paths &p,const Payload *payload,
     rejectLinks(p.support); rejectLinks(p.scripts); rejectLinks(p.runtime()); rejectLinks(p.hook()); rejectLinks(p.commands());
     fs::create_directories(p.support);
     if(payload) fs::create_directories(p.commands().parent_path());
-    const auto transaction=p.support/(L"transaction-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
-    if(!fs::create_directory(transaction)) throw std::runtime_error("Another installation transaction exists.");
+    // Stage on each destination volume. Even with redirected roaming AppData,
+    // publishing and rollback use directory renames, outside the Scripts scan tree.
+    const auto name=L"Unbound-transaction-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64());
+    const auto transaction=p.support/name;
+    const auto scriptStage=p.scripts.parent_path()/name;
+    bool ownsScriptStage=false;
+    auto cleanup=[&] {
+        std::error_code runtimeError,scriptError;
+        fs::remove_all(transaction,runtimeError);
+        if(ownsScriptStage) fs::remove_all(scriptStage,scriptError);
+        if(runtimeError || scriptError) throw std::runtime_error("Could not remove Unbound's transaction folders.");
+    };
     std::vector<std::pair<fs::path,fs::path>> previous;
     std::vector<fs::path> published;
+    if(!fs::create_directory(transaction)) throw std::runtime_error("Another installation transaction exists.");
     try {
+        if(payload || fs::exists(p.hook()) || fs::exists(p.commands())) {
+            ownsScriptStage=fs::create_directory(scriptStage);
+            if(!ownsScriptStage) throw std::runtime_error("Another installation transaction exists.");
+        }
         if(payload) {
             if(payload->loader.empty() || payload->helper.empty() || payload->hook.empty() || payload->version.empty())
                 throw std::runtime_error("Incomplete installer payload.");
@@ -108,36 +107,38 @@ inline void apply(const Paths &p,const Payload *payload,
             write(transaction/L"new-runtime/UnboundLuaLoader.dll",payload->loader);
             write(transaction/L"new-runtime/Unbound.dll",payload->helper);
             write(transaction/L"new-runtime/VERSION",payload->version);
-            write(transaction/L"new-hook",payload->hook);
-            fs::create_directory(transaction/L"new-commands");
+            write(scriptStage/L"new-hook",payload->hook);
+            fs::create_directory(scriptStage/L"new-commands");
             for(const auto &command:payload->commands) {
                 const fs::path filename(command.first);
                 if(filename.filename()!=filename || filename.extension()!=L".lua")throw std::runtime_error("Invalid command filename.");
-                write(transaction/L"new-commands"/filename,command.second);
+                write(scriptStage/L"new-commands"/filename,command.second);
             }
         }
         checkpoint(0);
         if(running()) throw std::runtime_error("DaVinci Resolve started during preparation; existing files were left in place.");
-        auto save=[&](const fs::path &original) {
+        auto save=[&](const fs::path &original,const fs::path &backup) {
             if(!fs::exists(original)) return;
             rejectLinks(original);
-            const auto backup=transaction/std::to_wstring(previous.size());
-            moveEntry(original,backup); previous.emplace_back(original,backup);
+            fs::rename(original,backup); previous.emplace_back(original,backup);
         };
-        save(p.hook()); save(p.runtime()); save(p.commands()); checkpoint(1);
+        save(p.hook(),scriptStage/L"previous-hook");
+        save(p.runtime(),transaction/L"previous-runtime");
+        save(p.commands(),scriptStage/L"previous-commands");
+        checkpoint(1);
         if(payload) {
-            moveEntry(transaction/L"new-runtime",p.runtime()); published.push_back(p.runtime()); checkpoint(2);
-            moveEntry(transaction/L"new-hook",p.hook()); published.push_back(p.hook()); checkpoint(3);
-            moveEntry(transaction/L"new-commands",p.commands()); published.push_back(p.commands()); checkpoint(4);
+            fs::rename(transaction/L"new-runtime",p.runtime()); published.push_back(p.runtime()); checkpoint(2);
+            fs::rename(scriptStage/L"new-hook",p.hook()); published.push_back(p.hook()); checkpoint(3);
+            fs::rename(scriptStage/L"new-commands",p.commands()); published.push_back(p.commands()); checkpoint(4);
         }
     } catch(...) {
         const auto failure=std::current_exception(); bool recovered=true;
         for(auto it=published.rbegin();it!=published.rend();++it) { std::error_code e; fs::remove_all(*it,e); if(e) recovered=false; }
-        for(auto it=previous.rbegin();it!=previous.rend();++it) { std::error_code e; moveEntry(it->second,it->first,e); if(e) recovered=false; }
-        if(!recovered) throw std::runtime_error("Rollback could not finish. Retained recovery files in Unbound's transaction folder.");
-        std::error_code e; fs::remove_all(transaction,e); std::rethrow_exception(failure);
+        for(auto it=previous.rbegin();it!=previous.rend();++it) { std::error_code e; fs::rename(it->second,it->first,e); if(e) recovered=false; }
+        if(!recovered) throw std::runtime_error("Rollback could not finish. Recovery files are in the transaction folders under Unbound and beside Scripts.");
+        cleanup();
+        std::rethrow_exception(failure);
     }
-    std::error_code cleanup; fs::remove_all(transaction,cleanup);
-    if(cleanup) throw std::runtime_error("Change completed, but old installation files remain in Unbound's transaction folder.");
+    cleanup();
 }
 }

@@ -2,17 +2,31 @@
 #include "installation.h"
 #include <iostream>
 static void require(bool c,const char *m) { if(!c) throw std::runtime_error(m); }
-int main() {
+int wmain(int argc,wchar_t **argv) {
     namespace fs=std::filesystem; using namespace Installation;
     const auto root=fs::temp_directory_path()/(L"unbound-installer-test-"+std::to_wstring(GetCurrentProcessId()));
-    if(fs::exists(root)) return 1;
+    if(argc>2 || fs::exists(root)) return 1;
+    // An optional scratch directory on another drive exercises redirected AppData.
+    const auto roaming=argc==2 ? fs::path(argv[1])/root.filename() : root/L"Roaming User";
     try {
-        Paths p{root/L"Local User/Unbound",root/L"Roaming User/Scripts"};
+        if(argc==2 && !fs::create_directory(roaming)) return 1;
+        Paths p{root/L"Local User/Unbound",roaming/L"Scripts"};
         const Payload first{"loader-one","helper-one","hook-one","0.3.0+test.1",{{L"Layout 1.lua","command-one"}}}, second{"loader-two","helper-two","hook-two","0.3.0+test.2",{{L"Layout 1.lua","command-two"}}};
         auto idle=[]{return false;};
         apply(p,&first,idle); require(matches(p,first),"Fresh install mismatch");
         write(p.runtime()/L"UnboundHelper.dll","obsolete runtime");
         write(p.support/L"Unbound.json","saved layouts"); write(p.scripts/L"unrelated.lua","keep");
+        write(p.commands()/L"Layout 2.lua","second original command");
+        auto locked=CreateFileW(p.commands().c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,
+            nullptr,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,nullptr);
+        require(locked!=INVALID_HANDLE_VALUE,"Could not lock the commands directory");
+        bool renameBlocked=false;
+        try { apply(p,&second,idle); } catch(const fs::filesystem_error &) { renameBlocked=true; }
+        CloseHandle(locked);
+        require(renameBlocked && read(p.commands()/L"Layout 2.lua")=="second original command",
+            "A blocked directory rename lost an original command");
+        fs::remove(p.commands()/L"Layout 2.lua");
+        require(matches(p,first),"Blocked command backup did not restore the installation");
         for(int phase=0;phase<=4;++phase) {
             bool failed=false;
             try { apply(p,&second,idle,[=](int stage){if(stage==phase) throw std::runtime_error("injected failure");}); }
@@ -45,6 +59,7 @@ int main() {
         apply(p,nullptr,idle);
         require(!installed(p) && retained() && read(p.scripts/L"unrelated.lua")=="keep","Repeated uninstall altered retained files");
         fs::remove_all(root);
+        if(argc==2) fs::remove_all(roaming);
         std::cout<<"PASS: install/update, all rollback stages, Resolve guard, repair, uninstall/reinstall, settings and unrelated files\n";
         return 0;
     } catch(const std::exception &e) {std::cerr<<e.what()<<"; retained fixture: "<<root<<"\n"; return 1;}
