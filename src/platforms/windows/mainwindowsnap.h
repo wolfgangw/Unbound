@@ -80,6 +80,7 @@ private:
             return result;
         }
         if (message == WM_CANCELMODE || (message == WM_KEYDOWN && wParam == VK_ESCAPE)) {
+            m_active = false;
             m_topAligned = m_commitPending = false;
             stopFrames(); m_liveTarget=false;m_snap.end();
         }
@@ -144,13 +145,15 @@ private:
             m_rawRect=target; m_hit=hit;
             m_liveTarget=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0;
             RECT final=target;
-            m_snap.apply(final,hit,m_limits);
             if(m_liveTarget) {
-                m_snap.applyAnimated(target,hit,m_limits);
+                m_snap.applyAnimated(target,hit,m_limits,false,&final);
                 if(m_snap.animating()) {
                     if(!m_frameTimer) m_frameTimer=SetTimer(handle,reinterpret_cast<UINT_PTR>(this),PaneSnapFrameIntervalMs,nullptr);
                 } else stopFrames();
-            } else { stopFrames(); target=final; }
+            } else {
+                m_snap.apply(final,hit,m_limits);
+                stopFrames(); target=final;
+            }
             m_topAligned = false;
             if (message == WM_MOVING && !(GetAsyncKeyState(VK_MENU) & 0x8000)) {
                 RECT current{};

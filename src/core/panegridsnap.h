@@ -24,18 +24,23 @@ class PaneGridSnap {
         bool leading,bool trailing,int minimum,int maximum,int &active,int &retarget) {
         if(!leading && !trailing) {state.valid=false;return 0;}
         const bool move=leading && trailing;
-        int lo=origin,hi=origin+extent;
-        if(!move) {
-            lo=qMax(lo,leading ? fixed-maximum : fixed+minimum);
-            hi=qMin(hi,leading ? fixed-minimum : fixed+maximum);
+        int line=0;
+        if(move) {
+            // Moves snap to the pointer display's grid lattice without clamping
+            // the window's leading edge into that display, preserving spans.
+            line=origin+qRound(double(from-origin)/step)*step;
+            // Two logical pixels around the midpoint prevent boundary jitter.
+            if(state.valid && qAbs(from-state.line)<=step/2+qMax(1,step/12)) line=state.line;
+        } else {
+            const int lo=qMax(origin,leading ? fixed-maximum : fixed+minimum);
+            const int hi=qMin(origin+extent,leading ? fixed-minimum : fixed+maximum);
+            const int first=int(std::ceil(double(lo-origin)/step));
+            const int last=int(std::floor(double(hi-origin)/step));
+            if(first>last) {state.valid=false;return 0;}
+            line=origin+qBound(first,qRound(double(from-origin)/step),last)*step;
+            if(state.valid && state.line>=lo && state.line<=hi &&
+                qAbs(from-state.line)<=step/2+qMax(1,step/12))line=state.line;
         }
-        const int first=int(std::ceil(double(lo-origin)/step));
-        const int last=int(std::floor(double(hi-origin)/step));
-        if(first>last) {state.valid=false;return 0;}
-        int line=origin+qBound(first,qRound(double(from-origin)/step),last)*step;
-        // Two logical pixels around the midpoint prevent boundary jitter.
-        if(state.valid && state.line>=lo && state.line<=hi &&
-            qAbs(from-state.line)<=step/2+qMax(1,step/12))line=state.line;
         retarget=retarget || !state.valid || line!=state.line;
         state.valid=true;state.line=line;active=1;
         return line-from;

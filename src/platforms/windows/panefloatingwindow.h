@@ -114,8 +114,12 @@ public:
             if (right) target.right += dx;
             if (top) target.top += dy;
             if (bottom) target.bottom += dy;
-            const LONG width = qBound(m_dragLimits.ptMinTrackSize.x, target.right - target.left, m_dragLimits.ptMaxTrackSize.x);
-            const LONG height = qBound(m_dragLimits.ptMinTrackSize.y, target.bottom - target.top, m_dragLimits.ptMaxTrackSize.y);
+            const LONG minWidth = qMax(1L, m_dragLimits.ptMinTrackSize.x);
+            const LONG maxWidth = qMax(minWidth, m_dragLimits.ptMaxTrackSize.x);
+            const LONG minHeight = qMax(1L, m_dragLimits.ptMinTrackSize.y);
+            const LONG maxHeight = qMax(minHeight, m_dragLimits.ptMaxTrackSize.y);
+            const LONG width = qBound(minWidth, target.right - target.left, maxWidth);
+            const LONG height = qBound(minHeight, target.bottom - target.top, maxHeight);
             if (left) target.left = target.right - width; else target.right = target.left + width;
             if (top) target.top = target.bottom - height; else target.bottom = target.top + height;
         }
@@ -249,7 +253,7 @@ private:
         if (hit != HTCAPTION) beginDeferredResize();
         if (!fromButton) {
             SetCapture(handle);
-            if (GetCapture() != handle) finishDeferredResize();
+            if (GetCapture() != handle) finishDeferredResize(false);
         }
     }
     QPointer<QLayout> m_deferredLayout;

@@ -599,6 +599,11 @@ int main(int argc, char **argv)
         check(grid.offset(QRect(53,73,500,400),QRect(0,0,3840,2160),48,true,true,true,true,min,max)==QPoint(-5,23),
             "DPI-scaled grid spacing failed");
         check(Unbound::paneGridArea(QPoint(-100,100),{work,QRect(0,0,1920,1080)})==work,"Grid selected wrong monitor");
+        // Dragging a window across adjacent monitors must snap to the pointer monitor's
+        // lattice without clamping/teleporting the leading edge onto the monitor seam.
+        grid.reset();
+        const auto crossOffset=grid.offset(QRect(1620,100,500,300),QRect(1920,0,1920,1080),24,true,true,true,true,min,max,&engaged);
+        check(qAbs(crossOffset.x())<=12 && engaged==QPoint(1,1),"Cross-monitor Shift-move teleported window to monitor seam");
         std::puts("PASS: grid spacing, negative work-area origins, midpoint hysteresis, resize limits, fixed sizes and DPI units");
         using Unbound::paneSnapOffset;
         Unbound::PaneSnapTransition transition;

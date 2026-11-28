@@ -62,14 +62,16 @@ inline void restoreReachablePaneClientGeometry(QWidget *window,const QByteArray 
     const auto saved=qtGeometryJson(bytes);
     QRect client;
     if(!readRectangle(saved.value("clientRect"),client)) return;
+    QRegion available;
+    const int savedWidth=saved.value("screenWidth").toInt();
+    bool widthMatches=savedWidth==0;
     for(auto screen:QGuiApplication::screens()) {
-        if(screen->availableGeometry().contains(client)
-            && (!saved.value("screenWidth").toInt()
-                || saved.value("screenWidth").toInt()==screen->geometry().width())) {
-            window->setGeometry(client);
-            break;
-        }
+        available+=screen->availableGeometry();
+        if(savedWidth && screen->geometry().width()==savedWidth
+            && screen->availableGeometry().intersects(client)) widthMatches=true;
     }
+    if(widthMatches && QRegion(client).subtracted(available).isEmpty())
+        window->setGeometry(client);
     // QWidget may expand a recalled rectangle to a native content minimum.
     // Recover the actual allocation, not just the smaller saved rectangle.
     ensureReachablePaneGeometry(window);
