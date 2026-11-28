@@ -86,11 +86,11 @@ inline void apply(const Paths &p,const Payload *payload,
     const auto transaction=p.support/name;
     const auto scriptStage=p.scripts.parent_path()/name;
     bool ownsScriptStage=false;
-    auto cleanup=[&] {
+    auto cleanup=[&](bool strict) {
         std::error_code runtimeError,scriptError;
         fs::remove_all(transaction,runtimeError);
         if(ownsScriptStage) fs::remove_all(scriptStage,scriptError);
-        if(runtimeError || scriptError) throw std::runtime_error("Could not remove Unbound's transaction folders.");
+        if(strict && (runtimeError || scriptError)) throw std::runtime_error("Could not remove Unbound's transaction folders.");
     };
     std::vector<std::pair<fs::path,fs::path>> previous;
     std::vector<fs::path> published;
@@ -136,9 +136,9 @@ inline void apply(const Paths &p,const Payload *payload,
         for(auto it=published.rbegin();it!=published.rend();++it) { std::error_code e; fs::remove_all(*it,e); if(e) recovered=false; }
         for(auto it=previous.rbegin();it!=previous.rend();++it) { std::error_code e; fs::rename(it->second,it->first,e); if(e) recovered=false; }
         if(!recovered) throw std::runtime_error("Rollback could not finish. Recovery files are in the transaction folders under Unbound and beside Scripts.");
-        cleanup();
+        cleanup(false);
         std::rethrow_exception(failure);
     }
-    cleanup();
+    cleanup(true);
 }
 }

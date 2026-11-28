@@ -34,6 +34,28 @@ int wmain(int argc,wchar_t **argv) {
             require(failed && matches(p,first),"Failed update did not restore old runtime and hook");
             require(read(p.runtime()/L"UnboundHelper.dll")=="obsolete runtime","Rollback lost previous runtime files");
         }
+        // A locked staging folder during rollback cleanup must not mask the root failure.
+        HANDLE lockedStage=INVALID_HANDLE_VALUE;
+        fs::path retainedStage;
+        std::string rollbackMessage;
+        try {
+            apply(p,&second,idle,[&](int stage) {
+                if(stage!=0) return;
+                for(const auto &entry:fs::directory_iterator(p.support)) {
+                    if(entry.is_directory() && entry.path().filename().wstring().rfind(L"Unbound-transaction-",0)==0) {
+                        retainedStage=entry.path();
+                        lockedStage=CreateFileW(retainedStage.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,
+                            nullptr,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,nullptr);
+                        break;
+                    }
+                }
+                throw std::runtime_error("root cause failure");
+            });
+        } catch(const std::runtime_error &e) { rollbackMessage=e.what(); }
+        if(lockedStage!=INVALID_HANDLE_VALUE) CloseHandle(lockedStage);
+        if(!retainedStage.empty()) { std::error_code ignore; fs::remove_all(retainedStage,ignore); }
+        require(rollbackMessage=="root cause failure" && matches(p,first),
+            "Rollback cleanup error masked the original installation failure");
         bool blocked=false; try { apply(p,&second,[]{return true;}); } catch(...) { blocked=true; }
         require(blocked && matches(p,first),"Resolve guard failed");
         int calls=0; blocked=false;
